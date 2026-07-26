@@ -1,0 +1,9 @@
+Duplicate = same instid + same full name (F+M+L), 2+ rows.
+
+Duplicate-name groups total: 6139
+  All rows same subject set: 71
+  At least two different subject sets in group: 6068
+  Any row has 0 subjects: 2
+  0-subject rows mixed with rows that have subjects: 2
+
+Detail TSV (every row in duplicate groups): STUDENTS_duplicate_name_subject_compare.tsv

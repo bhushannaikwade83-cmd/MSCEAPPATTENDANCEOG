@@ -1,0 +1,233 @@
+-- Remove existing naikwadebhushan@gmail.com user and add fresh dummy institutes
+
+BEGIN;
+
+-- Delete auth user with naikwadebhushan@gmail.com (cascades to profiles)
+DELETE FROM auth.users
+WHERE email = 'naikwadebhushan@gmail.com';
+
+-- Delete existing institute 12345
+DELETE FROM public.institutes
+WHERE id = '12345';
+
+-- Delete any conflicting admin invites
+DELETE FROM public.admin_invites
+WHERE institute_id IN ('99099', '99098', '99097', '12345');
+
+-- Institute 1: dummy1
+INSERT INTO public.institutes (
+  id,
+  institute_code,
+  name,
+  location,
+  address,
+  city,
+  state,
+  country,
+  mobile_no,
+  is_active,
+  created_at,
+  updated_at
+)
+VALUES (
+  '99099',
+  '99099',
+  'dummy1',
+  'Pune',
+  'Pune, Maharashtra 411001',
+  'Pune',
+  'Maharashtra',
+  'India',
+  '+91 98223 22990',
+  true,
+  now(),
+  now()
+);
+
+INSERT INTO public.admin_invites (
+  institute_id,
+  full_name,
+  phone,
+  email,
+  claimed,
+  created_at,
+  updated_at
+)
+VALUES (
+  '99099',
+  'admin1',
+  '+91 98223 22990',
+  'Latest.infotech@gmail.com',
+  false,
+  now(),
+  now()
+);
+
+-- Institute 2: dummy2
+INSERT INTO public.institutes (
+  id,
+  institute_code,
+  name,
+  location,
+  address,
+  city,
+  state,
+  country,
+  mobile_no,
+  is_active,
+  created_at,
+  updated_at
+)
+VALUES (
+  '99098',
+  '99098',
+  'dummy2',
+  'Pune',
+  'Pune, Maharashtra 411001',
+  'Pune',
+  'Maharashtra',
+  'India',
+  '+91 98223 22990',
+  true,
+  now(),
+  now()
+);
+
+INSERT INTO public.admin_invites (
+  institute_id,
+  full_name,
+  phone,
+  email,
+  claimed,
+  created_at,
+  updated_at
+)
+VALUES (
+  '99098',
+  'admin2',
+  '+91 98223 22990',
+  'Latest.infotech@gmail.com',
+  false,
+  now(),
+  now()
+);
+
+-- Institute 3: dummy3
+INSERT INTO public.institutes (
+  id,
+  institute_code,
+  name,
+  location,
+  address,
+  city,
+  state,
+  country,
+  mobile_no,
+  is_active,
+  created_at,
+  updated_at
+)
+VALUES (
+  '99097',
+  '99097',
+  'dummy3',
+  'Pune',
+  'Pune, Maharashtra 411001',
+  'Pune',
+  'Maharashtra',
+  'India',
+  '+91 98223 22990',
+  true,
+  now(),
+  now()
+);
+
+INSERT INTO public.admin_invites (
+  institute_id,
+  full_name,
+  phone,
+  email,
+  claimed,
+  created_at,
+  updated_at
+)
+VALUES (
+  '99097',
+  'admin3',
+  '+91 98223 22990',
+  'Latest.infotech@gmail.com',
+  false,
+  now(),
+  now()
+);
+
+-- Institute 4: dummy4
+INSERT INTO public.institutes (
+  id,
+  institute_code,
+  name,
+  location,
+  address,
+  city,
+  state,
+  country,
+  mobile_no,
+  is_active,
+  created_at,
+  updated_at
+)
+VALUES (
+  '12345',
+  '12345',
+  'dummy4',
+  'Pune',
+  'Pune, Maharashtra 411001',
+  'Pune',
+  'Maharashtra',
+  'India',
+  '9773609077',
+  true,
+  now(),
+  now()
+);
+
+INSERT INTO public.admin_invites (
+  institute_id,
+  full_name,
+  phone,
+  email,
+  claimed,
+  created_at,
+  updated_at
+)
+VALUES (
+  '12345',
+  'bhushan naikwade',
+  '9773609077',
+  'naikwadebhushan@gmail.com',
+  false,
+  now(),
+  now()
+);
+
+-- Verify all 4 institutes
+SELECT
+  id,
+  name,
+  city,
+  mobile_no
+FROM public.institutes
+WHERE id IN ('99099', '99098', '99097', '12345')
+ORDER BY id DESC;
+
+-- Verify all admin invites
+SELECT
+  institute_id,
+  full_name,
+  email,
+  phone
+FROM public.admin_invites
+WHERE institute_id IN ('99099', '99098', '99097', '12345')
+ORDER BY institute_id DESC;
+
+COMMIT;

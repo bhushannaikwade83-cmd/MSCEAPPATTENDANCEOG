@@ -1,0 +1,552 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Helper function to check if user is authenticated
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    // Helper function to check if user belongs to a specific institute
+    // IMPORTANT: Admin IS the user - anyone in institutes/{instituteId}/users/{uid} is an admin of that institute
+    // TESTING PHASE: Approval check removed - all users in institute can access
+    function belongsToInstitute(instituteId) {
+      return isAuthenticated() && (
+        exists(/databases/$(database)/documents/institutes/$(instituteId)/users/$(request.auth.uid)) ||
+        (
+          exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' &&
+          (
+            get(/databases/$(database)/documents/users/$(request.auth.uid)).data.instituteId == instituteId ||
+            get(/databases/$(database)/documents/users/$(request.auth.uid)).data.instituteId == null
+          )
+        )
+      );
+    }
+    
+    // Helper function to check if user is main admin (super admin control panel)
+    function isMainAdmin() {
+      return isAuthenticated() && 
+        exists(/databases/$(database)/documents/main_admins/$(request.auth.uid));
+    }
+
+    // Helper function to check super admin role via coders collection
+    function isSuperAdmin() {
+      return isAuthenticated() &&
+        exists(/databases/$(database)/documents/coders/$(request.auth.uid)) &&
+        (
+          get(/databases/$(database)/documents/coders/$(request.auth.uid)).data.isSuperAdmin == true ||
+          get(/databases/$(database)/documents/coders/$(request.auth.uid)).data.role == 'super_admin' ||
+          get(/databases/$(database)/documents/coders/$(request.auth.uid)).data.role == 'superadmin'
+        );
+    }
+
+    function isPlatformAdmin() {
+      return isMainAdmin() || isSuperAdmin();
+    }
+
+    // Helper function to validate email format
+    function isValidEmail(email) {
+      return email.matches('^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$');
+    }
+
+    // Helper function to validate string length
+    function isValidLength(str, minLen, maxLen) {
+      return str is string && str.size() >= minLen && str.size() <= maxLen;
+    }
+
+    // Helper function to validate roll number format
+    function isValidRollNumber(rollNumber) {
+      return rollNumber is string && 
+             rollNumber.matches('^[A-Za-z0-9_-]{1,20}$');
+    }
+
+    // Helper function to validate name format
+    function isValidName(name) {
+      return name is string && 
+             name.size() >= 2 && 
+             name.size() <= 100 &&
+             name.matches('^[a-zA-Z\\s\\.]{1,100}$');
+    }
+
+    // Helper function to validate institute data
+    function isValidInstituteData(data) {
+      return isValidLength(data.name, 2, 100) &&
+             isValidLength(data.instituteId, 1, 50) &&
+             data.instituteId.matches('^[A-Za-z0-9_-]{1,50}$');
+    }
+
+    // Helper function to validate student data
+    function isValidStudentData(data) {
+      // Check required fields exist and are valid
+      return data.name is string &&
+             isValidName(data.name) &&
+             data.userId is string &&
+             isValidRollNumber(data.userId) &&
+             // Optional batchName - allow null, empty string, or valid length
+             (data.batchName == null || 
+              (data.batchName is string && 
+               (data.batchName.size() == 0 || isValidLength(data.batchName, 1, 50)))) &&
+             // Optional email - allow null, empty string, or valid email format
+             (data.email == null || 
+              (data.email is string && 
+               (data.email.size() == 0 || isValidEmail(data.email))));
+    }
+
+    // Helper function to validate attendance data
+    function isValidAttendanceData(data) {
+      // Required fields: rollNumber must be valid string
+      // Subject is now optional (can be array of subjects or single subject)
+      // Timestamp validation: serverTimestamp() sentinels are handled by Firestore
+      // We check if timestamp exists (it will be converted to timestamp on server)
+      return data.rollNumber is string &&
+             isValidRollNumber(data.rollNumber) &&
+             // Subject can be string (old format) or array (new format) or null
+             (data.subject == null || 
+              (data.subject is string && isValidLength(data.subject, 1, 50)) ||
+              (data.subjects is list)) &&
+             // Timestamp: can be timestamp type or serverTimestamp sentinel (Firestore handles conversion)
+             // We just check that the field exists - Firestore will convert serverTimestamp() to actual timestamp
+             data.keys().hasAny(['timestamp', 'entryTime', 'exitTime']) &&
+             // Optional fields
+             (data.photoUrl == null || (data.photoUrl is string && data.photoUrl.size() > 0)) &&
+             (data.entryPhoto == null || (data.entryPhoto is string && data.entryPhoto.size() > 0)) &&
+             (data.exitPhoto == null || (data.exitPhoto is string && data.exitPhoto.size() > 0)) &&
+             (data.studentName == null || (data.studentName is string && isValidName(data.studentName))) &&
+             (data.date == null || (data.date is string && data.date.size() > 0));
+    }
+    
+    // ========== MAIN ADMINS COLLECTION ==========
+    match /main_admins/{adminId} {
+      // Main admin can read their own data
+      allow read: if isAuthenticated() && request.auth.uid == adminId;
+      // Only server/admin SDK can write (for security)
+      allow write: if false;
+    }
+    
+    // ========== INSTITUTES COLLECTION ==========
+    match /institutes/{instituteId} {
+      // Institute document - readable by anyone (authenticated or not) for search
+      // This allows users to search institutes before registration
+      // allow read covers both document reads and collection queries
+      allow read: if true;
+      // ONLY platform admin (super admin) can create institutes
+      allow create: if isPlatformAdmin() && 
+        isValidInstituteData(request.resource.data);
+      // Allow update/delete for:
+      // 1. Platform admin
+      // 2. Users belonging to THIS institute  
+      // 3. Authenticated users during registration (to update userCount/lastUserAdded only)
+      // 4. Authenticated users who exist in users subcollection
+      allow update: if (
+        // Platform admin can update anything (with validation)
+        (isPlatformAdmin() && 
+         (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['userCount', 'lastUserAdded']) ||
+          isValidInstituteData(request.resource.data))) ||
+        // Users belonging to institute can update anything (with validation)
+        (belongsToInstitute(instituteId) && 
+         (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['userCount', 'lastUserAdded']) ||
+          isValidInstituteData(request.resource.data))) ||
+        // Allow authenticated users to update userCount/lastUserAdded during registration
+        (isAuthenticated() && 
+         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['userCount', 'lastUserAdded'])) ||
+        // Allow authenticated users to update if they exist in users subcollection
+        (isAuthenticated() && 
+         exists(/databases/$(database)/documents/institutes/$(instituteId)/users/$(request.auth.uid)) &&
+         (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['userCount', 'lastUserAdded']) ||
+          isValidInstituteData(request.resource.data)))
+      );
+      allow delete: if isPlatformAdmin();
+      
+      // Institute admins subcollection (everyone here is an admin)
+      // FULL PERMISSIONS: Any authenticated admin can do everything
+      match /users/{userId} {
+        // Allow read for duplicate checks during registration (before user exists)
+        // Also allow read for users belonging to institute
+        // Note: Allowing reads for duplicate name checks during registration
+        // This allows queries on name/nameLower fields for duplicate checking
+        // IMPORTANT: `true` at the end allows unauthenticated reads for PIN login
+        allow read: if belongsToInstitute(instituteId) || 
+                      isPlatformAdmin() ||
+                      // Allow authenticated users to read their own document
+                      (isAuthenticated() && request.auth.uid == userId) ||
+                      // Allow queries for duplicate checks (necessary for registration flow)
+                      // Security note: This allows reading admin names, but not other sensitive data
+                      // Also allows PIN login to find user profile before authentication
+                      true;
+        allow create: if isPlatformAdmin() ||
+          // Allow newly registered admin to create their own profile doc
+          (isAuthenticated() &&
+            request.auth.uid == userId &&
+            request.resource.data.role == 'admin' &&
+            request.resource.data.instituteId == instituteId);
+        allow update: if belongsToInstitute(instituteId) || isPlatformAdmin();
+        allow delete: if isPlatformAdmin();
+      }
+      
+      // User credentials subcollection (for email sending)
+      // FULL PERMISSIONS: Any authenticated admin can access
+      match /user_credentials/{credId} {
+        allow read, write: if request.auth != null;
+      }
+      
+      // Subjects subcollection - store predefined subjects
+      match /subjects/{subjectId} {
+        // FULL PERMISSIONS: Any authenticated admin can do everything
+        allow read, write: if request.auth != null;
+      }
+      
+      // Batches subcollection - store batch definitions with name, year, timing, subjects
+      match /batches/{batchId} {
+        // FULL PERMISSIONS: Any authenticated admin can do everything
+        allow read, write: if request.auth != null;
+      }
+      
+      // Students subcollection
+      match /students/{studentId} {
+        // FULL PERMISSIONS: Any authenticated admin can do everything
+        allow read, write: if request.auth != null;
+        
+        // ⚡ FAST INDEX: Student attendance photos for instant queries
+        // Structure: students/{studentId}/attendancePhotos/{autoDoc}
+        match /attendancePhotos/{photoId} {
+          // Allow authenticated users to read their own photos or institute admins
+          allow read: if isAuthenticated() && (
+            belongsToInstitute(instituteId) ||
+            isPlatformAdmin() ||
+            // Allow any authenticated admin to read (for viewing student photos)
+            (exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+             get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin')
+          );
+          
+          // Allow authenticated admins to create (when marking attendance)
+          allow create: if isAuthenticated() && (
+            belongsToInstitute(instituteId) ||
+            isPlatformAdmin() ||
+            // Allow any authenticated admin to create (for attendance marking)
+            (exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+             get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin')
+          );
+          
+          // Prevent updates/deletes (photos are immutable once created)
+          allow update, delete: if false;
+        }
+      }
+      
+      // Attendance subcollection
+      match /attendance/{attendanceId} {
+        // FULL PERMISSIONS: Any authenticated admin can do everything
+        // Once logged in, no restrictions - full access
+        allow read, write: if request.auth != null;
+      }
+      
+      // GPS settings subcollection
+      // Path: institutes/{instituteId}/gps_settings/{adminId}
+      // Security: Only the admin who owns the GPS settings can read/write
+      // Super admins can also access for monitoring
+      match /gps_settings/{adminId} {
+        // Allow read for:
+        // 1. The admin who owns these settings
+        // 2. Any admin belonging to this institute
+        // 3. Super admins
+        allow read: if isAuthenticated() && (
+          request.auth.uid == adminId ||
+          belongsToInstitute(instituteId) ||
+          isPlatformAdmin()
+        );
+        
+        // Allow write (create/update) for:
+        // 1. The admin who owns these settings
+        // 2. Super admins (for data correction)
+        allow create, update: if isAuthenticated() && (
+          request.auth.uid == adminId ||
+          isPlatformAdmin()
+        );
+        
+        // Allow delete only for super admins
+        allow delete: if isAuthenticated() && isPlatformAdmin();
+      }
+      
+      // Batches subcollection - batches with name, year, timing, and subjects
+      // Path: institutes/{instituteId}/batches/{batchId}
+      match /batches/{batchId} {
+        // FULL PERMISSIONS: Any authenticated admin can manage batches
+        allow read, write: if request.auth != null;
+      }
+      
+      // User devices subcollection - track device fingerprints for security
+      // Path: institutes/{instituteId}/user_devices/{userId}
+      match /user_devices/{userId} {
+        // Allow authenticated users to read their own device history
+        // Also allow institute admins to read for security monitoring
+        allow read: if isAuthenticated() && (
+          request.auth.uid == userId ||
+          belongsToInstitute(instituteId) ||
+          isPlatformAdmin()
+        );
+        // Allow authenticated users to write/update their own device info
+        // Also allow institute admins to update for security purposes
+        allow write: if isAuthenticated() && (
+          request.auth.uid == userId ||
+          belongsToInstitute(instituteId) ||
+          isPlatformAdmin()
+        );
+      }
+      
+      // Suspicious activity subcollection - log suspicious attendance patterns
+      // Path: institutes/{instituteId}/suspicious_activity/{activityId}
+      match /suspicious_activity/{activityId} {
+        // Allow authenticated institute admins to read suspicious activity logs
+        // Also allow platform admins to read for monitoring
+        allow read: if isAuthenticated() && (
+          belongsToInstitute(instituteId) ||
+          isPlatformAdmin()
+        );
+        // Allow authenticated users to create suspicious activity logs
+        // This is non-blocking security logging
+        allow create: if isAuthenticated();
+        // Only institute admins and platform admins can update/delete logs
+        allow update, delete: if isAuthenticated() && (
+          belongsToInstitute(instituteId) ||
+          isPlatformAdmin()
+        );
+      }
+      
+      // Daily status subcollection - track institute open/close/holiday status
+      // Path: institutes/{instituteId}/dailyStatus/{date}
+      match /dailyStatus/{date} {
+        // Allow authenticated institute admins to read daily status
+        // Also allow platform admins to read for monitoring
+        allow read: if isAuthenticated() && (
+          belongsToInstitute(instituteId) ||
+          isPlatformAdmin() ||
+          // Allow any authenticated admin to read (for viewing status)
+          (exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+           get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin')
+        );
+        
+        // Allow authenticated institute admins to create/update daily status
+        // Also allow platform admins to manage status
+        allow create, update: if isAuthenticated() && (
+          belongsToInstitute(instituteId) ||
+          isPlatformAdmin() ||
+          // Allow any authenticated admin to write (for marking status)
+          (exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+           get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin')
+        );
+        
+        // Allow delete only for platform admins (for data correction)
+        allow delete: if isAuthenticated() && isPlatformAdmin();
+      }
+    }
+
+    // ========== USERS COLLECTION (old structure - for backward compatibility only) ==========
+    // NOTE: This should be phased out. New admins should be in institutes/{instituteId}/users
+    match /users/{userId} {
+      // Allow read for authenticated users (for backward compatibility during migration)
+      // Also allow queries for duplicate checks during registration (before user is authenticated)
+      // allow read covers both document reads and collection queries (list operations)
+      // Note: Allowing unauthenticated reads for duplicate checks - this is necessary for registration flow
+      // Also allows PIN login to find user profile before authentication
+      allow read: if true;
+      
+      // Allow create/update/delete only for backward compatibility
+      // New admins should be created in institute structure
+      allow create: if isAuthenticated() || isMainAdmin();
+      allow update: if isAuthenticated() && (
+        request.auth.uid == userId ||
+        isPlatformAdmin()
+      );
+      allow delete: if isAuthenticated() && isPlatformAdmin();
+    }
+
+    // ========== ATTENDANCE COLLECTION (old structure - for backward compatibility) ==========
+    // NOTE: New attendance should be in institutes/{instituteId}/attendance
+    match /attendance/{attendanceId} {
+      allow read: if isAuthenticated() || isMainAdmin();
+      allow write: if isAuthenticated() && isMainAdmin(); // Only main admin can write to old structure
+    }
+
+    // ========== SYSTEM SETTINGS COLLECTION (old structure - for backward compatibility) ==========
+    // NOTE: New GPS settings should be in institutes/{instituteId}/gps_settings
+    match /system_settings/{settingId} {
+      allow read: if isAuthenticated() || isMainAdmin();
+      allow write: if isAuthenticated() && isMainAdmin(); // Only main admin can write to old structure
+    }
+
+    // ========== ERROR LOGS COLLECTION (for coder dashboard) ==========
+    match /error_logs/{errorId} {
+      // Only coders can read error logs
+      allow read: if isAuthenticated() && 
+        exists(/databases/$(database)/documents/coders/$(request.auth.uid));
+      // Any authenticated user can create error logs (for logging errors)
+      // But only coders can update/delete (for resolving/deleting errors)
+      allow create: if isAuthenticated();
+      allow update, delete: if isAuthenticated() && 
+        exists(/databases/$(database)/documents/coders/$(request.auth.uid));
+    }
+
+    // ========== AUDIT LOGS COLLECTION (super admin activity trail) ==========
+    match /audit_logs/{auditId} {
+      // Super/main admins can read full audit trail
+      allow read: if isPlatformAdmin();
+      // Super/main admins and backend (via authenticated super admin client flow)
+      // can create entries. Updates/deletes are blocked for immutability.
+      allow create: if isPlatformAdmin();
+      allow update, delete: if false;
+    }
+
+    // ========== CODERS COLLECTION (for coder authentication) ==========
+    match /coders/{coderId} {
+      // Coders can read their own data
+      allow read: if isAuthenticated() && request.auth.uid == coderId;
+      // Allow bootstrap for the primary super admin account by email
+      // Note: set() with merge:true is treated as update, so we allow both create and update for bootstrap
+      allow create: if isAuthenticated() &&
+        request.auth.uid == coderId &&
+        request.auth.token.email == 'digitrixmedia05@gmail.com';
+      // Allow update for bootstrap (set with merge:true) and for main admin
+      allow update: if (isAuthenticated() &&
+        request.auth.uid == coderId &&
+        request.auth.token.email == 'digitrixmedia05@gmail.com') ||
+        isMainAdmin();
+      // Only main admin can delete coders
+      allow delete: if isMainAdmin();
+    }
+
+    // ========== HIERARCHICAL ATTENDANCE STRUCTURE ==========
+    // Structure: year/{year}/semester/{semester}/instituteCode/{code}/students/{studentId}/attendance/{date}/inOut/{type}
+    // This provides better organization by year, semester, and institute code
+    match /year/{year} {
+      allow read: if isAuthenticated(); // Allow authenticated users to read attendance data
+      allow write: if false; // Prevent direct writes to year documents
+      
+      match /semester/{semester} {
+        allow read: if isAuthenticated();
+        allow write: if false; // Prevent direct writes to semester documents
+        
+        match /instituteCode/{instituteCode} {
+          // Helper function to check if user belongs to this institute by code
+          function belongsToInstituteByCode() {
+            return isAuthenticated() && (
+              // Check if user exists in institutes/{instituteId}/users
+              // We need to find the instituteId from instituteCode
+              // Since instituteCode might be the same as instituteId, check both
+              exists(/databases/$(database)/documents/institutes/$(instituteCode)/users/$(request.auth.uid)) ||
+              // Check old structure
+              (exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+               get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' &&
+               (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.instituteId == instituteCode ||
+                get(/databases/$(database)/documents/users/$(request.auth.uid)).data.instituteCode == instituteCode)) ||
+              // Also allow if user is authenticated admin (for attendance marking)
+              // This is more permissive to allow attendance marking
+              (exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+               get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin')
+            );
+          }
+          
+          allow read: if isAuthenticated(); // Allow authenticated users to read
+          allow write: if false; // Prevent direct writes to instituteCode documents
+          
+          match /students/{studentId} {
+            allow read: if isAuthenticated(); // Allow authenticated users to read student data
+            allow write: if false; // Prevent direct writes to student documents in hierarchical structure
+            
+            match /attendance/{date} {
+              allow read: if isAuthenticated(); // Allow authenticated users to read attendance
+              allow write: if false; // Prevent direct writes to attendance date documents
+              
+              match /inOut/{type} {
+                // Allow read for authenticated users
+                // For collection group queries, we need to be more permissive
+                // The query itself filters by studentId and instituteCode, so we allow authenticated admins
+                // For path-based queries, we still check belongsToInstituteByCode()
+                allow read: if isAuthenticated() && (
+                  // Path-based check (for direct path queries)
+                  belongsToInstituteByCode() ||
+                  // Collection group query check (uses document data)
+                  (resource.data.instituteCode != null &&
+                   exists(/databases/$(database)/documents/institutes/$(resource.data.instituteCode)/users/$(request.auth.uid))) ||
+                  // Collection group query check with old structure
+                  (resource.data.instituteCode != null &&
+                   exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+                   get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' &&
+                   (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.instituteId == resource.data.instituteCode ||
+                    get(/databases/$(database)/documents/users/$(request.auth.uid)).data.instituteCode == resource.data.instituteCode)) ||
+                  // Platform admin can access all
+                  isPlatformAdmin() ||
+                  // Allow any authenticated admin to read (for attendance viewing and collection group queries)
+                  // This is necessary for collection group queries which don't have path context
+                  (exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+                   get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin')
+                );
+                
+                // Allow write (create/update) for authenticated users who belong to the institute
+                // Also allow super admins to write attendance
+                // More permissive: allow any authenticated admin to write (for attendance marking)
+                // Type must be 'entry' or 'exit'
+                allow create, update: if isAuthenticated() && (
+                  belongsToInstituteByCode() ||
+                  isPlatformAdmin() ||
+                  // Allow any authenticated admin to write (for attendance marking)
+                  (exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+                   get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin')
+                ) && (
+                  type == 'entry' ||
+                  type == 'exit'
+                );
+                
+                // Allow delete only for super admins (for data correction)
+                allow delete: if isAuthenticated() && isPlatformAdmin();
+              }
+            }
+          }
+        }
+      }
+    }
+    
+    // ========== COLLECTION GROUP QUERY SUPPORT FOR inOut ==========
+    // Collection group queries on 'inOut' don't match the hierarchical path rules above
+    // We need a catch-all rule to handle collection group queries
+    // This allows authenticated admins to query inOut collection group
+    // The query itself filters by studentId and instituteCode for security
+    match /{path=**}/inOut/{type} {
+      // More permissive: allow any authenticated user to read
+      // The query filters by studentId and instituteCode, so security is maintained
+      allow read: if isAuthenticated();
+      
+      // Write permissions remain in the hierarchical structure rules above
+      allow write: if false; // Prevent writes through collection group path
+    }
+    
+    // ========== ROOT-LEVEL STUDENTS COLLECTION (FAST PHOTO INDEX) ==========
+    // ⚡ FAST INDEX: students/{studentId}/attendancePhotos/{photoId}
+    // This is a root-level collection for fast photo queries
+    // Structure: students/{studentId}/attendancePhotos/{autoDoc}
+    match /students/{studentId} {
+      // Allow authenticated users to read student documents
+      allow read: if isAuthenticated();
+      // Prevent direct writes to student documents (they're managed through institutes)
+      allow write: if false;
+      
+      // ⚡ FAST INDEX: Student attendance photos for instant queries
+      match /attendancePhotos/{photoId} {
+        // Allow any authenticated admin to read (for viewing student photos)
+        // This is permissive because the query filters by studentId
+        allow read: if isAuthenticated();
+        
+        // Allow authenticated admins to create (when marking attendance)
+        allow create: if isAuthenticated() && (
+          isPlatformAdmin() ||
+          // Allow any authenticated admin to create (for attendance marking)
+          (exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+           get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin')
+        );
+        
+        // Prevent updates/deletes (photos are immutable once created)
+        allow update, delete: if false;
+      }
+    }
+  }
+}

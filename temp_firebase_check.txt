@@ -1,0 +1,9 @@
+- Preparing the list of your Firebase projects
+✔ Preparing the list of your Firebase projects
+[90m┌──────────────────────[39m[90m┬────────────────────[39m[90m┬────────────────[39m[90m┬──────────────────────┐[39m
+[90m│[39m[32m Project Display Name [39m[90m│[39m[32m Project ID         [39m[90m│[39m[32m Project Number [39m[90m│[39m[32m Resource Location ID [39m[90m│[39m
+[90m├──────────────────────[39m[90m┼────────────────────[39m[90m┼────────────────[39m[90m┼──────────────────────┤[39m
+[90m│[39m MSCE ATTENDACE APP   [90m│[39m msce-attendace-app [90m│[39m 719857616327   [90m│[39m [33m[Not specified][39m      [90m│[39m
+[90m└──────────────────────[39m[90m┴────────────────────[39m[90m┴────────────────[39m[90m┴──────────────────────┘[39m
+
+1 project(s) total.

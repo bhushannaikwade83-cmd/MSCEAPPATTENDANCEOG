@@ -1,0 +1,8 @@
+Within each institute (instid), full name = FNAME+MNAME+LNAME (normalized).
+Keeping ONLY rows where that full name appears exactly once at that institute.
+
+Original data rows (excl. header): 103393
+Rows kept (unique full name within inst): 90971
+Rows removed (another row shares same inst+fullname): 12422
+
+Output CSV: STUDENTS_fullname_unique_within_inst_only.csv

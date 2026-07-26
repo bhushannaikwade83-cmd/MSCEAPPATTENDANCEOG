@@ -1,0 +1,117 @@
+rules_version = '2';
+
+service firebase.storage {
+  match /b/{bucket}/o {
+    
+    // Helper function to check if user is authenticated
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    // Helper function to check if user is main admin (top boss admin)
+    function isMainAdmin() {
+      return isAuthenticated() && 
+        exists(/databases/(default)/documents/main_admins/$(request.auth.uid));
+    }
+    
+    // Helper function to check if user belongs to a specific institute
+    // IMPORTANT: Admin IS the user - anyone in institutes/{instituteId}/users/{uid} is an admin
+    // TESTING PHASE: Approval check removed - all users in institute can access
+    function belongsToInstitute(instituteId) {
+      return isAuthenticated() && 
+        request.auth != null &&
+        exists(/databases/(default)/documents/institutes/$(instituteId)/users/$(request.auth.uid));
+    }
+    
+    // Helper function to check if file is an image
+    function isImage(filename) {
+      return filename.matches('.*\\.(jpg|jpeg|png|gif|bmp|webp)$');
+    }
+
+    // Helper function to validate file size (max 5MB)
+    function isValidFileSize() {
+      return request.resource.size < 5 * 1024 * 1024; // 5MB
+    }
+
+    // Helper function to validate content type
+    function isValidContentType() {
+      return request.resource.contentType.matches('image/(jpeg|jpg|png|gif|bmp|webp)');
+    }
+
+    // ========== BATCH-ORGANIZED ATTENDANCE PHOTOS ==========
+    // Path: institutes/{instituteId}/batches/{batchId}/attendance/{date}/{filename}
+    // FULL PERMISSIONS: Any authenticated admin can do everything
+    match /institutes/{instituteId}/batches/{batchId}/attendance/{date}/{filename} {
+      allow read, write, delete: if request.auth != null;
+    }
+
+    // ========== NEW STRUCTURE: Institute-based Attendance Photos with Subjects ==========
+    // Path: institutes/{instituteId}/Attendance/{subject}/{year}/{rollFolder}/{filename}
+    // FULL PERMISSIONS: Any authenticated admin can do everything
+    match /institutes/{instituteId}/Attendance/{subject}/{year}/{rollFolder}/{filename} {
+      allow read, write, delete: if request.auth != null;
+    }
+
+    // ========== OLD STRUCTURE: Without subject (for backward compatibility) ==========
+    // Path: institutes/{instituteId}/Attendance/{year}/{rollFolder}/{filename}
+    // FULL PERMISSIONS: Any authenticated admin can do everything
+    match /institutes/{instituteId}/Attendance/{year}/{rollFolder}/{filename} {
+      allow read, write, delete: if request.auth != null;
+    }
+
+    // ========== OLD STRUCTURE: Direct Attendance Folder with subject ==========
+    // Path: Attendance/{subject}/{year}/{rollFolder}/{filename}
+    // NOTE: This is old structure - should migrate to institutes/{instituteId}/Attendance
+    match /Attendance/{subject}/{year}/{rollFolder}/{filename} {
+      // Only main admin can access old structure
+      allow read: if isMainAdmin();
+      allow write: if isMainAdmin() && isImage(filename);
+      allow delete: if isMainAdmin();
+    }
+
+    // ========== OLDEST STRUCTURE: Without subject (for backward compatibility) ==========
+    // Path: Attendance/{year}/{rollFolder}/{filename}
+    // NOTE: This is old structure - should migrate to institutes/{instituteId}/Attendance
+    match /Attendance/{year}/{rollFolder}/{filename} {
+      // Only main admin can access old structure
+      allow read: if isMainAdmin();
+      allow write: if isMainAdmin() && isImage(filename);
+      allow delete: if isMainAdmin();
+    }
+
+    // ========== USER PROFILE PICTURES ==========
+    match /profile_pictures/{userId}/{filename} {
+      allow read: if isAuthenticated();
+      allow write: if isAuthenticated() && (request.auth.uid == userId || isMainAdmin()) && isImage(filename);
+      allow delete: if isAuthenticated() && (request.auth.uid == userId || isMainAdmin());
+    }
+
+    // ========== INSTITUTE LOGOS/IMAGES ==========
+    match /institutes/{instituteId}/logos/{filename} {
+      // Anyone authenticated can read logos (for display)
+      allow read: if isAuthenticated();
+      // STRICT: Only main admin or users belonging to THIS institute can modify logos
+      allow write: if (isMainAdmin() || belongsToInstitute(instituteId)) && 
+        isImage(filename) &&
+        isValidFileSize() &&
+        isValidContentType();
+      allow delete: if isMainAdmin() || belongsToInstitute(instituteId);
+    }
+
+    // ========== ATTENDANCE PROOFS (old structure) ==========
+    // FULL PERMISSIONS: Any authenticated admin can do everything
+    match /attendance_proofs/{date}/{filename} {
+      allow read, write, delete: if request.auth != null;
+    }
+
+    // ========== ATTENDANCE PHOTOS (for student app) ==========
+    match /attendance_photos/{allPaths=**} {
+      allow read, write, delete: if request.auth != null;
+    }
+
+    // ========== DEFAULT: Allow all authenticated users ==========
+    match /{allPaths=**} {
+      allow read, write, delete: if request.auth != null;
+    }
+  }
+}

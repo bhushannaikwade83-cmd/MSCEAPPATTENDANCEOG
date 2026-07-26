@@ -1,0 +1,307 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg viewBox="0 0 1600 2400" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <style>
+      .box { fill: #4D96FF; stroke: #000; stroke-width: 2; }
+      .diamond { fill: #FFD93D; stroke: #000; stroke-width: 2; }
+      .process { fill: #4D96FF; stroke: #000; stroke-width: 2; }
+      .new { fill: #FF6B6B; stroke: #000; stroke-width: 2; }
+      .success { fill: #6BCB77; stroke: #000; stroke-width: 2; }
+      .error { fill: #FF6B6B; stroke: #000; stroke-width: 2; }
+      .text { font-family: Arial, sans-serif; font-size: 12px; text-anchor: middle; }
+      .title { font-size: 16px; font-weight: bold; }
+      .line { stroke: #000; stroke-width: 2; }
+      .arrow { fill: #000; }
+    </style>
+  </defs>
+
+  <!-- Title -->
+  <text x="800" y="30" class="text title">MSCE GCC-TBC ATTENDANCE APP - UPDATED FLOWCHART</text>
+  <text x="800" y="50" class="text" style="font-size: 11px;">Updated: May 2026 | Status: Session Management + Biometric Lock Added</text>
+
+  <!-- APP LAUNCH -->
+  <rect x="650" y="70" width="300" height="60" class="box" rx="5"/>
+  <text x="800" y="105" class="text">APP LAUNCH</text>
+
+  <!-- Arrow down -->
+  <line x1="800" y1="130" x2="800" y2="160" class="line"/>
+  <polygon points="800,165 795,155 805,155" class="arrow"/>
+
+  <!-- SPLASH SCREEN -->
+  <rect x="650" y="160" width="300" height="60" class="box" rx="5"/>
+  <text x="800" y="185" class="text">SPLASH SCREEN</text>
+  <text x="800" y="205" class="text" style="font-size: 10px;">(2.4 second animation)</text>
+
+  <!-- Arrow down -->
+  <line x1="800" y1="220" x2="800" y2="250" class="line"/>
+  <polygon points="800,255 795,245 805,245" class="arrow"/>
+
+  <!-- Decision: Already logged in? -->
+  <polygon points="800,250 900,310 800,370 700,310" class="diamond"/>
+  <text x="800" y="310" class="text">Already</text>
+  <text x="800" y="325" class="text">Logged In?</text>
+
+  <!-- YES - Go to Biometric Lock -->
+  <line x1="900" y1="310" x2="1050" y2="310" class="line"/>
+  <text x="950" y="305" class="text" style="font-size: 11px; fill: green;">YES</text>
+  <polygon points="1055,310 1045,305 1045,315" class="arrow"/>
+
+  <!-- BIOMETRIC LOCK SCREEN (NEW!) -->
+  <rect x="1050" y="280" width="300" height="80" class="new" rx="5"/>
+  <text x="1200" y="300" class="text" style="fill: white; font-weight: bold;">⭐ BIOMETRIC LOCK SCREEN ⭐</text>
+  <text x="1200" y="320" class="text" style="fill: white; font-size: 11px;">PIN (4 digits) Required</text>
+  <text x="1200" y="335" class="text" style="fill: white; font-size: 11px;">+ Fingerprint/Face (optional)</text>
+
+  <!-- Arrow from Biometric Lock down -->
+  <line x1="1200" y1="360" x2="1200" y2="390" class="line"/>
+  <polygon points="1200,395 1195,385 1205,385" class="arrow"/>
+
+  <!-- Unlock successful? -->
+  <polygon points="1200,390 1280,450 1200,510 1120,450" class="diamond"/>
+  <text x="1200" y="450" class="text">Unlock</text>
+  <text x="1200" y="465" class="text">Successful?</text>
+
+  <!-- YES from Biometric -->
+  <line x1="1280" y1="450" x2="1350" y2="450" class="line"/>
+  <text x="1320" y="445" class="text" style="font-size: 11px; fill: green;">YES</text>
+  <polygon points="1355,450 1345,445 1345,455" class="arrow"/>
+
+  <!-- Goes to Dashboard from Biometric -->
+  <line x1="1350" y1="450" x2="1350" y2="1100" class="line"/>
+
+  <!-- NO - Go back to biometric lock or login -->
+  <line x1="1200" y1="510" x2="1200" y2="540" class="line"/>
+  <text x="1210" y="530" class="text" style="font-size: 11px; fill: red;">NO</text>
+  <polygon points="1200,545 1195,535 1205,535" class="arrow"/>
+
+  <!-- Try again or go to login -->
+  <rect x="1100" y="540" width="200" height="50" class="error" rx="5"/>
+  <text x="1200" y="560" class="text" style="fill: white;">Try again or</text>
+  <text x="1200" y="575" class="text" style="fill: white;">Go to Login</text>
+
+  <!-- NO - Go to Onboarding/Login -->
+  <line x1="700" y1="310" x2="500" y2="310" class="line"/>
+  <text x="600" y="305" class="text" style="font-size: 11px; fill: red;">NO</text>
+  <polygon points="495,310 505,305 505,315" class="arrow"/>
+
+  <!-- Check Permissions -->
+  <polygon points="500,310 580,370 500,430 420,370" class="diamond"/>
+  <text x="500" y="365" class="text">Permissions</text>
+  <text x="500" y="380" class="text">Done?</text>
+
+  <!-- NO - Show Permissions Screen -->
+  <line x1="420" y1="370" x2="250" y2="370" class="line"/>
+  <text x="335" y="365" class="text" style="font-size: 11px; fill: red;">NO</text>
+  <polygon points="245,370 255,365 255,375" class="arrow"/>
+
+  <!-- APP PERMISSIONS SCREEN (Repositioned!) -->
+  <rect x="50" y="340" width="300" height="80" class="new" rx="5"/>
+  <text x="200" y="360" class="text" style="fill: white; font-weight: bold;">⭐ APP PERMISSIONS ⭐</text>
+  <text x="200" y="378" class="text" style="fill: white; font-size: 11px;">Camera • Location • Biometric</text>
+  <text x="200" y="393" class="text" style="fill: white; font-size: 11px;">Storage • Grant All</text>
+
+  <!-- Arrow from Permissions down -->
+  <line x1="200" y1="420" x2="200" y2="450" class="line"/>
+  <polygon points="200,455 195,445 205,445" class="arrow"/>
+
+  <!-- Check Onboarding -->
+  <polygon points="200,450 280,510 200,570 120,510" class="diamond"/>
+  <text x="200" y="505" class="text">Onboarding</text>
+  <text x="200" y="520" class="text">Done?</text>
+
+  <!-- NO - Show Onboarding -->
+  <line x1="120" y1="510" x2="50" y2="510" class="line"/>
+  <text x="85" y="505" class="text" style="font-size: 11px; fill: red;">NO</text>
+  <polygon points="45,510 55,505 55,515" class="arrow"/>
+
+  <!-- ONBOARDING SCREEN -->
+  <rect x="-200" y="480" width="280" height="70" class="process" rx="5"/>
+  <text x="-60" y="505" class="text" style="fill: white;">ONBOARDING SCREEN</text>
+  <text x="-60" y="525" class="text" style="fill: white; font-size: 10px;">4 pages carousel (can skip)</text>
+
+  <!-- Arrow from Onboarding down -->
+  <line x1="-60" y1="550" x2="-60" y2="580" class="line"/>
+  <polygon points="-60,585 -65,575 -55,575" class="arrow"/>
+
+  <!-- YES - Skip to Login (from both Permissions and Onboarding) -->
+  <line x1="500" y1="370" x2="500" y2="580" class="line"/>
+  <line x1="200" y1="570" x2="200" y2="600" class="line"/>
+  <line x1="200" y1="600" x2="500" y2="600" class="line"/>
+  <text x="450" y="595" class="text" style="font-size: 11px; fill: green;">YES/SKIP</text>
+  <polygon points="505,600 495,595 495,605" class="arrow"/>
+
+  <!-- Line from Onboarding to Login -->
+  <line x1="-60" y1="550" x2="-60" y2="615" class="line"/>
+  <line x1="-60" y1="615" x2="500" y2="615" class="line"/>
+
+  <!-- LOGIN SCREEN -->
+  <rect x="350" y="600" width="300" height="80" class="process" rx="5"/>
+  <text x="500" y="625" class="text" style="fill: white; font-weight: bold;">LOGIN SCREEN</text>
+  <text x="500" y="645" class="text" style="fill: white; font-size: 10px;">Email + Password + CAPTCHA/OTP</text>
+  <text x="500" y="660" class="text" style="fill: white; font-size: 10px;">Existing or New User</text>
+
+  <!-- Arrow down -->
+  <line x1="500" y1="680" x2="500" y2="710" class="line"/>
+  <polygon points="500,715 495,705 505,705" class="arrow"/>
+
+  <!-- Decision: Login Success? -->
+  <polygon points="500,710 580,770 500,830 420,770" class="diamond"/>
+  <text x="500" y="770" class="text">Login</text>
+  <text x="500" y="785" class="text">Success?</text>
+
+  <!-- NO - Error -->
+  <line x1="420" y1="770" x2="280" y2="770" class="line"/>
+  <text x="350" y="765" class="text" style="font-size: 11px; fill: red;">NO</text>
+  <polygon points="275,770 285,765 285,775" class="arrow"/>
+
+  <!-- Error box -->
+  <rect x="100" y="740" width="200" height="60" class="error" rx="5"/>
+  <text x="200" y="765" class="text" style="fill: white;">Error:</text>
+  <text x="200" y="782" class="text" style="fill: white; font-size: 10px;">Check credentials</text>
+
+  <!-- YES - Continue -->
+  <line x1="500" y1="830" x2="500" y2="860" class="line"/>
+  <text x="510" y="850" class="text" style="font-size: 11px; fill: green;">YES</text>
+  <polygon points="500,865 495,855 505,855" class="arrow"/>
+
+  <!-- PIN SETUP -->
+  <rect x="350" y="860" width="300" height="70" class="process" rx="5"/>
+  <text x="500" y="885" class="text" style="fill: white;">PIN SETUP</text>
+  <text x="500" y="905" class="text" style="fill: white; font-size: 11px;">4-digit PIN (can skip)</text>
+
+  <!-- Arrow down -->
+  <line x1="500" y1="930" x2="500" y2="960" class="line"/>
+  <polygon points="500,965 495,955 505,955" class="arrow"/>
+
+  <!-- GPS SETTINGS -->
+  <rect x="350" y="960" width="300" height="70" class="process" rx="5"/>
+  <text x="500" y="985" class="text" style="fill: white;">GPS SETTINGS</text>
+  <text x="500" y="1005" class="text" style="fill: white; font-size: 11px;">Set location (set once, locked)</text>
+
+  <!-- Arrow down -->
+  <line x1="500" y1="1030" x2="500" y2="1060" class="line"/>
+  <polygon points="500,1065 495,1055 505,1055" class="arrow"/>
+
+  <!-- SESSION MANAGEMENT BOX (NEW!) -->
+  <rect x="250" y="1060" width="500" height="200" class="new" stroke-dasharray="5,5" rx="5"/>
+  <text x="500" y="1085" class="text" style="fill: white; font-weight: bold;">⭐ SESSION ACTIVE (NEW!) ⭐</text>
+  <text x="500" y="1105" class="text" style="fill: white; font-size: 11px;">Valid from login time until 12:00 AM (Midnight)</text>
+
+  <text x="280" y="1130" class="text" style="fill: white; font-size: 10px; text-anchor: start;">✅ User can mark attendance</text>
+  <text x="280" y="1145" class="text" style="fill: white; font-size: 10px; text-anchor: start;">✅ GPS check runs</text>
+  <text x="280" y="1160" class="text" style="fill: white; font-size: 10px; text-anchor: start;">✅ Back button: Session continues</text>
+  <text x="280" y="1175" class="text" style="fill: white; font-size: 10px; text-anchor: start;">✅ Pause/Resume: No BiometricLock</text>
+  <text x="280" y="1190" class="text" style="fill: white; font-size: 10px; text-anchor: start;">✅ Close app: Session persists</text>
+  <text x="280" y="1205" class="text" style="fill: white; font-size: 10px; text-anchor: start;">✅ At 12:00 AM: Auto-logout</text>
+  <text x="280" y="1220" class="text" style="fill: white; font-size: 10px; text-anchor: start;">✅ Manual logout: Anytime</text>
+
+  <!-- Arrow from Session to Dashboard -->
+  <line x1="500" y1="1260" x2="500" y2="1290" class="line"/>
+  <polygon points="500,1295 495,1285 505,1285" class="arrow"/>
+
+  <!-- ADMIN DASHBOARD -->
+  <rect x="300" y="1290" width="400" height="80" class="success" rx="5"/>
+  <text x="500" y="1315" class="text" style="fill: white; font-weight: bold;">ADMIN DASHBOARD</text>
+  <text x="500" y="1335" class="text" style="fill: white; font-size: 11px;">5-Tab Navigation</text>
+  <text x="500" y="1350" class="text" style="fill: white; font-size: 10px;">Home • Add User • Students • GPS • Reports</text>
+
+  <!-- Arrow down -->
+  <line x1="500" y1="1370" x2="500" y2="1400" class="line"/>
+  <polygon points="500,1405 495,1395 505,1395" class="arrow"/>
+
+  <!-- MARK ATTENDANCE BOX -->
+  <rect x="100" y="1400" width="800" height="280" class="process" stroke-dasharray="5,5" rx="5"/>
+  <text x="500" y="1425" class="text" style="fill: white; font-weight: bold;">MARK ATTENDANCE PROCESS</text>
+
+  <text x="130" y="1450" class="text" style="fill: white; font-size: 11px; text-anchor: start; font-weight: bold;">1. GPS CHECK</text>
+  <text x="130" y="1468" class="text" style="fill: white; font-size: 10px; text-anchor: start;">   Get location → Compare distance with 15m</text>
+  <text x="130" y="1482" class="text" style="fill: white; font-size: 10px; text-anchor: start;">   If > 15m: Error "Outside institute"</text>
+  <text x="130" y="1496" class="text" style="fill: white; font-size: 10px; text-anchor: start;">   If ≤ 15m: Continue to next step</text>
+
+  <text x="130" y="1522" class="text" style="fill: white; font-size: 11px; text-anchor: start; font-weight: bold;">2. LIVENESS DETECTION</text>
+  <text x="130" y="1540" class="text" style="fill: white; font-size: 10px; text-anchor: start;">   User must blink eyes (anti-spoof)</text>
+  <text x="130" y="1554" class="text" style="fill: white; font-size: 10px; text-anchor: start;">   If not live: Error "Blink your eyes"</text>
+
+  <text x="130" y="1580" class="text" style="fill: white; font-size: 11px; text-anchor: start; font-weight: bold;">3. FACE CAPTURE</text>
+  <text x="130" y="1598" class="text" style="fill: white; font-size: 10px; text-anchor: start;">   Take single photo → Detect face → Crop</text>
+  <text x="130" y="1612" class="text" style="fill: white; font-size: 10px; text-anchor: start;">   If error: Retry or select different student</text>
+
+  <text x="130" y="1638" class="text" style="fill: white; font-size: 11px; text-anchor: start; font-weight: bold;">4. FACE MATCHING</text>
+  <text x="130" y="1656" class="text" style="fill: white; font-size: 10px; text-anchor: start;">   AI generates embedding → Compare with registered</text>
+  <text x="130" y="1670" class="text" style="fill: white; font-size: 10px; text-anchor: start;">   If similarity ≥ 0.65: Match found → Record</text>
+  <text x="130" y="1684" class="text" style="fill: white; font-size: 10px; text-anchor: start;">   If similarity < 0.65: Error "Face not recognized"</text>
+
+  <!-- Arrow from attendance down -->
+  <line x1="500" y1="1680" x2="500" y2="1710" class="line"/>
+  <polygon points="500,1715 495,1705 505,1705" class="arrow"/>
+
+  <!-- RECORD TO SUPABASE -->
+  <rect x="300" y="1710" width="400" height="80" class="success" rx="5"/>
+  <text x="500" y="1735" class="text" style="fill: white; font-weight: bold;">RECORD TO SUPABASE</text>
+  <text x="500" y="1755" class="text" style="fill: white; font-size: 10px;">Photo + GPS + Timestamp + Embedding</text>
+  <text x="500" y="1770" class="text" style="fill: white; font-size: 10px;">✅ ATTENDANCE MARKED</text>
+
+  <!-- Arrow down -->
+  <line x1="500" y1="1790" x2="500" y2="1820" class="line"/>
+  <polygon points="500,1825 495,1815 505,1815" class="arrow"/>
+
+  <!-- REPORTS -->
+  <rect x="300" y="1820" width="400" height="80" class="process" rx="5"/>
+  <text x="500" y="1845" class="text" style="fill: white; font-weight: bold;">ATTENDANCE REPORTS</text>
+  <text x="500" y="1865" class="text" style="fill: white; font-size: 11px;">PDF Export • Date Range Filter</text>
+  <text x="500" y="1880" class="text" style="fill: white; font-size: 11px;">Calendar View • Trends & Analytics</text>
+
+  <!-- Arrow down -->
+  <line x1="500" y1="1900" x2="500" y2="1930" class="line"/>
+  <polygon points="500,1935 495,1925 505,1925" class="arrow"/>
+
+  <!-- MIDNIGHT CHECK -->
+  <polygon points="500,1930 600,2000 500,2070 400,2000" class="diamond"/>
+  <text x="500" y="1995" class="text">Is it 12:00 AM</text>
+  <text x="500" y="2010" class="text">(Midnight)?</text>
+
+  <!-- YES - Auto Logout -->
+  <line x1="600" y1="2000" x2="750" y2="2000" class="line"/>
+  <text x="680" y="1995" class="text" style="font-size: 11px; fill: green;">YES</text>
+  <polygon points="755,2000 745,1995 745,2005" class="arrow"/>
+
+  <!-- AUTO LOGOUT -->
+  <rect x="750" y="1970" width="200" height="60" class="error" rx="5"/>
+  <text x="850" y="1995" class="text" style="fill: white;">⏰ AUTO-LOGOUT</text>
+  <text x="850" y="2015" class="text" style="fill: white; font-size: 10px;">Session Expired</text>
+
+  <!-- NO - Continue Session -->
+  <line x1="500" y1="2070" x2="500" y2="2100" class="line"/>
+  <text x="510" y="2090" class="text" style="font-size: 11px; fill: red;">NO</text>
+  <polygon points="500,2105 495,2095 505,2095" class="arrow"/>
+
+  <!-- CONTINUE SESSION -->
+  <rect x="350" y="2100" width="300" height="60" class="success" rx="5"/>
+  <text x="500" y="2125" class="text" style="fill: white;">✅ Continue Using App</text>
+  <text x="500" y="2142" class="text" style="fill: white; font-size: 10px;">Session Valid until Midnight</text>
+
+  <!-- Loop back to dashboard -->
+  <line x1="500" y1="2100" x2="250" y2="2100" class="line"/>
+  <line x1="250" y1="2100" x2="250" y2="1330" class="line"/>
+  <line x1="250" y1="1330" x2="300" y2="1330" class="line"/>
+  <text x="220" y="1700" class="text" style="font-size: 10px;">Loop back</text>
+
+  <!-- OR - Manual Logout -->
+  <text x="500" y="2200" class="text" style="font-size: 12px; fill: red; font-weight: bold;">OR</text>
+
+  <!-- Manual Logout Box -->
+  <rect x="300" y="2220" width="400" height="70" class="error" rx="5"/>
+  <text x="500" y="2245" class="text" style="fill: white;">User clicks LOGOUT button</text>
+  <text x="500" y="2265" class="text" style="fill: white; font-size: 11px;">Session ends immediately → Go to Login</text>
+
+  <!-- Legend -->
+  <text x="50" y="2380" class="text" style="font-size: 12px; fill: #000; text-anchor: start; font-weight: bold;">Legend:</text>
+  <rect x="50" y="2390" width="40" height="30" class="box"/>
+  <text x="100" y="2410" class="text" style="text-anchor: start;">Process</text>
+
+  <polygon points="190,2390 210,2405 190,2420 170,2405" class="diamond"/>
+  <text x="230" y="2410" class="text" style="text-anchor: start;">Decision</text>
+
+  <rect x="420" y="2390" width="40" height="30" class="new"/>
+  <text x="470" y="2410" class="text" style="text-anchor: start;">NEW! (Critical Update)</text>
+</svg>

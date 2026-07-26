@@ -1,0 +1,26 @@
+# Face Recognition Backend - Production Stack
+Flask==2.3.0
+Flask-CORS==4.0.0
+python-dotenv==1.0.0
+
+# Core Face Recognition
+insightface==0.7.3
+onnxruntime==1.16.0
+
+# Duplicate Detection
+faiss-cpu==1.7.4  # Use faiss-gpu if you have NVIDIA GPU
+
+# Liveness Detection
+minifacenet==1.0.0
+
+# Image Processing
+opencv-python==4.8.0.74
+Pillow==10.0.0
+numpy==1.24.0
+
+# Utilities
+requests==2.31.0
+gunicorn==21.2.0
+
+# Logging & Monitoring
+python-json-logger==2.0.7

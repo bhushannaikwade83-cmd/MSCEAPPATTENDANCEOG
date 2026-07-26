@@ -1,0 +1,33 @@
+{
+  "@@locale": "en",
+  "portalPrimaryLine": "MSCE Attendance App  |  एमएससीई उपस्थिती अॅप",
+  "portalSecondaryLineDefault": "MSCE Smart Attendance Management System",
+  "officialBadge": "OFFICIAL",
+  "footerOfficialUse": "OFFICIAL USE ONLY",
+  "footerCredit": "Powered by MSCE - Maharashtra State Council of Education",
+  "mainNavSubtitleAdmin": "Admin dashboard  |  प्रशासक डॅशबोर्ड",
+  "mainNavSubtitleInstructor": "Instructor user  |  प्रशिक्षक वापरकर्ता",
+  "mainNavSubtitleStudent": "Student records  |  विद्यार्थी नोंदी",
+  "mainNavSubtitleGps": "GPS geofence  |  स्थान सीमा सेटिंग्ज",
+  "mainNavSubtitleReports": "Attendance reports  |  उपस्थिती अहवाल",
+  "splashTitle": "MSCE Attendance App",
+  "splashSubtitle": "MSCE Smart Attendance Management System",
+  "splashCredit": "Powered by MSCE - Maharashtra State Council of Education",
+  "splashLoading": "Loading…",
+  "languageEnglish": "English",
+  "languageMarathi": "मराठी",
+  "languageToggleHint": "Language  |  भाषा",
+  "loginAppTitle": "MSCE Attendance App",
+  "loginSubtitle": "MSCE Smart Attendance Management System",
+  "loginCopyright": "© {year} MSCE Attendance App. All rights reserved.",
+  "@loginCopyright": {
+    "placeholders": {
+      "year": {
+        "type": "String"
+      }
+    }
+  },
+  "chipEncrypted": "Encrypted",
+  "chipGovtPortal": "Govt. Portal",
+  "chipSecure": "Secure"
+}

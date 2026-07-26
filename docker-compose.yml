@@ -1,0 +1,21 @@
+version: '3.8'
+
+services:
+  insightface-api:
+    build: .
+    container_name: insightface-server
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./face_database.json:/app/face_database.json
+      - ./data:/app/data
+    environment:
+      - PYTHONUNBUFFERED=1
+    restart: unless-stopped
+    # Limit memory to prevent OOM
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+        reservations:
+          memory: 2G

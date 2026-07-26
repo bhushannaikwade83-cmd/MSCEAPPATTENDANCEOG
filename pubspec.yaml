@@ -1,0 +1,94 @@
+name: smart_attendance_app
+description: "MSCE Attendance App - Smart attendance for MSCE institutes"
+publish_to: 'none'
+
+version: 2.0.0+2
+
+environment:
+  sdk: ^3.10.3
+
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_localizations:
+    sdk: flutter
+
+  # UI & Fonts
+  google_fonts: ^8.0.2
+  cupertino_icons: ^1.0.8
+  
+  # Location & Camera
+  geolocator: ^14.0.2
+  camera: ^0.12.0+1
+  google_mlkit_face_detection: ^0.13.2
+  # MobileFaceNet 192-dim embeddings (TensorFlow Lite; iOS + Android via tflite_flutter)
+  tflite_flutter: ^0.12.1
+
+  # Backend: Supabase (Postgres + Auth). Storage: Backblaze B2 via b2b_storage_service.
+  supabase_flutter: ^2.12.0
+
+  # Local scheduled reminders (institute_notification_service)
+  flutter_local_notifications: ^21.0.0
+  timezone: ^0.11.0
+  workmanager: ^0.9.0+3
+
+  # State Management & Utilities
+  provider: ^6.1.1
+  intl: ^0.20.2
+  image_picker: ^1.0.4
+  shared_preferences: ^2.3.3
+  crypto: ^3.0.5  # For PIN hashing
+  flutter_dotenv: ^6.0.0
+  url_launcher: ^6.3.1  # For opening Firebase Console links
+  cached_network_image: ^3.3.1  # For efficient image loading
+  
+  # Security & Anti-Fraud Packages
+  device_info_plus: ^12.4.0  # Device fingerprinting
+  image: ^4.8.0  # Image processing & watermarking
+  exif: ^3.3.0  # EXIF metadata extraction
+  connectivity_plus: ^7.1.1  # Network type detection
+  permission_handler: ^11.4.0  # First-launch camera / location / notification prompts
+  http: ^1.2.2  # IP address detection
+  path_provider: ^2.1.2  # File paths
+  local_auth: ^3.0.1  # Biometric authentication (fingerprint/face unlock)
+
+  # Animation Packages
+  flutter_animate: ^4.5.0  # Versatile animation library
+  shimmer: ^3.0.0  # Shimmer loading effect
+  
+  # PDF Generation
+  pdf: ^3.11.1
+  printing: ^5.13.3
+  
+  # Responsive Design
+  flutter_screenutil: ^5.9.0
+  flutter_secure_storage: ^10.0.0
+  flutter_cache_manager: ^3.4.1
+
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+  flutter_launcher_icons: ^0.14.3
+
+flutter_launcher_icons:
+  android: true
+  ios: true
+  image_path: assets/msce_attendance_app_logo.png
+  adaptive_icon_background: "#FFFFFF"
+  adaptive_icon_foreground: assets/msce_attendance_app_logo.png
+  min_sdk_android: 21
+
+flutter:
+  uses-material-design: true
+  generate: true
+
+  # Assets
+  assets:
+    - app_config.env
+    - assets/msce_attendance_app_logo.png
+    - assets/models/mobilefacenet.tflite
+    - assets/models/minifas_v1se_80x80.tflite
+    - assets/models/face_anti_spoofing.tflite
+    - assets/models/anti_spoof_print_replay.tflite

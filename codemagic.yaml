@@ -1,0 +1,49 @@
+workflows:
+  ios-workflow:
+    name: iOS Workflow
+    max_build_duration: 120
+    instance_type: mac_mini_m1
+    environment:
+      flutter: stable
+      xcode: latest
+      cocoapods: default
+      groups:
+        - app_store_credentials  # Add your credentials group here
+      vars:
+        APP_ID: "com.mscegcc.tbcattendance.app"  # Bundle ID (iOS + Android)
+    scripts:
+      - name: Get Flutter dependencies
+        script: |
+          flutter pub get
+      - name: Install CocoaPods dependencies
+        script: |
+          cd ios && pod install
+      - name: Flutter analyze
+        script: |
+          flutter analyze
+      - name: Flutter test
+        script: |
+          flutter test
+      - name: Build iOS (Debug)
+        script: |
+          flutter build ios --debug --no-codesign
+      - name: Build iOS (Release)
+        script: |
+          flutter build ios --release --no-codesign
+    artifacts:
+      - build/ios/iphoneos/*.app
+      - build/ios/ipa/*.ipa
+    publishing:
+      email:
+        recipients:
+          - your-email@example.com  # Update with your email
+        notify:
+          success: true
+          failure: true
+      # Uncomment below if you want to publish to TestFlight
+      # app_store_connect:
+      #   auth: integration
+      #   submit_to_testflight: true
+      #   beta_groups:
+      #     - group name 1
+      #     - group name 2

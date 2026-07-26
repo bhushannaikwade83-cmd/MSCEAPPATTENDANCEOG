@@ -1,0 +1,26 @@
+# FastAPI and server
+fastapi>=0.104.1,<0.137
+uvicorn[standard]>=0.24.0,<0.45
+python-multipart>=0.0.6,<0.1
+
+# Face Recognition - RetinaFace (detection) + ArcFace (embedding)
+# InsightFace provides both RetinaFace detector and ArcFace embedding model
+insightface==0.7.3  # Includes RetinaFace (detection) + ArcFace R100 (512-dim embeddings)
+onnxruntime>=1.24.1,<1.25  # Newer wheels are required for current Python versions
+opencv-python-headless>=4.8,<4.14  # Headless version for Cloud Run (no GUI)
+numpy>=1.24,<3
+Pillow>=10,<13
+scipy>=1.9.0  # Required by some ML libraries
+
+# Vector Database
+faiss-cpu>=1.7.4,<1.14  # Use faiss-gpu if you have GPU
+# faiss-gpu==1.7.4  # Uncomment if using GPU
+
+# Firebase (for metadata)
+firebase-admin>=6.2.0,<8
+google-auth>=2.0.0,<3  # Required by firebase-admin
+
+# Utilities
+python-dotenv>=1.0.0,<2
+pydantic>=2.5.0,<3
+requests>=2.28.0,<3  # For downloading models

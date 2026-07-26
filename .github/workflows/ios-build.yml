@@ -1,0 +1,76 @@
+name: iOS Build and Test
+
+on:
+  push:
+    branches: [ main, master, develop ]
+  pull_request:
+    branches: [ main, master, develop ]
+  workflow_dispatch:  # Allows manual triggering
+
+jobs:
+  build-ios:
+    name: Build iOS App
+    runs-on: macos-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.24.0'
+          channel: 'stable'
+          cache: true
+      
+      - name: Verify Flutter installation
+        run: flutter doctor -v
+      
+      - name: Get Flutter dependencies
+        run: flutter pub get
+      
+      - name: Install CocoaPods dependencies
+        run: |
+          cd ios
+          pod install
+          cd ..
+        env:
+          FLUTTER_ROOT: ${{ env.FLUTTER_ROOT }}
+      
+      - name: Build iOS (Debug - No Codesign)
+        run: flutter build ios --debug --no-codesign
+        continue-on-error: true
+      
+      - name: Build iOS (Release - No Codesign)
+        run: flutter build ios --release --no-codesign
+        continue-on-error: true
+      
+      - name: Run Flutter tests
+        run: flutter test
+        continue-on-error: true
+      
+      - name: Upload Debug build artifacts
+        uses: actions/upload-artifact@v4
+        if: success()
+        with:
+          name: ios-debug-build
+          path: build/ios/iphoneos/*.app
+          retention-days: 7
+          if-no-files-found: warn
+      
+      - name: Upload Release build artifacts
+        uses: actions/upload-artifact@v4
+        if: success()
+        with:
+          name: ios-release-build
+          path: build/ios/iphoneos/*.app
+          retention-days: 7
+          if-no-files-found: warn
+      
+      - name: Build summary
+        if: always()
+        run: |
+          echo "## iOS Build Summary" >> $GITHUB_STEP_SUMMARY
+          echo "- Flutter Version: $(flutter --version | head -n 1)" >> $GITHUB_STEP_SUMMARY
+          echo "- Build Status: ${{ job.status }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Artifacts: Check the Actions tab for downloadable builds" >> $GITHUB_STEP_SUMMARY

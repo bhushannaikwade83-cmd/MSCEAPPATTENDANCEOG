@@ -1,0 +1,11 @@
+Lists are for MERGED file: STUDENTS_MERGED_duplicate_names.csv (use for import).
+
+MERGED — no subject (all SUBJECT_* empty/0): 5 students
+MERGED — more than 4 distinct subjects: 3 students
+
+RAW STUDENTS.csv — no subject: 7
+RAW STUDENTS.csv — more than 4 subjects: 0
+
+Files:
+  STUDENTS_no_subject_rows_LIST.tsv
+  STUDENTS_more_than_4_subjects_LIST.tsv

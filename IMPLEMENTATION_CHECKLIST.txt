@@ -1,0 +1,261 @@
+╔════════════════════════════════════════════════════════════════════════╗
+║        STORE CREDITED HOURS IN DATABASE - IMPLEMENTATION CHECKLIST       ║
+╚════════════════════════════════════════════════════════════════════════╝
+
+PHASE 1: DATABASE SETUP
+┌────────────────────────────────────────────────────────────────────────┐
+Task: Apply migration to add columns
+  ☐ Copy: supabase/migrations/add_credited_hours_to_attendance.sql
+  ☐ Run in Supabase SQL editor (or supabase migration up)
+  ☐ Verify columns exist:
+    - credited_hours (NUMERIC)
+    - hours_calculation_note (TEXT)
+    - hours_calculated_at (TIMESTAMP)
+  ☐ Check indexes were created
+  ☐ Estimate: 5 minutes
+└────────────────────────────────────────────────────────────────────────┘
+
+PHASE 2: ADD SERVICE FILES
+┌────────────────────────────────────────────────────────────────────────┐
+Task: Copy 3 new service files to project
+  ☐ File 1: lib/services/attendance_hours_calculator_service.dart
+    ☐ Copy contents
+    ☐ Check: imports are correct
+    ☐ Check: class name is AttendanceHoursCalculatorService
+
+  ☐ File 2: lib/services/attendance_hours_persistence_service.dart
+    ☐ Copy contents
+    ☐ Check: imports are correct
+    ☐ Check: class name is AttendanceHoursPersistenceService
+
+  ☐ File 3: lib/core/attendance_hours_db_reader.dart
+    ☐ Copy contents
+    ☐ Check: imports are correct
+    ☐ Check: class name is AttendanceHoursDbReader
+
+  ☐ Try to compile: flutter pub get && flutter analyze
+  ☐ Fix any import errors
+  ☐ Estimate: 10 minutes
+└────────────────────────────────────────────────────────────────────────┘
+
+PHASE 3: UPDATE ATTENDANCE EXIT CODE
+┌────────────────────────────────────────────────────────────────────────┐
+Task: When student marks exit, save calculated hours
+
+Location: Find your attendance exit marking code
+  Typical locations:
+    - lib/services/attendance_service.dart
+    - lib/services/student_attendance_service.dart
+    - Wherever you handle "Mark Exit" button
+
+Step-by-step:
+  ☐ Find: Code that saves exitTime to database
+  ☐ Add imports:
+    import '../../services/attendance_hours_calculator_service.dart';
+    import '../../services/attendance_hours_persistence_service.dart';
+
+  ☐ After saving exit time, add:
+    final calculation = AttendanceHoursCalculatorService.calculateCreditedHours(
+      entryTime: entryTime,
+      exitTime: exitTime,
+      subjectCount: subjectCount,
+    );
+
+    await AttendanceHoursPersistenceService.saveHoursToRecord(
+      recordId: recordId,
+      creditedHours: calculation['creditedHours'] as double,
+      calculationNote: calculation['calculationNote'] as String,
+    );
+
+  ☐ Test: Mark exit, check DB for credited_hours value
+  ☐ Estimate: 15 minutes
+└────────────────────────────────────────────────────────────────────────┘
+
+PHASE 4: UPDATE AUTO-CLOSE CODE
+┌────────────────────────────────────────────────────────────────────────┐
+Task: When auto-close happens (midnight), save hours to existing record
+
+Location: Find your auto-close logic
+  Typical locations:
+    - lib/core/attendance_auto_close_policy.dart
+    - Wherever you handle midnight auto-close
+    - Job scheduling service
+
+Step-by-step:
+  ☐ Find: Code that updates record with synthetic exit time
+  ☐ Add imports:
+    import '../services/attendance_hours_calculator_service.dart';
+    import '../services/attendance_hours_persistence_service.dart';
+
+  ☐ Before updating record, add:
+    final calculation = AttendanceHoursCalculatorService.calculateCreditedHours(
+      entryTime: entryTime,
+      exitTime: nowUtc,  // midnight time
+      subjectCount: subjectCount,
+    );
+
+  ☐ When updating record, add:
+    'credited_hours': calculation['creditedHours'],
+    'hours_calculation_note': calculation['calculationNote'],
+    'hours_calculated_at': DateTime.now().toUtc().toIso8601String(),
+
+  ☐ Also call persistence service to save:
+    await AttendanceHoursPersistenceService.saveHoursToRecord(...);
+
+  ☐ Test: Check midnight auto-close saves hours
+  ☐ Estimate: 15 minutes
+└────────────────────────────────────────────────────────────────────────┘
+
+PHASE 5: UPDATE REPORT READING CODE
+┌────────────────────────────────────────────────────────────────────────┐
+Task: Read pre-calculated hours from database instead of calculating
+
+Location: lib/presentation/screens/attendance_reports_screen.dart
+
+Step-by-step:
+  ☐ Add import:
+    import '../../core/attendance_hours_db_reader.dart';
+
+  ☐ Find _generateReport() method
+
+  ☐ Find: Section that calculates hours (around line 356-428)
+    Look for: _calculateCreditedHours() calls
+
+  ☐ Replace entire hours calculation section with:
+    final studentCreditedHours = await AttendanceHoursDbReader.getStudentCreditedHours(
+      studentIds: studentIds,
+      startDate: _selectedStartDate,
+      endDate: _selectedEndDate,
+    );
+
+    final dailyCreditedHours = await AttendanceHoursDbReader.getDailyCreditedHours(
+      studentIds: studentIds,
+      startDate: _selectedStartDate,
+      endDate: _selectedEndDate,
+    );
+
+    final totalCreditedHours = studentCreditedHours.values.fold<double>(0, (a, b) => a + b);
+
+  ☐ Remove _calculateCreditedHours() method from this file (no longer needed)
+
+  ☐ Compile and test
+  ☐ Test: Generate report, check total hours display correctly
+  ☐ Estimate: 15 minutes
+└────────────────────────────────────────────────────────────────────────┘
+
+PHASE 6: BACKFILL EXISTING DATA (ONE-TIME)
+┌────────────────────────────────────────────────────────────────────────┐
+Task: Calculate and save hours for all existing records
+
+Step-by-step:
+  ☐ Create a test function or admin endpoint
+
+  ☐ Add:
+    import '../../services/attendance_hours_persistence_service.dart';
+
+    Future<void> backfillCreditedHours() async {
+      final result = await AttendanceHoursPersistenceService.backfillCreditedHours(
+        instituteId: null,  // null = all institutes
+        startDate: DateTime(2024, 1, 1),
+        endDate: DateTime.now(),
+      );
+
+      print('✅ Backfilled: ${result['successCount']} records');
+      print('❌ Errors: ${result['errorCount']} records');
+    }
+
+  ☐ Call this function once (add to debug screen or admin endpoint)
+  ☐ Monitor progress
+  ☐ Verify with:
+    final validation = await AttendanceHoursPersistenceService.validateCreditedHours();
+    // Should show coverage = 100%
+
+  ☐ Delete backfill function after running (it's done)
+  ☐ Estimate: 10 minutes
+└────────────────────────────────────────────────────────────────────────┘
+
+PHASE 7: TESTING
+┌────────────────────────────────────────────────────────────────────────┐
+Test Case 1: Mark Exit with Hours
+  ☐ Mark student entry at 9:00 AM
+  ☐ Mark student exit at 11:00 AM
+  ☐ Check database: SELECT credited_hours FROM attendance_in_out WHERE id=?
+  ☐ Verify: Hours are saved (e.g., 2.0 or 2.5)
+  ☐ Check console for "✅ Saved hours to record" message
+
+Test Case 2: Auto-Close with Hours
+  ☐ Mark entry at 8:00 AM
+  ☐ Don't mark exit
+  ☐ Wait for midnight auto-close (or trigger manually)
+  ☐ Check database: credited_hours should be 1.0
+  ☐ Check console for auto-close logs
+
+Test Case 3: Generate Report
+  ☐ Click "Load All Students"
+  ☐ Click "View All Students Report"
+  ☐ Check: TOTAL Hours shows correct value
+  ☐ Verify: NOT showing 9h 20m (the old bug)
+  ☐ Check: Individual student hours look reasonable
+
+Test Case 4: Multiple Date Ranges
+  ☐ Test report with 1 week date range
+  ☐ Test report with 1 month date range
+  ☐ Test report with custom date range
+  ☐ Verify: Hours calculated correctly for each range
+
+Test Case 5: PDF Export
+  ☐ Generate report
+  ☐ Click "Export PDF"
+  ☐ Verify: PDF shows correct total hours
+  ☐ Check: PDF hours match report display
+
+All tests passing? ✅ You're done!
+Estimate: 20 minutes
+└────────────────────────────────────────────────────────────────────────┘
+
+PHASE 8: DEPLOYMENT
+┌────────────────────────────────────────────────────────────────────────┐
+  ☐ Create backup of database (just in case)
+  ☐ Deploy migration to production
+  ☐ Verify columns exist on production
+  ☐ Deploy updated code
+  ☐ Run backfill on production
+  ☐ Verify all records have hours
+  ☐ Test report on production
+  ☐ Monitor for issues
+  ☐ Estimate: 10 minutes + monitoring
+└────────────────────────────────────────────────────────────────────────┘
+
+SUMMARY
+┌────────────────────────────────────────────────────────────────────────┐
+Phase 1: Database              [ ] 5 min
+Phase 2: Service Files         [ ] 10 min
+Phase 3: Exit Marking Code     [ ] 15 min
+Phase 4: Auto-Close Code       [ ] 15 min
+Phase 5: Report Reading Code   [ ] 15 min
+Phase 6: Backfill Existing     [ ] 10 min
+Phase 7: Testing               [ ] 20 min
+Phase 8: Deployment            [ ] 10 min
+                              ─────────
+TOTAL TIME                     [ ] ~100 min
+
+KEY DOCUMENTATION
+  📖 IMPLEMENTATION_GUIDE_STORE_HOURS_IN_DB.md - Detailed steps
+  💻 INTEGRATION_CODE_EXAMPLES.md - Code snippets
+  📋 DATABASE_HOURS_STORAGE_SUMMARY.md - Overview
+
+SUPPORT RESOURCES
+  Service Files:
+    ☐ attendance_hours_calculator_service.dart
+    ☐ attendance_hours_persistence_service.dart
+    ☐ attendance_hours_db_reader.dart
+
+  Migration:
+    ☐ add_credited_hours_to_attendance.sql
+
+  Documentation:
+    ☐ 4 detailed guides created
+
+═══════════════════════════════════════════════════════════════════════════
+READY TO START? Begin with Phase 1 (Database Setup) ↓
+═══════════════════════════════════════════════════════════════════════════

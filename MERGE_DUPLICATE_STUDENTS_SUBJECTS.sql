@@ -1,0 +1,739 @@
+-- MERGE: Combine subjects from duplicate student registrations
+-- Keep the NEWEST record, merge all subjects, delete the OLDER ones
+-- Uses the list from CLEANUP_DUPLICATE_STUDENTS_LIST.sql
+
+-- ========================================
+-- STEP 1: Identify what will be merged (SAFE - Read Only)
+-- ========================================
+
+-- Show which duplicates will be merged
+SELECT
+  i.institute_code,
+  s.name as student_name,
+  COUNT(*) as total_registrations,
+  COUNT(DISTINCT s.sr_no) as different_sr_nos,
+  string_agg(DISTINCT s.sr_no::text, ', ' ORDER BY s.sr_no::text) as all_sr_nos,
+  COUNT(DISTINCT s.subjects::text) as different_subject_sets,
+  string_agg(s.id::text, ', ') as all_record_ids,
+  MIN(s.created_at) as oldest_registered,
+  MAX(s.created_at) as newest_registered
+FROM public.students s
+JOIN public.institutes i ON s.institute_id = i.id
+WHERE (i.institute_code, s.name) IN (
+  ('11063', 'AASHISH BALARAM GAIKAR'),
+  ('11063', 'POURNIMA ASHOK RATHOD'),
+  ('11066', 'RUCHIRA SANTOSH DESHMUKH'),
+  ('11132', 'KOMAL VILAS TAMBE'),
+  ('11132', 'MRINAL VASANT PATIL'),
+  ('11132', 'RAJESH RADHESHYAM PAL'),
+  ('11147', 'KALYANI SWAPNIL ZAGADE'),
+  ('11147', 'MEHEK SANJAY BHOIR'),
+  ('11147', 'MITALI SHANKAR MANORE'),
+  ('11147', 'MOUSAMI CHANDRAKANT SONKAMBLE'),
+  ('11147', 'NIKHIL JAYWANT PATKAR'),
+  ('11147', 'PRACHI BHIVAJI UTTEKAR'),
+  ('11147', 'RAJANI RAJENDRA SHINDE'),
+  ('11147', 'SHRUSTI SATISH TATE'),
+  ('11147', 'SUPRIYA VIJAY RANDHE'),
+  ('11150', 'ADITI SACHIN KORLEKAR'),
+  ('11150', 'ANIKET SHANKAR VAIDYA'),
+  ('11150', 'HITESHI BHASKAR KOLI'),
+  ('11150', 'MANSI SANCHIT JADHAV'),
+  ('11150', 'RIYA MAIKAL LONDHE'),
+  ('11150', 'VAIBHAV RAJU KAMBLE'),
+  ('11170', 'AMISHA DILIP LIGAM'),
+  ('11170', 'ANIRUDDH ATMARAM SAKAT'),
+  ('11170', 'SAHIL PRAKASH PATIL'),
+  ('11171', 'SHRUTI SUNIL SAWANT'),
+  ('11187', 'DIKSHA CHANDRAKANT KAMBLE'),
+  ('11187', 'RIYA PRAVIN SUKALWADKAR'),
+  ('11187', 'SANIKA NARENDRA RANE'),
+  ('11187', 'SAYALI MANGESH MHAISDHUNE'),
+  ('11187', 'SHWETA ATMARAM PAWAR'),
+  ('11187', 'SUJAY SAMPAT DHAVALE'),
+  ('11199', 'ADITYA AMAR GHADIGAONKAR'),
+  ('11199', 'PRANJAL PRABHAKAR MORE'),
+  ('11199', 'RUTIKA SUDHIR KHARADE'),
+  ('11224', 'ABHINAV NAGSEN JADHAV'),
+  ('11224', 'AKANKSHA KISHOR KAWALE'),
+  ('11224', 'PRADNYA PANDURANG KAMBLE'),
+  ('11224', 'PRANAV DATTATRAY JADHAV'),
+  ('11224', 'SAMRUDDHI AMOL HULE'),
+  ('11224', 'SHRADDHA PRAVIN MHASKE'),
+  ('11224', 'SUDHA RAJKUMAR GOUNDER'),
+  ('11225', 'ANIKET AVINASH MULE'),
+  ('11225', 'DHANASHRI SHRIKANT NEVAREKAR'),
+  ('11225', 'KASHVI CHANDRAKANT RUPAWATE'),
+  ('11225', 'PRANALI PRAKASH SAWANT'),
+  ('11250', 'ANIRUDDHA ANIL SHINDE'),
+  ('11250', 'ASMI PRADEEP CHAVAN'),
+  ('11250', 'KOMAL MANGESH THUMARE'),
+  ('11250', 'MAAZ NOOR MOHAMMED SAYED'),
+  ('11250', 'SAHIL BALKRISHNA GURAV'),
+  ('11259', 'GARGI DADASAHEB BANGAR'),
+  ('11259', 'SHEETAL PRASHANT GHUGE'),
+  ('11261', 'AMRUTA CHANDRAKANT PAWAR'),
+  ('11261', 'BHAGYASHREE MILIND SALVE'),
+  ('11261', 'NIKHIL RAJARAM SHINGE'),
+  ('11269', 'SAKSHI SANJAY GAMARE'),
+  ('11269', 'SNEHAL SUNIL BUWA'),
+  ('11269', 'SRUSHTI JIVDAS JADHAV'),
+  ('11273', 'SANIKA SATISH WAREKAR'),
+  ('11302', 'ANKITA SUNIL INGLE'),
+  ('11302', 'HARSHA SANDESH PADEKAR'),
+  ('11302', 'JUI SACHIN SAWANT'),
+  ('11302', 'MACHHINDRANATH ATMARAM KHARADE'),
+  ('11302', 'MAYURESH DAYARAM PANDHARE'),
+  ('11302', 'SUVARNA VITTHAL PINGALE'),
+  ('11302', 'VIVEK DATTATREY BHAYTANDEL'),
+  ('11308', 'HRUTUJA DATTATRAY GANDHI'),
+  ('11310', 'ANKITA AMOL PATIL'),
+  ('11310', 'RADHEEKA ASHOK KAVANDAR'),
+  ('11323', 'ANKITA SHAHAJI BITAKE'),
+  ('11323', 'DAVID DEVRAJ SHETTY'),
+  ('11323', 'MADHURI DNYANESHWAR SHIRMALE'),
+  ('11323', 'SAYLEE DINESH MORE'),
+  ('11323', 'SONAL DEEPAK KHARADE'),
+  ('11323', 'TANUJA SUHAS SAWANT'),
+  ('11323', 'YUKTA UMESH RAUL'),
+  ('11330', 'KAIVALYA ROHIT BANGAR'),
+  ('11330', 'PRAANVI PRATIK BANSODE'),
+  ('11330', 'RUSHIKESH BAPPA MISAL'),
+  ('11330', 'SALONEE SATISH DHASAL'),
+  ('11335', 'SAILEE JAYWANT CHAFE'),
+  ('11335', 'SAMIDHA SANTOSH MORE'),
+  ('11335', 'SANSKRUTI SANTOSH MORE'),
+  ('11335', 'YOGITA DADARAM AWAD'),
+  ('11339', 'PRATHAM VASANT PATIL'),
+  ('11339', 'RITU DIGAMBAR MADKAIKAR'),
+  ('11339', 'RIYA SUNIL HADKAR'),
+  ('11339', 'SHUBHAM SURYAKANT RANE'),
+  ('11341', 'AARYA AJAY SAWANT'),
+  ('11349', 'AMAN RAVINDRA NIKALJE'),
+  ('11360', 'KANCHAN RAJENDRA SHELAKE'),
+  ('11395', 'NIDHI DINESH PARANDWAL'),
+  ('11427', 'DIKSHA SANTOSH REWALE'),
+  ('11427', 'PRANAV NANDKUMAR JOGARI'),
+  ('11432', 'ANKITA RAVINDRA KADAM'),
+  ('11432', 'ANUSHKA RAJENDRA KAMBLE'),
+  ('11432', 'KUNAL TANAJIRAO CHAVAN'),
+  ('11432', 'RAJDEEP BHALCHANDRA JADHAV'),
+  ('11432', 'VEDIKA DEVDAS KAMBLE'),
+  ('11441', 'KANHAIYA MAHADEV METAKARI')
+)
+GROUP BY i.institute_code, s.name
+ORDER BY i.institute_code, s.name;
+
+-- ========================================
+-- STEP 2: See detailed records for each duplicate group (SAFE - Read Only)
+-- ========================================
+
+-- Show all records that will be merged
+SELECT
+  i.institute_code,
+  s.name as student_name,
+  s.sr_no,
+  s.user_id,
+  s.id as record_id,
+  s.subjects as current_subjects,
+  s.year,
+  s.created_at,
+  CASE WHEN s.face_photo_url IS NOT NULL THEN 'YES' ELSE 'NO' END as has_photo,
+  CASE WHEN s.face_embedding IS NOT NULL THEN 'YES' ELSE 'NO' END as has_embedding
+FROM public.students s
+JOIN public.institutes i ON s.institute_id = i.id
+WHERE (i.institute_code, s.name) IN (
+  ('11063', 'AASHISH BALARAM GAIKAR'),
+  ('11063', 'POURNIMA ASHOK RATHOD'),
+  ('11066', 'RUCHIRA SANTOSH DESHMUKH'),
+  ('11132', 'KOMAL VILAS TAMBE'),
+  ('11132', 'MRINAL VASANT PATIL'),
+  ('11132', 'RAJESH RADHESHYAM PAL'),
+  ('11147', 'KALYANI SWAPNIL ZAGADE'),
+  ('11147', 'MEHEK SANJAY BHOIR'),
+  ('11147', 'MITALI SHANKAR MANORE'),
+  ('11147', 'MOUSAMI CHANDRAKANT SONKAMBLE'),
+  ('11147', 'NIKHIL JAYWANT PATKAR'),
+  ('11147', 'PRACHI BHIVAJI UTTEKAR'),
+  ('11147', 'RAJANI RAJENDRA SHINDE'),
+  ('11147', 'SHRUSTI SATISH TATE'),
+  ('11147', 'SUPRIYA VIJAY RANDHE'),
+  ('11150', 'ADITI SACHIN KORLEKAR'),
+  ('11150', 'ANIKET SHANKAR VAIDYA'),
+  ('11150', 'HITESHI BHASKAR KOLI'),
+  ('11150', 'MANSI SANCHIT JADHAV'),
+  ('11150', 'RIYA MAIKAL LONDHE'),
+  ('11150', 'VAIBHAV RAJU KAMBLE'),
+  ('11170', 'AMISHA DILIP LIGAM'),
+  ('11170', 'ANIRUDDH ATMARAM SAKAT'),
+  ('11170', 'SAHIL PRAKASH PATIL'),
+  ('11171', 'SHRUTI SUNIL SAWANT'),
+  ('11187', 'DIKSHA CHANDRAKANT KAMBLE'),
+  ('11187', 'RIYA PRAVIN SUKALWADKAR'),
+  ('11187', 'SANIKA NARENDRA RANE'),
+  ('11187', 'SAYALI MANGESH MHAISDHUNE'),
+  ('11187', 'SHWETA ATMARAM PAWAR'),
+  ('11187', 'SUJAY SAMPAT DHAVALE'),
+  ('11199', 'ADITYA AMAR GHADIGAONKAR'),
+  ('11199', 'PRANJAL PRABHAKAR MORE'),
+  ('11199', 'RUTIKA SUDHIR KHARADE'),
+  ('11224', 'ABHINAV NAGSEN JADHAV'),
+  ('11224', 'AKANKSHA KISHOR KAWALE'),
+  ('11224', 'PRADNYA PANDURANG KAMBLE'),
+  ('11224', 'PRANAV DATTATRAY JADHAV'),
+  ('11224', 'SAMRUDDHI AMOL HULE'),
+  ('11224', 'SHRADDHA PRAVIN MHASKE'),
+  ('11224', 'SUDHA RAJKUMAR GOUNDER'),
+  ('11225', 'ANIKET AVINASH MULE'),
+  ('11225', 'DHANASHRI SHRIKANT NEVAREKAR'),
+  ('11225', 'KASHVI CHANDRAKANT RUPAWATE'),
+  ('11225', 'PRANALI PRAKASH SAWANT'),
+  ('11250', 'ANIRUDDHA ANIL SHINDE'),
+  ('11250', 'ASMI PRADEEP CHAVAN'),
+  ('11250', 'KOMAL MANGESH THUMARE'),
+  ('11250', 'MAAZ NOOR MOHAMMED SAYED'),
+  ('11250', 'SAHIL BALKRISHNA GURAV'),
+  ('11259', 'GARGI DADASAHEB BANGAR'),
+  ('11259', 'SHEETAL PRASHANT GHUGE'),
+  ('11261', 'AMRUTA CHANDRAKANT PAWAR'),
+  ('11261', 'BHAGYASHREE MILIND SALVE'),
+  ('11261', 'NIKHIL RAJARAM SHINGE'),
+  ('11269', 'SAKSHI SANJAY GAMARE'),
+  ('11269', 'SNEHAL SUNIL BUWA'),
+  ('11269', 'SRUSHTI JIVDAS JADHAV'),
+  ('11273', 'SANIKA SATISH WAREKAR'),
+  ('11302', 'ANKITA SUNIL INGLE'),
+  ('11302', 'HARSHA SANDESH PADEKAR'),
+  ('11302', 'JUI SACHIN SAWANT'),
+  ('11302', 'MACHHINDRANATH ATMARAM KHARADE'),
+  ('11302', 'MAYURESH DAYARAM PANDHARE'),
+  ('11302', 'SUVARNA VITTHAL PINGALE'),
+  ('11302', 'VIVEK DATTATREY BHAYTANDEL'),
+  ('11308', 'HRUTUJA DATTATRAY GANDHI'),
+  ('11310', 'ANKITA AMOL PATIL'),
+  ('11310', 'RADHEEKA ASHOK KAVANDAR'),
+  ('11323', 'ANKITA SHAHAJI BITAKE'),
+  ('11323', 'DAVID DEVRAJ SHETTY'),
+  ('11323', 'MADHURI DNYANESHWAR SHIRMALE'),
+  ('11323', 'SAYLEE DINESH MORE'),
+  ('11323', 'SONAL DEEPAK KHARADE'),
+  ('11323', 'TANUJA SUHAS SAWANT'),
+  ('11323', 'YUKTA UMESH RAUL'),
+  ('11330', 'KAIVALYA ROHIT BANGAR'),
+  ('11330', 'PRAANVI PRATIK BANSODE'),
+  ('11330', 'RUSHIKESH BAPPA MISAL'),
+  ('11330', 'SALONEE SATISH DHASAL'),
+  ('11335', 'SAILEE JAYWANT CHAFE'),
+  ('11335', 'SAMIDHA SANTOSH MORE'),
+  ('11335', 'SANSKRUTI SANTOSH MORE'),
+  ('11335', 'YOGITA DADARAM AWAD'),
+  ('11339', 'PRATHAM VASANT PATIL'),
+  ('11339', 'RITU DIGAMBAR MADKAIKAR'),
+  ('11339', 'RIYA SUNIL HADKAR'),
+  ('11339', 'SHUBHAM SURYAKANT RANE'),
+  ('11341', 'AARYA AJAY SAWANT'),
+  ('11349', 'AMAN RAVINDRA NIKALJE'),
+  ('11360', 'KANCHAN RAJENDRA SHELAKE'),
+  ('11395', 'NIDHI DINESH PARANDWAL'),
+  ('11427', 'DIKSHA SANTOSH REWALE'),
+  ('11427', 'PRANAV NANDKUMAR JOGARI'),
+  ('11432', 'ANKITA RAVINDRA KADAM'),
+  ('11432', 'ANUSHKA RAJENDRA KAMBLE'),
+  ('11432', 'KUNAL TANAJIRAO CHAVAN'),
+  ('11432', 'RAJDEEP BHALCHANDRA JADHAV'),
+  ('11432', 'VEDIKA DEVDAS KAMBLE'),
+  ('11441', 'KANHAIYA MAHADEV METAKARI')
+)
+ORDER BY i.institute_code, s.name, s.created_at;
+
+-- ========================================
+-- STEP 3: Backup all records before merging (RECOMMENDED)
+-- ========================================
+
+CREATE TABLE students_merge_backup_[DATE] AS
+SELECT *
+FROM public.students s
+WHERE s.institute_id IN (
+  SELECT id FROM public.institutes
+  WHERE institute_code IN (
+    SELECT DISTINCT institute_code FROM public.institutes
+    WHERE institute_code IN (
+      '11063', '11066', '11132', '11147', '11150', '11170', '11171', '11187',
+      '11199', '11224', '11225', '11250', '11259', '11261', '11269', '11273',
+      '11302', '11308', '11310', '11323', '11330', '11335', '11339', '11341',
+      '11349', '11360', '11395', '11427', '11432', '11441'
+    )
+  )
+)
+AND (s.institute_id, s.name) IN (
+  SELECT s2.institute_id, s2.name
+  FROM public.students s2
+  GROUP BY s2.institute_id, s2.name
+  HAVING COUNT(*) > 1
+);
+
+-- Verify backup
+SELECT COUNT(*) as total_records_backed_up FROM students_merge_backup_[DATE];
+
+-- ========================================
+-- STEP 4: Identify which record to KEEP for each group (SAFE - Read Only)
+-- ========================================
+
+-- Show which record will be kept (newest with photo preferred)
+WITH duplicates_info AS (
+  SELECT
+    s.id,
+    s.institute_id,
+    s.name,
+    s.sr_no,
+    s.created_at,
+    s.face_photo_url,
+    s.face_embedding,
+    s.subjects,
+    ROW_NUMBER() OVER (
+      PARTITION BY s.institute_id, s.name
+      ORDER BY
+        CASE WHEN s.face_photo_url IS NOT NULL THEN 0 ELSE 1 END,
+        CASE WHEN s.face_embedding IS NOT NULL THEN 0 ELSE 1 END,
+        s.created_at DESC
+    ) as priority
+  FROM public.students s
+  WHERE (
+    SELECT COUNT(*)
+    FROM public.students s2
+    WHERE s2.institute_id = s.institute_id AND s2.name = s.name
+  ) > 1
+)
+SELECT
+  'KEEP' as action,
+  i.institute_code,
+  d.name,
+  d.sr_no,
+  d.id as record_id,
+  d.created_at,
+  CASE WHEN d.face_photo_url IS NOT NULL THEN 'YES' ELSE 'NO' END as has_photo,
+  d.subjects as current_subjects
+FROM duplicates_info d
+JOIN public.institutes i ON d.institute_id = i.id
+WHERE d.priority = 1
+  AND (i.institute_code, d.name) IN (
+    ('11063', 'AASHISH BALARAM GAIKAR'),
+    ('11063', 'POURNIMA ASHOK RATHOD'),
+    ('11066', 'RUCHIRA SANTOSH DESHMUKH'),
+    ('11132', 'KOMAL VILAS TAMBE'),
+    ('11132', 'MRINAL VASANT PATIL'),
+    ('11132', 'RAJESH RADHESHYAM PAL'),
+    ('11147', 'KALYANI SWAPNIL ZAGADE'),
+    ('11147', 'MEHEK SANJAY BHOIR'),
+    ('11147', 'MITALI SHANKAR MANORE'),
+    ('11147', 'MOUSAMI CHANDRAKANT SONKAMBLE'),
+    ('11147', 'NIKHIL JAYWANT PATKAR'),
+    ('11147', 'PRACHI BHIVAJI UTTEKAR'),
+    ('11147', 'RAJANI RAJENDRA SHINDE'),
+    ('11147', 'SHRUSTI SATISH TATE'),
+    ('11147', 'SUPRIYA VIJAY RANDHE'),
+    ('11150', 'ADITI SACHIN KORLEKAR'),
+    ('11150', 'ANIKET SHANKAR VAIDYA'),
+    ('11150', 'HITESHI BHASKAR KOLI'),
+    ('11150', 'MANSI SANCHIT JADHAV'),
+    ('11150', 'RIYA MAIKAL LONDHE'),
+    ('11150', 'VAIBHAV RAJU KAMBLE'),
+    ('11170', 'AMISHA DILIP LIGAM'),
+    ('11170', 'ANIRUDDH ATMARAM SAKAT'),
+    ('11170', 'SAHIL PRAKASH PATIL'),
+    ('11171', 'SHRUTI SUNIL SAWANT'),
+    ('11187', 'DIKSHA CHANDRAKANT KAMBLE'),
+    ('11187', 'RIYA PRAVIN SUKALWADKAR'),
+    ('11187', 'SANIKA NARENDRA RANE'),
+    ('11187', 'SAYALI MANGESH MHAISDHUNE'),
+    ('11187', 'SHWETA ATMARAM PAWAR'),
+    ('11187', 'SUJAY SAMPAT DHAVALE'),
+    ('11199', 'ADITYA AMAR GHADIGAONKAR'),
+    ('11199', 'PRANJAL PRABHAKAR MORE'),
+    ('11199', 'RUTIKA SUDHIR KHARADE'),
+    ('11224', 'ABHINAV NAGSEN JADHAV'),
+    ('11224', 'AKANKSHA KISHOR KAWALE'),
+    ('11224', 'PRADNYA PANDURANG KAMBLE'),
+    ('11224', 'PRANAV DATTATRAY JADHAV'),
+    ('11224', 'SAMRUDDHI AMOL HULE'),
+    ('11224', 'SHRADDHA PRAVIN MHASKE'),
+    ('11224', 'SUDHA RAJKUMAR GOUNDER'),
+    ('11225', 'ANIKET AVINASH MULE'),
+    ('11225', 'DHANASHRI SHRIKANT NEVAREKAR'),
+    ('11225', 'KASHVI CHANDRAKANT RUPAWATE'),
+    ('11225', 'PRANALI PRAKASH SAWANT'),
+    ('11250', 'ANIRUDDHA ANIL SHINDE'),
+    ('11250', 'ASMI PRADEEP CHAVAN'),
+    ('11250', 'KOMAL MANGESH THUMARE'),
+    ('11250', 'MAAZ NOOR MOHAMMED SAYED'),
+    ('11250', 'SAHIL BALKRISHNA GURAV'),
+    ('11259', 'GARGI DADASAHEB BANGAR'),
+    ('11259', 'SHEETAL PRASHANT GHUGE'),
+    ('11261', 'AMRUTA CHANDRAKANT PAWAR'),
+    ('11261', 'BHAGYASHREE MILIND SALVE'),
+    ('11261', 'NIKHIL RAJARAM SHINGE'),
+    ('11269', 'SAKSHI SANJAY GAMARE'),
+    ('11269', 'SNEHAL SUNIL BUWA'),
+    ('11269', 'SRUSHTI JIVDAS JADHAV'),
+    ('11273', 'SANIKA SATISH WAREKAR'),
+    ('11302', 'ANKITA SUNIL INGLE'),
+    ('11302', 'HARSHA SANDESH PADEKAR'),
+    ('11302', 'JUI SACHIN SAWANT'),
+    ('11302', 'MACHHINDRANATH ATMARAM KHARADE'),
+    ('11302', 'MAYURESH DAYARAM PANDHARE'),
+    ('11302', 'SUVARNA VITTHAL PINGALE'),
+    ('11302', 'VIVEK DATTATREY BHAYTANDEL'),
+    ('11308', 'HRUTUJA DATTATRAY GANDHI'),
+    ('11310', 'ANKITA AMOL PATIL'),
+    ('11310', 'RADHEEKA ASHOK KAVANDAR'),
+    ('11323', 'ANKITA SHAHAJI BITAKE'),
+    ('11323', 'DAVID DEVRAJ SHETTY'),
+    ('11323', 'MADHURI DNYANESHWAR SHIRMALE'),
+    ('11323', 'SAYLEE DINESH MORE'),
+    ('11323', 'SONAL DEEPAK KHARADE'),
+    ('11323', 'TANUJA SUHAS SAWANT'),
+    ('11323', 'YUKTA UMESH RAUL'),
+    ('11330', 'KAIVALYA ROHIT BANGAR'),
+    ('11330', 'PRAANVI PRATIK BANSODE'),
+    ('11330', 'RUSHIKESH BAPPA MISAL'),
+    ('11330', 'SALONEE SATISH DHASAL'),
+    ('11335', 'SAILEE JAYWANT CHAFE'),
+    ('11335', 'SAMIDHA SANTOSH MORE'),
+    ('11335', 'SANSKRUTI SANTOSH MORE'),
+    ('11335', 'YOGITA DADARAM AWAD'),
+    ('11339', 'PRATHAM VASANT PATIL'),
+    ('11339', 'RITU DIGAMBAR MADKAIKAR'),
+    ('11339', 'RIYA SUNIL HADKAR'),
+    ('11339', 'SHUBHAM SURYAKANT RANE'),
+    ('11341', 'AARYA AJAY SAWANT'),
+    ('11349', 'AMAN RAVINDRA NIKALJE'),
+    ('11360', 'KANCHAN RAJENDRA SHELAKE'),
+    ('11395', 'NIDHI DINESH PARANDWAL'),
+    ('11427', 'DIKSHA SANTOSH REWALE'),
+    ('11427', 'PRANAV NANDKUMAR JOGARI'),
+    ('11432', 'ANKITA RAVINDRA KADAM'),
+    ('11432', 'ANUSHKA RAJENDRA KAMBLE'),
+    ('11432', 'KUNAL TANAJIRAO CHAVAN'),
+    ('11432', 'RAJDEEP BHALCHANDRA JADHAV'),
+    ('11432', 'VEDIKA DEVDAS KAMBLE'),
+    ('11441', 'KANHAIYA MAHADEV METAKARI')
+  )
+ORDER BY i.institute_code, d.name;
+
+-- ========================================
+-- STEP 5: Get merged subjects for each group (SAFE - Read Only)
+-- ========================================
+
+-- Show what the merged subjects will look like
+WITH all_subjects AS (
+  SELECT
+    s.institute_id,
+    s.name,
+    array_agg(DISTINCT jsonb_array_elements(s.subjects)::text ORDER BY jsonb_array_elements(s.subjects)::text) as merged_subjects,
+    string_agg(DISTINCT s.id::text, ', ') as all_record_ids
+  FROM public.students s
+  WHERE (
+    SELECT COUNT(*)
+    FROM public.students s2
+    WHERE s2.institute_id = s.institute_id AND s2.name = s.name
+  ) > 1
+  GROUP BY s.institute_id, s.name
+)
+SELECT
+  i.institute_code,
+  a.name as student_name,
+  a.merged_subjects as new_merged_subjects,
+  a.all_record_ids
+FROM all_subjects a
+JOIN public.institutes i ON a.institute_id = i.id
+WHERE (i.institute_code, a.name) IN (
+  ('11063', 'AASHISH BALARAM GAIKAR'),
+  ('11063', 'POURNIMA ASHOK RATHOD'),
+  ('11066', 'RUCHIRA SANTOSH DESHMUKH'),
+  ('11132', 'KOMAL VILAS TAMBE'),
+  ('11132', 'MRINAL VASANT PATIL'),
+  ('11132', 'RAJESH RADHESHYAM PAL'),
+  ('11147', 'KALYANI SWAPNIL ZAGADE'),
+  ('11147', 'MEHEK SANJAY BHOIR'),
+  ('11147', 'MITALI SHANKAR MANORE'),
+  ('11147', 'MOUSAMI CHANDRAKANT SONKAMBLE'),
+  ('11147', 'NIKHIL JAYWANT PATKAR'),
+  ('11147', 'PRACHI BHIVAJI UTTEKAR'),
+  ('11147', 'RAJANI RAJENDRA SHINDE'),
+  ('11147', 'SHRUSTI SATISH TATE'),
+  ('11147', 'SUPRIYA VIJAY RANDHE'),
+  ('11150', 'ADITI SACHIN KORLEKAR'),
+  ('11150', 'ANIKET SHANKAR VAIDYA'),
+  ('11150', 'HITESHI BHASKAR KOLI'),
+  ('11150', 'MANSI SANCHIT JADHAV'),
+  ('11150', 'RIYA MAIKAL LONDHE'),
+  ('11150', 'VAIBHAV RAJU KAMBLE'),
+  ('11170', 'AMISHA DILIP LIGAM'),
+  ('11170', 'ANIRUDDH ATMARAM SAKAT'),
+  ('11170', 'SAHIL PRAKASH PATIL'),
+  ('11171', 'SHRUTI SUNIL SAWANT'),
+  ('11187', 'DIKSHA CHANDRAKANT KAMBLE'),
+  ('11187', 'RIYA PRAVIN SUKALWADKAR'),
+  ('11187', 'SANIKA NARENDRA RANE'),
+  ('11187', 'SAYALI MANGESH MHAISDHUNE'),
+  ('11187', 'SHWETA ATMARAM PAWAR'),
+  ('11187', 'SUJAY SAMPAT DHAVALE'),
+  ('11199', 'ADITYA AMAR GHADIGAONKAR'),
+  ('11199', 'PRANJAL PRABHAKAR MORE'),
+  ('11199', 'RUTIKA SUDHIR KHARADE'),
+  ('11224', 'ABHINAV NAGSEN JADHAV'),
+  ('11224', 'AKANKSHA KISHOR KAWALE'),
+  ('11224', 'PRADNYA PANDURANG KAMBLE'),
+  ('11224', 'PRANAV DATTATRAY JADHAV'),
+  ('11224', 'SAMRUDDHI AMOL HULE'),
+  ('11224', 'SHRADDHA PRAVIN MHASKE'),
+  ('11224', 'SUDHA RAJKUMAR GOUNDER'),
+  ('11225', 'ANIKET AVINASH MULE'),
+  ('11225', 'DHANASHRI SHRIKANT NEVAREKAR'),
+  ('11225', 'KASHVI CHANDRAKANT RUPAWATE'),
+  ('11225', 'PRANALI PRAKASH SAWANT'),
+  ('11250', 'ANIRUDDHA ANIL SHINDE'),
+  ('11250', 'ASMI PRADEEP CHAVAN'),
+  ('11250', 'KOMAL MANGESH THUMARE'),
+  ('11250', 'MAAZ NOOR MOHAMMED SAYED'),
+  ('11250', 'SAHIL BALKRISHNA GURAV'),
+  ('11259', 'GARGI DADASAHEB BANGAR'),
+  ('11259', 'SHEETAL PRASHANT GHUGE'),
+  ('11261', 'AMRUTA CHANDRAKANT PAWAR'),
+  ('11261', 'BHAGYASHREE MILIND SALVE'),
+  ('11261', 'NIKHIL RAJARAM SHINGE'),
+  ('11269', 'SAKSHI SANJAY GAMARE'),
+  ('11269', 'SNEHAL SUNIL BUWA'),
+  ('11269', 'SRUSHTI JIVDAS JADHAV'),
+  ('11273', 'SANIKA SATISH WAREKAR'),
+  ('11302', 'ANKITA SUNIL INGLE'),
+  ('11302', 'HARSHA SANDESH PADEKAR'),
+  ('11302', 'JUI SACHIN SAWANT'),
+  ('11302', 'MACHHINDRANATH ATMARAM KHARADE'),
+  ('11302', 'MAYURESH DAYARAM PANDHARE'),
+  ('11302', 'SUVARNA VITTHAL PINGALE'),
+  ('11302', 'VIVEK DATTATREY BHAYTANDEL'),
+  ('11308', 'HRUTUJA DATTATRAY GANDHI'),
+  ('11310', 'ANKITA AMOL PATIL'),
+  ('11310', 'RADHEEKA ASHOK KAVANDAR'),
+  ('11323', 'ANKITA SHAHAJI BITAKE'),
+  ('11323', 'DAVID DEVRAJ SHETTY'),
+  ('11323', 'MADHURI DNYANESHWAR SHIRMALE'),
+  ('11323', 'SAYLEE DINESH MORE'),
+  ('11323', 'SONAL DEEPAK KHARADE'),
+  ('11323', 'TANUJA SUHAS SAWANT'),
+  ('11323', 'YUKTA UMESH RAUL'),
+  ('11330', 'KAIVALYA ROHIT BANGAR'),
+  ('11330', 'PRAANVI PRATIK BANSODE'),
+  ('11330', 'RUSHIKESH BAPPA MISAL'),
+  ('11330', 'SALONEE SATISH DHASAL'),
+  ('11335', 'SAILEE JAYWANT CHAFE'),
+  ('11335', 'SAMIDHA SANTOSH MORE'),
+  ('11335', 'SANSKRUTI SANTOSH MORE'),
+  ('11335', 'YOGITA DADARAM AWAD'),
+  ('11339', 'PRATHAM VASANT PATIL'),
+  ('11339', 'RITU DIGAMBAR MADKAIKAR'),
+  ('11339', 'RIYA SUNIL HADKAR'),
+  ('11339', 'SHUBHAM SURYAKANT RANE'),
+  ('11341', 'AARYA AJAY SAWANT'),
+  ('11349', 'AMAN RAVINDRA NIKALJE'),
+  ('11360', 'KANCHAN RAJENDRA SHELAKE'),
+  ('11395', 'NIDHI DINESH PARANDWAL'),
+  ('11427', 'DIKSHA SANTOSH REWALE'),
+  ('11427', 'PRANAV NANDKUMAR JOGARI'),
+  ('11432', 'ANKITA RAVINDRA KADAM'),
+  ('11432', 'ANUSHKA RAJENDRA KAMBLE'),
+  ('11432', 'KUNAL TANAJIRAO CHAVAN'),
+  ('11432', 'RAJDEEP BHALCHANDRA JADHAV'),
+  ('11432', 'VEDIKA DEVDAS KAMBLE'),
+  ('11441', 'KANHAIYA MAHADEV METAKARI')
+)
+ORDER BY i.institute_code, a.name;
+
+-- ========================================
+-- STEP 6: Update records with merged subjects and delete duplicates (ACTUAL MERGE)
+-- ========================================
+
+-- Create a CTE with all the merge logic
+WITH duplicates_to_merge AS (
+  SELECT
+    s.id as record_id,
+    s.institute_id,
+    s.name,
+    s.sr_no,
+    array_agg(DISTINCT jsonb_array_elements(s.subjects)::text ORDER BY jsonb_array_elements(s.subjects)::text) OVER (PARTITION BY s.institute_id, s.name) as merged_subjects,
+    ROW_NUMBER() OVER (
+      PARTITION BY s.institute_id, s.name
+      ORDER BY
+        CASE WHEN s.face_photo_url IS NOT NULL THEN 0 ELSE 1 END,
+        CASE WHEN s.face_embedding IS NOT NULL THEN 0 ELSE 1 END,
+        s.created_at DESC
+    ) as priority
+  FROM public.students s
+  WHERE (
+    SELECT COUNT(*)
+    FROM public.students s2
+    WHERE s2.institute_id = s.institute_id AND s2.name = s.name
+  ) > 1
+)
+-- Step 6a: Update the record to KEEP with merged subjects
+UPDATE public.students s
+SET
+  subjects = (
+    SELECT array_to_json(merged_subjects)::jsonb
+    FROM duplicates_to_merge dtm
+    WHERE dtm.record_id = s.id
+  ),
+  updated_at = NOW()
+FROM duplicates_to_merge dtm
+WHERE s.id = dtm.record_id
+  AND dtm.priority = 1
+  AND (
+    SELECT i.institute_code FROM public.institutes i WHERE i.id = s.institute_id
+  ) IN (
+    '11063', '11066', '11132', '11147', '11150', '11170', '11171', '11187',
+    '11199', '11224', '11225', '11250', '11259', '11261', '11269', '11273',
+    '11302', '11308', '11310', '11323', '11330', '11335', '11339', '11341',
+    '11349', '11360', '11395', '11427', '11432', '11441'
+  );
+
+-- Step 6b: Delete the duplicate records (keep only priority 1)
+DELETE FROM public.students s
+USING duplicates_to_merge dtm
+WHERE s.id = dtm.record_id
+  AND dtm.priority > 1
+  AND (
+    SELECT i.institute_code FROM public.institutes i WHERE i.id = s.institute_id
+  ) IN (
+    '11063', '11066', '11132', '11147', '11150', '11170', '11171', '11187',
+    '11199', '11224', '11225', '11250', '11259', '11261', '11269', '11273',
+    '11302', '11308', '11310', '11323', '11330', '11335', '11339', '11341',
+    '11349', '11360', '11395', '11427', '11432', '11441'
+  );
+
+-- ========================================
+-- STEP 7: Verify merge was successful (SAFE - Read Only)
+-- ========================================
+
+-- Check that duplicates are gone
+SELECT
+  i.institute_code,
+  s.name,
+  COUNT(*) as remaining_records,
+  s.sr_no,
+  s.subjects as merged_subjects
+FROM public.students s
+JOIN public.institutes i ON s.institute_id = i.id
+WHERE (i.institute_code, s.name) IN (
+  ('11063', 'AASHISH BALARAM GAIKAR'),
+  ('11063', 'POURNIMA ASHOK RATHOD'),
+  ('11066', 'RUCHIRA SANTOSH DESHMUKH'),
+  ('11132', 'KOMAL VILAS TAMBE'),
+  ('11132', 'MRINAL VASANT PATIL'),
+  ('11132', 'RAJESH RADHESHYAM PAL'),
+  ('11147', 'KALYANI SWAPNIL ZAGADE'),
+  ('11147', 'MEHEK SANJAY BHOIR'),
+  ('11147', 'MITALI SHANKAR MANORE'),
+  ('11147', 'MOUSAMI CHANDRAKANT SONKAMBLE'),
+  ('11147', 'NIKHIL JAYWANT PATKAR'),
+  ('11147', 'PRACHI BHIVAJI UTTEKAR'),
+  ('11147', 'RAJANI RAJENDRA SHINDE'),
+  ('11147', 'SHRUSTI SATISH TATE'),
+  ('11147', 'SUPRIYA VIJAY RANDHE'),
+  ('11150', 'ADITI SACHIN KORLEKAR'),
+  ('11150', 'ANIKET SHANKAR VAIDYA'),
+  ('11150', 'HITESHI BHASKAR KOLI'),
+  ('11150', 'MANSI SANCHIT JADHAV'),
+  ('11150', 'RIYA MAIKAL LONDHE'),
+  ('11150', 'VAIBHAV RAJU KAMBLE'),
+  ('11170', 'AMISHA DILIP LIGAM'),
+  ('11170', 'ANIRUDDH ATMARAM SAKAT'),
+  ('11170', 'SAHIL PRAKASH PATIL'),
+  ('11171', 'SHRUTI SUNIL SAWANT'),
+  ('11187', 'DIKSHA CHANDRAKANT KAMBLE'),
+  ('11187', 'RIYA PRAVIN SUKALWADKAR'),
+  ('11187', 'SANIKA NARENDRA RANE'),
+  ('11187', 'SAYALI MANGESH MHAISDHUNE'),
+  ('11187', 'SHWETA ATMARAM PAWAR'),
+  ('11187', 'SUJAY SAMPAT DHAVALE'),
+  ('11199', 'ADITYA AMAR GHADIGAONKAR'),
+  ('11199', 'PRANJAL PRABHAKAR MORE'),
+  ('11199', 'RUTIKA SUDHIR KHARADE'),
+  ('11224', 'ABHINAV NAGSEN JADHAV'),
+  ('11224', 'AKANKSHA KISHOR KAWALE'),
+  ('11224', 'PRADNYA PANDURANG KAMBLE'),
+  ('11224', 'PRANAV DATTATRAY JADHAV'),
+  ('11224', 'SAMRUDDHI AMOL HULE'),
+  ('11224', 'SHRADDHA PRAVIN MHASKE'),
+  ('11224', 'SUDHA RAJKUMAR GOUNDER'),
+  ('11225', 'ANIKET AVINASH MULE'),
+  ('11225', 'DHANASHRI SHRIKANT NEVAREKAR'),
+  ('11225', 'KASHVI CHANDRAKANT RUPAWATE'),
+  ('11225', 'PRANALI PRAKASH SAWANT'),
+  ('11250', 'ANIRUDDHA ANIL SHINDE'),
+  ('11250', 'ASMI PRADEEP CHAVAN'),
+  ('11250', 'KOMAL MANGESH THUMARE'),
+  ('11250', 'MAAZ NOOR MOHAMMED SAYED'),
+  ('11250', 'SAHIL BALKRISHNA GURAV'),
+  ('11259', 'GARGI DADASAHEB BANGAR'),
+  ('11259', 'SHEETAL PRASHANT GHUGE'),
+  ('11261', 'AMRUTA CHANDRAKANT PAWAR'),
+  ('11261', 'BHAGYASHREE MILIND SALVE'),
+  ('11261', 'NIKHIL RAJARAM SHINGE'),
+  ('11269', 'SAKSHI SANJAY GAMARE'),
+  ('11269', 'SNEHAL SUNIL BUWA'),
+  ('11269', 'SRUSHTI JIVDAS JADHAV'),
+  ('11273', 'SANIKA SATISH WAREKAR'),
+  ('11302', 'ANKITA SUNIL INGLE'),
+  ('11302', 'HARSHA SANDESH PADEKAR'),
+  ('11302', 'JUI SACHIN SAWANT'),
+  ('11302', 'MACHHINDRANATH ATMARAM KHARADE'),
+  ('11302', 'MAYURESH DAYARAM PANDHARE'),
+  ('11302', 'SUVARNA VITTHAL PINGALE'),
+  ('11302', 'VIVEK DATTATREY BHAYTANDEL'),
+  ('11308', 'HRUTUJA DATTATRAY GANDHI'),
+  ('11310', 'ANKITA AMOL PATIL'),
+  ('11310', 'RADHEEKA ASHOK KAVANDAR'),
+  ('11323', 'ANKITA SHAHAJI BITAKE'),
+  ('11323', 'DAVID DEVRAJ SHETTY'),
+  ('11323', 'MADHURI DNYANESHWAR SHIRMALE'),
+  ('11323', 'SAYLEE DINESH MORE'),
+  ('11323', 'SONAL DEEPAK KHARADE'),
+  ('11323', 'TANUJA SUHAS SAWANT'),
+  ('11323', 'YUKTA UMESH RAUL'),
+  ('11330', 'KAIVALYA ROHIT BANGAR'),
+  ('11330', 'PRAANVI PRATIK BANSODE'),
+  ('11330', 'RUSHIKESH BAPPA MISAL'),
+  ('11330', 'SALONEE SATISH DHASAL'),
+  ('11335', 'SAILEE JAYWANT CHAFE'),
+  ('11335', 'SAMIDHA SANTOSH MORE'),
+  ('11335', 'SANSKRUTI SANTOSH MORE'),
+  ('11335', 'YOGITA DADARAM AWAD'),
+  ('11339', 'PRATHAM VASANT PATIL'),
+  ('11339', 'RITU DIGAMBAR MADKAIKAR'),
+  ('11339', 'RIYA SUNIL HADKAR'),
+  ('11339', 'SHUBHAM SURYAKANT RANE'),
+  ('11341', 'AARYA AJAY SAWANT'),
+  ('11349', 'AMAN RAVINDRA NIKALJE'),
+  ('11360', 'KANCHAN RAJENDRA SHELAKE'),
+  ('11395', 'NIDHI DINESH PARANDWAL'),
+  ('11427', 'DIKSHA SANTOSH REWALE'),
+  ('11427', 'PRANAV NANDKUMAR JOGARI'),
+  ('11432', 'ANKITA RAVINDRA KADAM'),
+  ('11432', 'ANUSHKA RAJENDRA KAMBLE'),
+  ('11432', 'KUNAL TANAJIRAO CHAVAN'),
+  ('11432', 'RAJDEEP BHALCHANDRA JADHAV'),
+  ('11432', 'VEDIKA DEVDAS KAMBLE'),
+  ('11441', 'KANHAIYA MAHADEV METAKARI')
+)
+GROUP BY i.institute_code, s.name, s.sr_no, s.subjects
+ORDER BY i.institute_code, s.name;
+
+-- Final summary: Should show 1 record per student
+SELECT
+  'Merge Complete' as status,
+  COUNT(*) as total_records_remaining
+FROM public.students;
+
+-- Cleanup: Optional - drop backup when done
+-- DROP TABLE students_merge_backup_[DATE];

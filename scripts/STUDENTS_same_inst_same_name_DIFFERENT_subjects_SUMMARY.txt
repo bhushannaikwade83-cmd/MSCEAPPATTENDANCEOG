@@ -1,0 +1,6 @@
+Same institute + same full name, but SUBJECT allotment differs across rows (2+ distinct non-zero subject patterns in group).
+
+Groups: 6068
+Total CSV rows in those groups: 12273
+
+Detail: STUDENTS_same_inst_same_name_DIFFERENT_subjects.tsv

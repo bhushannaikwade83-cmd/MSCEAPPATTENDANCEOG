@@ -1,0 +1,3 @@
+# Optional: fastest bulk INSERT into public.students (PostgreSQL COPY).
+# pip install -r scripts/requirements-fast-pg-load.txt
+psycopg[binary]>=3.2

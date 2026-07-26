@@ -1,0 +1,19 @@
+project_id = "snxcrqgodamoxwgkkqez"
+
+[functions.b2-storage-proxy]
+verify_jwt = false
+
+[functions.email-otp]
+verify_jwt = false
+
+[functions.admin-reset-password]
+verify_jwt = false
+
+[functions.attestation-verify]
+verify_jwt = false
+
+[functions.security-incident-alert]
+verify_jwt = true
+
+[functions.create-institute-attendance-user]
+verify_jwt = false

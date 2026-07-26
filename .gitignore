@@ -1,0 +1,69 @@
+# Miscellaneous
+.venv/
+
+*.class
+*.log
+*.pyc
+*.swp
+.DS_Store
+.atom/
+.buildlog/
+.history
+.svn/
+
+# IntelliJ
+.idea/
+*.iml
+*.ipr
+*.iws
+
+# Visual Studio Code
+.vscode/
+.claude/
+
+# Flutter/Dart/Pub
+.dart_tool/
+.packages
+.pub/
+build/
+ios/Flutter/App.framework
+ios/Flutter/Flutter.framework
+ios/Flutter/Generated.xcconfig
+ios/Flutter/app.flx
+ios/Flutter/app.zip
+ios/Flutter/flutter_assets/
+ios/ServiceDefinitions.json
+ios/Runner/GeneratedPluginRegistrant.*
+android/local.properties
+.flutter-plugins
+.flutter-plugins-dependencies
+
+# Android Studio & Keys
+*.jks
+*.keystore
+*.key
+
+# Environment variables & Secrets
+.env
+functions/.env
+assets/gcs-service-account.json
+lib/config/b2b_storage_config.dart
+
+# Firebase credentials (if you want to keep them private)
+# Uncomment the line below if you want to ignore firebase_options.dart
+# lib/firebase_options.dart
+
+# Node.js
+node_modules/
+npm-debug.log
+yarn-error.log
+package-lock.json
+yarn.lock
+
+# Logs
+*.log
+flutter_*.log
+
+# OS files
+Thumbs.db
+.DS_Store

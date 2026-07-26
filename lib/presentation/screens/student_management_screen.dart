@@ -1,0 +1,2964 @@
+import 'dart:convert';
+import 'dart:async';
+import 'package:flutter/material.dart';
+import 'package:flutter_cache_manager/flutter_cache_manager.dart';
+import 'package:flutter/foundation.dart' show kDebugMode, debugPrint;
+import 'package:flutter_screenutil/flutter_screenutil.dart';
+import 'package:intl/intl.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+import '../../core/app_db.dart';
+import '../../core/root_navigator.dart' show rootNavigatorKey, scaffoldMessengerOr;
+import '../../core/supabase_maps.dart';
+import '../../core/time_parse.dart';
+import '../../core/utils/responsive.dart';
+import '../../config/supabase_env.dart';
+
+import '../../core/student_face_embedding_utils.dart';
+import '../../core/attendance_presence_rules.dart';
+import '../../core/attendance_auto_close_policy.dart';
+import '../../core/theme/app_theme.dart';
+import '../widgets/shimmer_effect.dart';
+import '../widgets/enhanced_animations.dart';
+import 'login_screen.dart';
+import 'staff_attendance_portal_screen.dart';
+import 'student_photos_screen.dart';
+import '../../services/stale_attendance_reconciliation_service.dart';
+import '../../services/session_manager.dart';
+import '../../services/shared_stats_service.dart';
+import '../../services/pin_session_manager.dart';
+import '../../services/location_monitor_service.dart' show LocationVerificationService;
+import '../widgets/secure_network_image.dart';
+import '../../services/distance_check_service.dart';
+import 'auto_face_scan_screen.dart';
+import 'student_face_registration_wrapper.dart';
+
+enum _StudentAttendanceFilter { all, present, absent }
+
+class StudentManagementScreen extends StatefulWidget {
+  static const routeName = '/student-management';
+
+  /// When true, shows the same UI as in admin main nav, but for `attendance_user`:
+  /// sign-out control, no system back to leave the portal (use Sign out).
+  final bool forAttendanceStaffPortal;
+
+  const StudentManagementScreen({
+    super.key,
+    this.forAttendanceStaffPortal = false,
+  });
+
+  @override
+  State<StudentManagementScreen> createState() =>
+      _StudentManagementScreenState();
+}
+
+class _StudentManagementScreenState extends State<StudentManagementScreen>
+    with TickerProviderStateMixin {
+  String? _instituteId;
+  bool _isLoadingInstitute = true;
+
+  // Search with debounce (server-side)
+  final TextEditingController _searchController = TextEditingController();
+  String _searchQuery = '';
+  Timer? _debounce;
+
+  // Paginated student list state (server-side range; scroll loads next page)
+  static const int _pageSize = 20;
+  int _page = 0;
+  bool _hasMore = true;
+  bool _isLoadingStudents = false;
+  bool _isLoadingMore = false;
+  List<Map<String, dynamic>> _students = [];
+  int _studentCount = 0;
+  final ScrollController _scrollController = ScrollController();
+  _StudentAttendanceFilter _attendanceFilter = _StudentAttendanceFilter.all;
+
+  /// Omit `face_embedding` / `photo_thumbnail` — they are large JSON and slow every list page.
+  static const String _studentSelectCols =
+      'id,name,user_id,sr_no,year,subject,subjects,face_photo_url,photo_version,face_photo_changed_once';
+
+  /// Today's entry/exit UI state keyed by [students.id] only (avoids roll/userId collisions).
+  Map<String, Map<String, dynamic>> _todayPayloadByStudentId = {};
+
+  /// 🔄 Cache for fresh subjects fetched from database (not stale display data)
+  /// Maps student srNo/userId to their current subjects
+  final Map<String, List<String>> _freshSubjectsCache = {};
+
+  /// Selected subject on each row for per-subject entry / exit.
+
+  static const Color _exitAttendanceMarkColor = Color(0xFFFFC107);
+
+  Timer? _timerUpdateTimer;  // ✅ Periodic timer to update countdown
+
+  int _statsTotal = 0;
+  int _statsPresentToday = 0;
+  int _statsAbsentToday = 0;
+  RealtimeChannel? _studentsChannel;
+  RealtimeChannel? _attendanceChannel;
+  Timer? _realtimeRefreshDebounce;
+  // ✅ Auto-refresh stats every 2 seconds for real-time sync
+  Timer? _statsRefreshTimer;
+
+  String _supabaseHostForLogs() {
+    try {
+      return Uri.parse(SupabaseEnv.url).host;
+    } catch (_) {
+      return 'unknown-host';
+    }
+  }
+
+  late AnimationController _fadeController;
+  late Animation<double> _fadeAnimation;
+
+  @override
+  void initState() {
+    super.initState();
+    _fadeController =
+        AnimationController(vsync: this, duration: const Duration(milliseconds: 800));
+    _fadeAnimation =
+        CurvedAnimation(parent: _fadeController, curve: Curves.easeOut);
+    _fadeController.forward();
+    _loadInstituteId();
+    // ✅ Setup stats auto-refresh (2 sec interval for real-time sync)
+    _setupStatsAutoRefresh();
+    _scrollController.addListener(_onScroll);
+    _searchController.addListener(_onSearchChanged);
+
+    // ⏸️ DISABLED: Periodic minute rebuild was causing scroll lag
+    // Users can pull-to-refresh if they need latest times
+    // _timerUpdateTimer = Timer.periodic(const Duration(minutes: 1), (_) {
+    //   if (mounted) setState(() {});  // Rebuild to recalculate remaining time
+    // });
+  }
+
+  @override
+  void dispose() {
+    _fadeController.dispose();
+    _searchController.removeListener(_onSearchChanged);
+    _searchController.dispose();
+    _debounce?.cancel();
+    _realtimeRefreshDebounce?.cancel();
+    _timerUpdateTimer?.cancel();  // ✅ Cancel timer countdown
+    // _statsRefreshTimer already disabled - no cleanup needed
+    if (_studentsChannel != null) appDb.removeChannel(_studentsChannel!);
+    if (_attendanceChannel != null) appDb.removeChannel(_attendanceChannel!);
+    _scrollController.dispose();
+
+    super.dispose();
+  }
+
+  void _onSearchChanged() {
+    _debounce?.cancel();
+    _debounce = Timer(const Duration(milliseconds: 350), () {
+      if (!mounted) return;
+      final q = _sanitizeStudentSearchToken(_searchController.text);
+      if (q == _searchQuery) return;
+      setState(() {
+        _searchQuery = q;
+        _page = 0;
+        _students.clear();
+        _hasMore = true;
+      });
+      _loadStudents(reset: true);
+    });
+  }
+
+  void _onScroll() {
+    // Auto-scroll pagination disabled - use manual "Load More" button instead
+    // This prevents loading multiple pages automatically when list fits on screen
+    // User must explicitly click "Load More" to load next batch
+  }
+
+  static String _formatSrDisplay(String? sr) {
+    final s = (sr ?? '').trim();
+    if (s.isEmpty) return '—';
+    final n = int.tryParse(s);
+    if (n != null) return n.toString().padLeft(3, '0');
+    return s;
+  }
+
+  /// PostgREST `.or()` splits on commas; user `%` / `_` widen ilike patterns.
+  static String _sanitizeStudentSearchToken(String raw) {
+    var s = raw.trim().replaceAll(',', ' ');
+    s = s.replaceAll(RegExp(r'[%_]'), '');
+    return s.trim();
+  }
+
+  /// Server-side match across common student columns (institute already scoped).
+  static String? _studentSearchOrFilter(String rawQuery) {
+    final q = _sanitizeStudentSearchToken(rawQuery);
+    if (q.isEmpty) return null;
+    const cols = [
+      'name',
+      'user_id',
+      'sr_no',
+      'year',
+      'subject',
+    ];
+    return cols.map((c) => '$c.ilike.%$q%').join(',');
+  }
+
+  /// Collapse duplicate DB rows (same roll / auth id) in the visible list.
+  static String _studentRowDedupeKey(Map<String, dynamic> mapped) {
+    final id = mapped['id']?.toString().trim() ?? '';
+    final uid = mapped['userId']?.toString().trim() ?? '';
+    final sr = mapped['srNo']?.toString().trim() ?? '';
+    if (sr.isNotEmpty) return 's:$sr';
+    if (uid.isNotEmpty) return 'u:$uid';
+    return 'id:$id';
+  }
+
+  static List<Map<String, dynamic>> _dedupeMergedStudents(
+    List<Map<String, dynamic>> list,
+  ) {
+    final keys = <String>{};
+    final out = <Map<String, dynamic>>[];
+    for (final s in list) {
+      final k = _studentRowDedupeKey(s);
+      if (keys.contains(k)) continue;
+      keys.add(k);
+      out.add(s);
+    }
+    return out;
+  }
+
+  List<String> _attendanceLookupKeysForStudent(Map<String, dynamic> student) {
+    final userId = student['userId']?.toString().trim() ?? '';
+    final srNo = student['srNo']?.toString().trim() ?? '';
+    final keys = <String>[];
+    if (srNo.isNotEmpty) keys.add(srNo);
+    if (keys.isEmpty && userId.isNotEmpty) keys.add(userId);
+    return keys;
+  }
+
+  /// Official SR only — used for saving attendance (never user_id).
+  String _canonicalAttendanceRollKey(Map<String, dynamic> student) {
+    return student['srNo']?.toString().trim() ?? '';
+  }
+
+  int _compareStudentsBySrNo(Map<String, dynamic> a, Map<String, dynamic> b) {
+    final aSr = a['srNo']?.toString().trim() ?? '';
+    final bSr = b['srNo']?.toString().trim() ?? '';
+
+    if (aSr.isEmpty != bSr.isEmpty) return aSr.isEmpty ? 1 : -1;
+
+    final aNum = int.tryParse(aSr);
+    final bNum = int.tryParse(bSr);
+    if (aNum != null && bNum != null) {
+      final byNumber = aNum.compareTo(bNum);
+      if (byNumber != 0) return byNumber;
+    } else {
+      final byText = aSr.toLowerCase().compareTo(bSr.toLowerCase());
+      if (byText != 0) return byText;
+    }
+
+    final aName = a['name']?.toString().trim().toLowerCase() ?? '';
+    final bName = b['name']?.toString().trim().toLowerCase() ?? '';
+    return aName.compareTo(bName);
+  }
+
+  bool _payloadHasAnyExit(Map<String, dynamic>? payload) {
+    if (payload == null || payload.isEmpty) return false;
+    if (sessionHasExitMap(payload)) return true;
+    for (final session in mapSubjectSessions(payload).values) {
+      if (sessionHasExitMap(session)) return true;
+    }
+    return false;
+  }
+
+  String? _attendancePhotoUrl(Map<String, dynamic> p, {required bool isEntry}) {
+    final photoKey = isEntry ? 'entryPhoto' : 'exitPhoto';
+    final fallbacks = isEntry ? const ['photoUrl'] : const <String>[];
+
+    String? pick(Map<String, dynamic> m) {
+      for (final k in [photoKey, ...fallbacks]) {
+        final v = m[k];
+        if (v is String && v.trim().isNotEmpty) return v.trim();
+      }
+      return null;
+    }
+
+    final root = pick(p);
+    if (root != null) return root;
+
+    final active = teacherPayloadActiveSessionSlice(p);
+    if (active != null) {
+      final fromActive = pick(active);
+      if (fromActive != null) return fromActive;
+    }
+
+    for (final s in mapSubjectSessions(p).values) {
+      final fromSession = pick(s);
+      if (fromSession != null) return fromSession;
+    }
+    return null;
+  }
+
+  String? _attendancePhotoPath(Map<String, dynamic> p, {required bool isEntry}) {
+    final pathKey = isEntry ? 'entryPhotoPath' : 'exitPhotoPath';
+
+    String? pick(Map<String, dynamic> m) {
+      final v = m[pathKey];
+      if (v is String && v.trim().isNotEmpty) return v.trim();
+      return null;
+    }
+
+    final root = pick(p);
+    if (root != null) return root;
+
+    final active = teacherPayloadActiveSessionSlice(p);
+    if (active != null) {
+      final fromActive = pick(active);
+      if (fromActive != null) return fromActive;
+    }
+
+    for (final s in mapSubjectSessions(p).values) {
+      final fromSession = pick(s);
+      if (fromSession != null) return fromSession;
+    }
+    return null;
+  }
+
+  DateTime? _attendanceTimestamp(Map<String, dynamic> p, {required bool isEntry}) {
+    DateTime? pick(Map<String, dynamic> m) {
+      if (isEntry) {
+        return parseAnyTimestamp(m['entryTime']) ?? parseAnyTimestamp(m['timestamp']);
+      }
+      return parseAnyTimestamp(m['exitTime']);
+    }
+
+    final root = pick(p);
+    if (root != null) return root;
+
+    final active = teacherPayloadActiveSessionSlice(p);
+    if (active != null) {
+      final fromActive = pick(active);
+      if (fromActive != null) return fromActive;
+    }
+
+    for (final s in mapSubjectSessions(p).values) {
+      final fromSession = pick(s);
+      if (fromSession != null) return fromSession;
+    }
+    return null;
+  }
+
+  bool _studentMatchesAttendanceFilter(Map<String, dynamic> student) {
+    if (_attendanceFilter == _StudentAttendanceFilter.all) return true;
+
+    final studentId = student['id']?.toString().trim() ?? '';
+    final payload =
+        studentId.isEmpty ? null : _todayPayloadByStudentId[studentId];
+    final hasEntry = payload != null && teacherPayloadHasAnySubjectEntry(payload);
+    final hasExit = _payloadHasAnyExit(payload);
+
+    switch (_attendanceFilter) {
+      case _StudentAttendanceFilter.all:
+        return true;
+      case _StudentAttendanceFilter.present:
+        return hasEntry;
+      case _StudentAttendanceFilter.absent:
+        return !hasEntry && !hasExit;
+    }
+  }
+
+  String _attendanceFilterLabel(_StudentAttendanceFilter filter) {
+    switch (filter) {
+      case _StudentAttendanceFilter.all:
+        return 'all';
+      case _StudentAttendanceFilter.present:
+        return 'present';
+      case _StudentAttendanceFilter.absent:
+        return 'absent';
+    }
+  }
+
+  List<Map<String, dynamic>> get _visibleStudents {
+    final visible = _students
+        .where(_studentMatchesAttendanceFilter)
+        .map((student) => Map<String, dynamic>.from(student))
+        .toList();
+    visible.sort(_compareStudentsBySrNo);
+    return visible;
+  }
+
+  /// Map legacy attendance rows (sr_no / user_id in wrong columns) to one student, or skip if ambiguous.
+  String? _resolveStudentIdForLegacyKey(
+    String key,
+    Map<String, Map<String, dynamic>> idToStudent,
+  ) {
+    final k = key.trim();
+    if (k.isEmpty) return null;
+    if (idToStudent.containsKey(k)) return k;
+
+    final matches = <String>[];
+    for (final e in idToStudent.entries) {
+      final sr = e.value['srNo']?.toString().trim() ?? '';
+      final uid = e.value['userId']?.toString().trim() ?? '';
+      if (sr == k || (sr.isEmpty && uid == k)) matches.add(e.key);
+    }
+    return matches.length == 1 ? matches.first : null;
+  }
+
+  void _mergePayloadIntoStudent(
+    Map<String, Map<String, dynamic>> map,
+    String studentId,
+    Map<String, dynamic> incoming,
+  ) {
+    if (studentId.isEmpty || incoming.isEmpty) return;
+    final existing = map[studentId];
+    if (existing == null) {
+      map[studentId] = Map<String, dynamic>.from(incoming);
+      return;
+    }
+    final merged = Map<String, dynamic>.from(existing);
+    _mergeTeacherAttendanceIntoSlice(merged, incoming);
+    map[studentId] = merged;
+  }
+
+  /// Stats for header (total students, present/absent today).
+  /// ✅ Load stats using shared service (unified logic with home dashboard)
+  Future<void> _loadHeaderStats() async {
+    if (_instituteId == null) return;
+    try {
+      // ✅ Use SharedStatsService for consistent calculation
+      final stats = await SharedStatsService.getTodayStats(_instituteId!);
+
+      if (mounted) {
+        // ⚡ Use addPostFrameCallback to prevent "reentrantly" painting errors
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) {
+            setState(() {
+              _statsTotal = stats['total'] ?? 0;
+              _statsPresentToday = stats['present'] ?? 0;
+              _statsAbsentToday = stats['absent'] ?? 0;
+            });
+          }
+        });
+      }
+    } catch (e) {
+      if (kDebugMode) debugPrint('❌ Header stats error: $e');
+    }
+  }
+
+  /// ✅ Setup one-time stats load (no periodic refresh to avoid lag)
+  void _setupStatsAutoRefresh() {
+    // Load stats once on init only
+    _loadHeaderStats();
+
+    // ⏸️ DISABLED: Periodic refresh was causing repeated rebuilds and memory thrashing
+    // Users can pull-to-refresh if they need latest stats
+    // Real-time updates come from real-time sync on attendance changes
+
+    if (kDebugMode) debugPrint('✅ Stats loaded once on init (no auto-refresh to prevent lag)');
+  }
+
+  Future<void> _refreshTodayPayloadsForVisibleStudents() async {
+    if (!mounted || _instituteId == null) return;
+    final today = DateFormat('yyyy-MM-dd').format(DateTime.now());
+    if (_students.isEmpty) {
+      if (mounted) setState(() => _todayPayloadByStudentId = {});
+      return;
+    }
+    try {
+      final code = await instituteCodeForId(_instituteId!);
+
+      final ids = <String>[];
+      final idToStudent = <String, Map<String, dynamic>>{};
+      final idToLookupKeys = <String, List<String>>{};
+      for (final student in _students) {
+        final studentId = student['id']?.toString().trim() ?? '';
+        final lookupKeys = _attendanceLookupKeysForStudent(student);
+
+        if (studentId.isEmpty || lookupKeys.isEmpty) {
+          if (kDebugMode) debugPrint('   ⏭️ SKIPPED: studentId or rollKey is empty');
+          continue;
+        }
+        ids.add(studentId);
+        idToStudent[studentId] = student;
+        idToLookupKeys[studentId] = lookupKeys;
+      }
+
+      if (ids.isEmpty) {
+        if (mounted) setState(() => _todayPayloadByStudentId = {});
+        return;
+      }
+
+      if (kDebugMode) {
+        debugPrint(
+          '🔍 Today thumbnails: ${_students.length} listed, ${ids.length} with id+roll — institute_code=$code',
+        );
+      }
+
+      final instituteKey = _instituteId!;
+      // ❌ DISABLED: ensureReconciled was running 20+ database queries per page load, causing lag
+      // This happens during display and blocked scrolling. Reconciliation is not needed just to show the list.
+      // It will still happen when attendance is actually marked.
+      // for (final student in _students) {
+      //   final userId = student['userId']?.toString().trim() ?? '';
+      //   final srNo = student['srNo']?.toString().trim() ?? '';
+      //   final rk = userId.isNotEmpty ? userId : srNo;
+      //   final rawSubs = student['subjectsList'];
+      //   final subjectsList = rawSubs is List
+      //       ? rawSubs.map((e) => e.toString().trim()).where((s) => s.isNotEmpty).toList()
+      //       : <String>[];
+      //   if (rk.isEmpty || subjectsList.isEmpty) continue;
+      //   await StaleAttendanceReconciliationService.ensureReconciled(
+      //     db: appDb,
+      //     instituteId: instituteKey,
+      //     srNo: rk,
+      //     date: today,
+      //     enrolledSubjects: subjectsList,
+      //   );
+      // }
+
+      void mergeAttendanceRow(Map<String, dynamic> payload, Map<String, dynamic> row) {
+        final type = (row['type']?.toString() ?? '').toLowerCase();
+        final photoUrl = (row['photo_url'] ?? '').toString().trim();
+        final photoPath = (row['photo_path'] ?? '').toString().trim();
+        final createdAt = row['created_at'];
+        final add = row['additional'] is Map
+            ? Map<String, dynamic>.from((row['additional'] as Map).cast<String, dynamic>())
+            : <String, dynamic>{};
+
+        if (type == 'exit') {
+          if (payload['exitPhoto'] == null && photoUrl.isNotEmpty) {
+            payload['exitPhoto'] = photoUrl;
+          }
+          if (payload['exitPhotoPath'] == null && photoPath.isNotEmpty) {
+            payload['exitPhotoPath'] = photoPath;
+          }
+          if (payload['exitTime'] == null) {
+            payload['exitTime'] = add['exitTime'] ?? createdAt;
+          }
+          payload['status'] = add['status'];
+        } else {
+          if (payload['entryPhoto'] == null && photoUrl.isNotEmpty) {
+            payload['entryPhoto'] = photoUrl;
+          }
+          if (payload['entryPhotoPath'] == null && photoPath.isNotEmpty) {
+            payload['entryPhotoPath'] = photoPath;
+          }
+          if (payload['photoUrl'] == null && photoUrl.isNotEmpty) {
+            payload['photoUrl'] = photoUrl;
+          }
+          if (payload['entryTime'] == null) {
+            payload['entryTime'] = add['entryTime'] ?? createdAt;
+          }
+          payload['status'] = add['status'];
+        }
+      }
+
+      final map = <String, Map<String, dynamic>>{};
+      const chunk = 100;
+      for (var offset = 0; offset < ids.length; offset += chunk) {
+        final end = (offset + chunk) > ids.length ? ids.length : offset + chunk;
+        final slice = ids.sublist(offset, end);
+
+        final instituteCodes = <String>{
+          code,
+          (_instituteId ?? '').trim(),
+        }..removeWhere((s) => s.isEmpty);
+
+        final rows = await appDb
+            .from('attendance_in_out')
+            .select('id,student_id,sr_no,type,photo_url,photo_path,created_at,additional')
+            .inFilter('institute_code', instituteCodes.toList())
+            .eq('attendance_date', today)
+            .inFilter('student_id', slice)
+            .order('created_at', ascending: false);
+
+        if (kDebugMode) {
+          debugPrint('📋 Attendance query: institute_codes=$instituteCodes, date=$today, student_ids=${slice.length}');
+          debugPrint('   Found ${rows.length} attendance records from database');
+          if (rows.isEmpty && slice.isNotEmpty) {
+            debugPrint('   ⚠️ NO RECORDS FOUND - checking data mismatch...');
+            debugPrint('   Looking for: institutes=$instituteCodes, date=$today');
+          }
+        }
+
+        final seenRowIds = <String>{};
+        final byStudent = <String, List<Map<String, dynamic>>>{};
+        void absorbRow(Map<String, dynamic> row, String attributedStudentId) {
+          final rid = row['id']?.toString().trim() ?? '';
+          if (rid.isNotEmpty && seenRowIds.contains(rid)) return;
+          if (rid.isNotEmpty) seenRowIds.add(rid);
+          if (attributedStudentId.isEmpty) return;
+          byStudent.putIfAbsent(attributedStudentId, () => []).add(row);
+        }
+
+        for (final raw in rows) {
+          final row = Map<String, dynamic>.from(raw as Map);
+          final sid = row['student_id']?.toString().trim() ?? '';
+          if (sid.isEmpty) continue;
+          final attributed = idToStudent.containsKey(sid)
+              ? sid
+              : _resolveStudentIdForLegacyKey(sid, idToStudent);
+          if (attributed == null) continue;
+          absorbRow(row, attributed);
+        }
+
+        final fallbackRolls = <String>{};
+        for (final sid in slice) {
+          final keys = idToLookupKeys[sid] ?? const <String>[];
+          if (keys.isEmpty) continue;
+          final have = byStudent[sid];
+          if (have == null || have.isEmpty) fallbackRolls.addAll(keys);
+        }
+        if (fallbackRolls.isNotEmpty) {
+          final rowsBySr = await appDb
+              .from('attendance_in_out')
+              .select('id,student_id,sr_no,type,photo_url,photo_path,created_at,additional')
+              .inFilter('institute_code', instituteCodes.toList())
+              .eq('attendance_date', today)
+              .inFilter('sr_no', fallbackRolls.toList())
+              .order('created_at', ascending: false);
+          for (final raw in rowsBySr) {
+            final row = Map<String, dynamic>.from(raw as Map);
+            final sr = row['sr_no']?.toString().trim() ?? '';
+            final sid = _resolveStudentIdForLegacyKey(sr, idToStudent);
+            if (sid == null) continue;
+            absorbRow(row, sid);
+          }
+        }
+
+        // Legacy: some rows store roll/user_id in student_id (not students.id) and omit sr_no.
+        final stillMissingRolls = <String>{};
+        for (final sid in slice) {
+          final keys = idToLookupKeys[sid] ?? const <String>[];
+          if (keys.isEmpty) continue;
+          final have = byStudent[sid];
+          if (have == null || have.isEmpty) stillMissingRolls.addAll(keys);
+        }
+        var rollAsStudentIdRowCount = 0;
+        if (stillMissingRolls.isNotEmpty) {
+          final rowsByRollInStudentId = await appDb
+              .from('attendance_in_out')
+              .select('id,student_id,sr_no,type,photo_url,photo_path,created_at,additional')
+              .inFilter('institute_code', instituteCodes.toList())
+              .eq('attendance_date', today)
+              .inFilter('student_id', stillMissingRolls.toList())
+              .order('created_at', ascending: false);
+          rollAsStudentIdRowCount = rowsByRollInStudentId.length;
+          for (final raw in rowsByRollInStudentId) {
+            final row = Map<String, dynamic>.from(raw as Map);
+            final key = row['student_id']?.toString().trim() ?? '';
+            final sid = _resolveStudentIdForLegacyKey(key, idToStudent);
+            if (sid == null) continue;
+            absorbRow(row, sid);
+          }
+        }
+
+        if (kDebugMode) {
+          var n = 0;
+          for (final sid in slice) {
+            final list = byStudent[sid];
+            if (list != null) n += list.length;
+          }
+          debugPrint(
+            '📸 Bulk attendance thumbnails chunk: ${slice.length} student(s), ${rows.length} by students.id'
+            '${fallbackRolls.isEmpty ? '' : ', sr_no fallback for ${fallbackRolls.length} key(s)'}'
+            '${stillMissingRolls.isEmpty ? '' : ', student_id=roll fetched $rollAsStudentIdRowCount row(s)'}, merged $n for slice',
+          );
+        }
+
+        for (final sid in slice) {
+          final student = idToStudent[sid];
+          final list = byStudent[sid];
+          if (student == null || list == null || list.isEmpty) continue;
+
+          final payload = <String, dynamic>{};
+          for (final row in list) {
+            mergeAttendanceRow(payload, row);
+          }
+          if (payload.isNotEmpty) {
+            _mergePayloadIntoStudent(map, sid, payload);
+          }
+        }
+      }
+
+      final docIdToStudentId = <String, String>{};
+      for (final student in _students) {
+        final sid = student['id']?.toString().trim() ?? '';
+        final roll = _canonicalAttendanceRollKey(student);
+        if (sid.isEmpty || roll.isEmpty) continue;
+        docIdToStudentId['${instituteKey}_${roll}_$today'] = sid;
+      }
+      final docIds = docIdToStudentId.keys.toList();
+      const tChunk = 40;
+      for (var o = 0; o < docIds.length; o += tChunk) {
+        final end = (o + tChunk > docIds.length) ? docIds.length : o + tChunk;
+        final sub = docIds.sublist(o, end);
+        try {
+          final trows = await appDb
+              .from('teacher_attendance')
+              .select('id,student_id,payload')
+              .inFilter('id', sub);
+          for (final raw in trows) {
+            final row = Map<String, dynamic>.from(raw as Map);
+            final docId = row['id']?.toString().trim() ?? '';
+            final p = row['payload'];
+            if (docId.isEmpty || p is! Map) continue;
+            final tp = Map<String, dynamic>.from(p.cast<String, dynamic>());
+            final sid = docIdToStudentId[docId] ??
+                _resolveStudentIdForLegacyKey(
+                  row['student_id']?.toString() ?? '',
+                  idToStudent,
+                );
+            if (sid == null) continue;
+            _mergePayloadIntoStudent(map, sid, tp);
+          }
+        } catch (e) {
+          if (kDebugMode) debugPrint('teacher_attendance UI merge: $e');
+        }
+      }
+
+      if (mounted) setState(() => _todayPayloadByStudentId = map);
+    } catch (e) {
+      if (kDebugMode) debugPrint('Today payloads: $e');
+    }
+  }
+
+  Future<void> _loadInstituteId() async {
+    try {
+      final user = appDb.auth.currentUser;
+      if (user == null) {
+        setState(() => _isLoadingInstitute = false);
+        return;
+      }
+
+      if (kDebugMode) {
+        debugPrint('🔐 Loading institute ID for user: ${user.id}');
+        debugPrint('   📱 Device/Phone Info for debugging cross-device sync');
+      }
+
+      final row = await appDb.from('profiles').select('institute_id').eq('id', user.id).maybeSingle();
+      if (!mounted) return;
+      final foundInstituteId = row?['institute_id'] as String?;
+
+      if (foundInstituteId != null && foundInstituteId.isNotEmpty) {
+        if (kDebugMode) {
+          debugPrint('✅ User found in institute: $foundInstituteId');
+          debugPrint('   📊 Profile institute_id: $foundInstituteId');
+
+          // DIAGNOSTIC: Check if students table has entries for this institute
+          try {
+            final studentCount = await appDb
+                .from('students')
+                .select('id')
+                .eq('institute_id', foundInstituteId)
+                .count(CountOption.exact);
+            debugPrint('   📚 Total students in institute: ${studentCount.count}');
+          } catch (e) {
+            debugPrint('   ⚠️ Could not count students: $e');
+          }
+        }
+        setState(() {
+          _instituteId = foundInstituteId;
+          _isLoadingInstitute = false;
+        });
+        await _subscribeRealtime();
+        await _bootstrapStudentList();
+        return;
+      }
+
+      if (kDebugMode) {
+        debugPrint('❌ CRITICAL: User not found in any institute!');
+        debugPrint('   User ID: ${user.id}');
+        debugPrint('   Profile row: $row');
+        debugPrint('   This means the profile institute_id is NULL or EMPTY');
+      }
+      if (mounted) setState(() => _isLoadingInstitute = false);
+    } catch (e) {
+      if (kDebugMode) debugPrint('❌ Institute load error: $e');
+      if (mounted) setState(() => _isLoadingInstitute = false);
+    }
+  }
+
+  Future<void> _bootstrapStudentList() async {
+    if (_instituteId == null) return;
+    final instituteId = _instituteId!;
+    var page = const _StudentPage(rows: [], total: 0, hasMore: false);
+
+    try {
+      page = await _fetchStudentPage(pageIndex: 0, query: '', previousTotal: null);
+      if (kDebugMode) {
+        debugPrint(
+          '📚 Student list bootstrap for institute $instituteId: ${page.total} total, ${page.rows.length} first-page rows',
+        );
+        debugPrint('   Supabase host: ${_supabaseHostForLogs()}');
+      }
+    } catch (e) {
+      if (kDebugMode) debugPrint('❌ Student bootstrap load error for institute $instituteId: $e');
+    }
+
+    if (!mounted) return;
+    _applyStudentPage(page, reset: true);
+  }
+
+  Future<void> _subscribeRealtime() async {
+    if (_instituteId == null || _instituteId!.isEmpty) return;
+
+    if (_studentsChannel != null) {
+      await appDb.removeChannel(_studentsChannel!);
+      _studentsChannel = null;
+    }
+    if (_attendanceChannel != null) {
+      await appDb.removeChannel(_attendanceChannel!);
+      _attendanceChannel = null;
+    }
+
+    void scheduleRefresh({bool attendanceOnly = false}) {
+      _realtimeRefreshDebounce?.cancel();
+      _realtimeRefreshDebounce = Timer(const Duration(milliseconds: 600), () async {
+        if (!mounted) return;
+        if (attendanceOnly) {
+          await _refreshTodayPayloadsForVisibleStudents();
+          // ⏸️ Don't call _loadHeaderStats() here - prevents reentrancy
+        } else {
+          await _loadStudents(reset: true);
+          // ⏸️ Don't call _loadHeaderStats() here - prevents reentrancy
+          // Stats are loaded once on init only
+        }
+      });
+    }
+
+    // ⏸️ DISABLED: Real-time sync was causing full list rebuilds every 600ms during scroll
+    // Users can pull-to-refresh to get latest data
+    // Real-time updates happen on AdminHomeScreen where it's appropriate
+
+    // _studentsChannel = appDb
+    //     .channel('student-management-students-${_instituteId!}')
+    //     .onPostgresChanges(...)
+    //     .subscribe();
+    // _attendanceChannel = appDb
+    //     .channel('student-management-attendance-$code')
+    //     .onPostgresChanges(...)
+    //     .subscribe();
+  }
+
+  Future<_StudentPage> _fetchStudentPage({
+    required int pageIndex,
+    required String query,
+    required int? previousTotal,
+  }) async {
+    if (_instituteId == null) {
+      return const _StudentPage(rows: [], total: 0, hasMore: false);
+    }
+    final instituteId = _instituteId!;
+
+    dynamic dataQ = appDb.from('students').select(_studentSelectCols).eq('institute_id', instituteId);
+    dynamic countQ = appDb.from('students').select('id').eq('institute_id', instituteId);
+    final searchFilter = _studentSearchOrFilter(query);
+    if (searchFilter != null) {
+      dataQ = dataQ.or(searchFilter);
+      countQ = countQ.or(searchFilter);
+    }
+
+    final total = (pageIndex > 0 && previousTotal != null)
+        ? previousTotal
+        : (await countQ.count(CountOption.exact)).count;
+
+    final from = pageIndex * _pageSize;
+    if (from >= total) {
+      return _StudentPage(rows: [], total: total, hasMore: false);
+    }
+
+    final rows = await dataQ
+        .order('sr_no', ascending: true, nullsFirst: false)
+        .order('name', ascending: true)
+        .order('id', ascending: true)
+        .range(from, from + _pageSize - 1);
+
+    final list =
+        (rows as List).map((e) => Map<String, dynamic>.from(e as Map)).toList();
+
+    final seen = <String>{};
+    final deduped = <Map<String, dynamic>>[];
+    for (final row in list) {
+      final id = row['id']?.toString().trim() ?? '';
+      if (id.isNotEmpty && !seen.contains(id)) {
+        seen.add(id);
+        deduped.add(row);
+      }
+    }
+
+    final hasMore = from + deduped.length < total;
+
+    if (kDebugMode) {
+      debugPrint(
+        '📋 Students page $pageIndex: ${deduped.length} row(s), total=$total, hasMore=$hasMore',
+      );
+    }
+
+    return _StudentPage(rows: deduped, total: total, hasMore: hasMore);
+  }
+
+  /// 🔄 Fetch FRESH photo URLs from database (never cached, always current)
+  Future<Map<String, String>> _fetchFreshPhotos(List<String> studentIds) async {
+    if (studentIds.isEmpty || _instituteId == null) return {};
+
+    try {
+      final students = await appDb
+          .from('students')
+          .select('id, face_photo_url')
+          .eq('institute_id', _instituteId!)
+          .inFilter('id', studentIds);
+
+      final photoMap = <String, String>{};
+      for (final s in students) {
+        final id = s['id']?.toString() ?? '';
+        final url = s['face_photo_url']?.toString().trim() ?? '';
+        if (id.isNotEmpty) photoMap[id] = url;
+      }
+
+      if (kDebugMode) {
+        debugPrint('📷 Fresh photos fetched: ${photoMap.length} students');
+      }
+
+      return photoMap;
+    } catch (e) {
+      if (kDebugMode) debugPrint('❌ Error fetching fresh photos: $e');
+      return {};
+    }
+  }
+
+  /// Lightweight: ids only, no embedding JSON over the wire.
+  Future<Set<String>> _studentIdsWithFaceEmbedding(List<String> studentIds) async {
+    if (studentIds.isEmpty || _instituteId == null) return {};
+    final out = <String>{};
+    const chunk = 80;
+    for (var i = 0; i < studentIds.length; i += chunk) {
+      final slice = studentIds.sublist(i, i + chunk > studentIds.length ? studentIds.length : i + chunk);
+      try {
+        final rows = await appDb
+            .from('students')
+            .select('id')
+            .eq('institute_id', _instituteId!)
+            .inFilter('id', slice)
+            .not('face_embedding', 'is', null);
+        for (final raw in rows) {
+          final id = (raw as Map)['id']?.toString().trim() ?? '';
+          if (id.isNotEmpty) out.add(id);
+        }
+      } catch (e) {
+        if (kDebugMode) debugPrint('⚠️ embedding-id batch: $e');
+      }
+    }
+    return out;
+  }
+
+  void _applyStudentPage(_StudentPage page, {required bool reset}) {
+    if (!mounted) return;
+    final mapped = page.rows.map(_mapStudentRow).toList();
+
+    setState(() {
+      if (reset) {
+        _students = _dedupeMergedStudents(mapped);
+      } else {
+        _students = _dedupeMergedStudents([..._students, ...mapped]);
+      }
+      _page = reset ? 1 : _page + 1;
+      _hasMore = page.hasMore;
+      _studentCount = page.total;
+      _isLoadingStudents = false;
+      _isLoadingMore = false;
+    });
+
+    final studentIds = mapped
+        .map((s) => s['id']?.toString() ?? '')
+        .where((id) => id.isNotEmpty)
+        .toList();
+
+    _studentIdsWithFaceEmbedding(studentIds).then((withEmb) {
+      if (!mounted || withEmb.isEmpty) return;
+      setState(() {
+        _students = _students.map((student) {
+          final id = student['id']?.toString() ?? '';
+          if (id.isEmpty || !withEmb.contains(id)) return student;
+          if (student['hasFaceEmbedding'] == true) return student;
+          return Map<String, dynamic>.from(student)..['hasFaceEmbedding'] = true;
+        }).toList();
+      });
+    });
+
+    // Merge fresh URLs by student id (avoids race when pages load out of order).
+    _fetchFreshPhotos(studentIds).then((photoMap) {
+      if (!mounted || photoMap.isEmpty) return;
+      setState(() {
+        _students = _students.map((student) {
+          final id = student['id']?.toString() ?? '';
+          if (id.isEmpty || !photoMap.containsKey(id)) return student;
+          return Map<String, dynamic>.from(student)..['photoUrl'] = photoMap[id];
+        }).toList();
+      });
+
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          _refreshTodayPayloadsForVisibleStudents();
+          if (reset) _loadHeaderStats();
+        }
+      });
+    });
+  }
+
+  Future<void> _loadStudents({bool reset = false}) async {
+    if (_instituteId == null) return;
+    if (reset) {
+      if (!mounted) return;
+      // Clear Flutter + disk cache so list rows never show another student's file.
+      imageCache.clear();
+      imageCache.clearLiveImages();
+      DefaultCacheManager().emptyCache();
+      setState(() {
+        _isLoadingStudents = true;
+        _page = 0;
+        _students.clear();
+        _hasMore = true;
+      });
+      debugPrint('🔄 Loading students from RESET... (image cache cleared)');
+    } else {
+      if (_isLoadingMore || !_hasMore) return;
+      setState(() => _isLoadingMore = true);
+      debugPrint('🔄 Loading students page: ${_page + 1}...');
+    }
+
+    try {
+      final pageData = await _fetchStudentPage(
+        pageIndex: reset ? 0 : _page,
+        query: _searchQuery,
+        previousTotal: reset ? null : _studentCount,
+      );
+      debugPrint('✅ Loaded ${pageData.rows.length} students for page ${reset ? 0 : _page}, total: ${pageData.total}, hasMore: ${pageData.hasMore}');
+      _applyStudentPage(pageData, reset: reset);
+    } catch (e) {
+      if (kDebugMode) debugPrint('Student load error: $e');
+      if (mounted) setState(() { _isLoadingStudents = false; _isLoadingMore = false; });
+    }
+  }
+
+  Map<String, dynamic> _mapStudentRow(Map<String, dynamic> row) {
+    String subject = row['subject']?.toString().trim() ?? '';
+    final subs = row['subjects'];
+    if (subject.isEmpty && subs is List && subs.isNotEmpty) {
+      subject = subs.map((e) => e.toString()).join(', ');
+    }
+
+    final srRaw = row['sr_no']?.toString().trim() ?? '';
+    final regUrl = (row['face_photo_url'] as String?)?.trim();
+    final url = regUrl ?? '';
+
+    final parsedSubs = _parseSubjectsList(row);
+    // Full embedding is loaded in a separate small id-only query after the page fetch.
+    final hasFaceEmb = false;
+
+    if (kDebugMode && url.isEmpty) {
+      debugPrint('⚠️ Student has no photo URL:');
+      debugPrint('   Name: ${row['name']}');
+      debugPrint('   face_photo_url: EMPTY');
+    } else if (kDebugMode && url.isNotEmpty) {
+      debugPrint('✅ Student photo found:');
+      debugPrint('   Name: ${row['name']}');
+      debugPrint('   Photo URL: $url');
+    }
+
+
+    return {
+      'id': row['id'],
+      'name': row['name'],
+      'userId': row['user_id'] ?? row['sr_no'] ?? '',
+      'srNo': srRaw,
+      'subject': subject,
+      'subjectsList': parsedSubs,
+      'year': row['year'],
+      'photoUrl': url,
+      'photoThumbnail': row['photo_thumbnail'],
+      'photoVersion': row['photo_version']?.toString(),
+      'hasFaceEmbedding': hasFaceEmb,
+      'facePhotoChangedOnce': row['face_photo_changed_once'] == true,
+    };
+  }
+
+  // Polling removed — data is loaded on demand with server-side pagination.
+
+  @override
+  Widget build(BuildContext context) {
+    if (_isLoadingInstitute) {
+      return const Scaffold(
+        backgroundColor: AppTheme.backgroundGrey,
+        body: Center(child: CircularProgressIndicator(color: AppTheme.primaryBlue)),
+      );
+    }
+
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final visibleStudents = _visibleStudents;
+
+    return PopScope(
+      canPop: !widget.forAttendanceStaffPortal,
+      onPopInvokedWithResult: (didPop, result) {
+        if (widget.forAttendanceStaffPortal) return;
+        if (didPop) return;
+        // Check if we're in a PageView (main navigation) or as a separate route
+        // If we can pop, do it normally
+        if (Navigator.of(context).canPop()) {
+          Navigator.pop(context);
+        }
+        // If we can't pop (likely in PageView), do nothing - let user use bottom nav
+        // Don't force navigation to home
+      },
+      child: Scaffold(
+        resizeToAvoidBottomInset: true,
+        backgroundColor: isDark ? const Color(0xFF0F172A) : AppTheme.backgroundGrey,
+        floatingActionButton: _instituteId == null
+            ? null
+            : FloatingActionButton.extended(
+                onPressed: () => _openAutoFaceScan(),
+                backgroundColor: AppTheme.primaryGreen,
+                icon: const Icon(Icons.face_retouching_natural, color: Colors.white),
+                label: const Text(
+                  'Auto Face Attendance',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+        body: SafeArea(
+          top: false,
+          child: FadeTransition(
+            opacity: _fadeAnimation,
+            child: RefreshIndicator(
+              onRefresh: () async {
+                await _loadStudents(reset: true);
+                await _loadHeaderStats();
+              },
+              child: CustomScrollView(
+                controller: _scrollController,
+                physics: const AlwaysScrollableScrollPhysics(
+                  parent: BouncingScrollPhysics(),
+                ),
+                slivers: [
+                  SliverToBoxAdapter(child: _buildBlueStudentsHeader()),
+                  SliverToBoxAdapter(child: _buildAutoFaceScanBanner()),
+                  SliverToBoxAdapter(child: _buildPhotoInstructionsCard()),
+                  SliverToBoxAdapter(child: _buildSearchBar()),
+                  SliverToBoxAdapter(child: _buildAttendanceFilterBar()),
+                  if (_instituteId != null)
+                    SliverToBoxAdapter(child: _buildSummaryStatCards()),
+                  if (_instituteId != null &&
+                      (_studentCount > 0 || visibleStudents.isNotEmpty))
+                    SliverToBoxAdapter(
+                      child: _buildListProgressHint(visibleStudents.length),
+                    ),
+                  ..._buildStudentContentSlivers(
+                    context,
+                    isDark,
+                    visibleStudents,
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildBlueStudentsHeader() {
+    return Container(
+      width: double.infinity,
+      padding: EdgeInsets.fromLTRB(14.w, 10.h, 10.w, 12.h),
+      color: AppTheme.primaryBlue,
+      child: Row(
+        children: [
+          if (widget.forAttendanceStaffPortal) ...[
+            IconButton(
+              icon: Icon(Icons.logout, color: Colors.white, size: 22.sp),
+              tooltip: 'Sign out',
+              padding: EdgeInsets.zero,
+              constraints: BoxConstraints(minWidth: 36.w, minHeight: 36.h),
+              onPressed: () async {
+                if (!context.mounted) return;
+                await StaffAttendancePortalScreen.signOutToLogin(context);
+              },
+            ),
+            SizedBox(width: 4.w),
+          ],
+          Icon(Icons.school_rounded, color: Colors.white.withValues(alpha: 0.95), size: 22.sp),
+          SizedBox(width: 8.w),
+          Expanded(
+            child: Text(
+              'Students',
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 17.sp,
+                fontWeight: FontWeight.w800,
+              ),
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          Flexible(
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  _headerStatChip('Total', _statsTotal),
+                  SizedBox(width: 6.w),
+                  _headerStatChip('Present', _statsPresentToday),
+                  SizedBox(width: 6.w),
+                  _headerStatChip('Absent', _statsAbsentToday),
+                  SizedBox(width: 8.w),
+                  Material(
+                    color: Colors.white.withValues(alpha: 0.18),
+                    borderRadius: BorderRadius.circular(20),
+                    child: InkWell(
+                      borderRadius: BorderRadius.circular(20),
+                      onTap: _instituteId == null
+                          ? null
+                          : () => _openAutoFaceScan(),
+                      child: Padding(
+                        padding: EdgeInsets.symmetric(horizontal: 10.w, vertical: 6.h),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              Icons.face_retouching_natural,
+                              color: Colors.white,
+                              size: 18.sp,
+                            ),
+                            SizedBox(width: 4.w),
+                            Text(
+                              'Auto scan',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 11.sp,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _headerStatChip(String label, int value) {
+    return Container(
+      padding: EdgeInsets.symmetric(horizontal: 8.w, vertical: 4.h),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.2),
+        borderRadius: BorderRadius.circular(14.r),
+      ),
+      child: Text(
+        '$label $value',
+        style: TextStyle(
+          color: Colors.white,
+          fontSize: 10.sp,
+          fontWeight: FontWeight.w700,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSummaryStatCards() {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return Padding(
+      padding: EdgeInsets.fromLTRB(16.w, 12.h, 16.w, 0),
+      child: Row(
+        children: [
+          Expanded(
+            child: _bigStatCard(
+              label: 'Total',
+              value: _statsTotal,
+              icon: Icons.people_alt_rounded,
+              color: AppTheme.primaryBlue,
+              isDark: isDark,
+            ),
+          ),
+          SizedBox(width: 10.w),
+          Expanded(
+            child: _bigStatCard(
+              label: 'Present',
+              value: _statsPresentToday,
+              icon: Icons.check_circle_rounded,
+              color: AppTheme.primaryGreen,
+              isDark: isDark,
+            ),
+          ),
+          SizedBox(width: 10.w),
+          Expanded(
+            child: _bigStatCard(
+              label: 'Absent',
+              value: _statsAbsentToday,
+              icon: Icons.cancel_rounded,
+              color: AppTheme.accentRed,
+              isDark: isDark,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _bigStatCard({
+    required String label,
+    required int value,
+    required IconData icon,
+    required Color color,
+    required bool isDark,
+  }) {
+    return Container(
+      padding: EdgeInsets.symmetric(vertical: 14.h, horizontal: 8.w),
+      decoration: BoxDecoration(
+        color: isDark ? Colors.white.withValues(alpha: 0.06) : Colors.white,
+        borderRadius: BorderRadius.circular(14.r),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.06),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, color: color, size: 26.sp),
+          SizedBox(height: 6.h),
+          Text(
+            '$value',
+            style: TextStyle(
+              fontSize: 20.sp,
+              fontWeight: FontWeight.w800,
+              color: isDark ? Colors.white : AppTheme.textDark,
+            ),
+          ),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 11.sp,
+              color: isDark ? Colors.white70 : AppTheme.textGray,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String? _entryPhotoUrl(Map<String, dynamic> p) =>
+      _attendancePhotoUrl(p, isEntry: true);
+
+  String? _exitPhotoUrl(Map<String, dynamic> p) =>
+      _attendancePhotoUrl(p, isEntry: false);
+
+  String _formatPayloadTime(Map<String, dynamic>? p, bool isEntry) {
+    if (p == null) return '—';
+    final t = _attendanceTimestamp(p, isEntry: isEntry);
+    if (t == null) return '—';
+    final loc = t.toLocal();
+    return DateFormat('HH:mm:ss').format(loc);
+  }
+
+  List<String> _parseSubjectsList(Map<String, dynamic> row) {
+    final subs = row['subjects'];
+    final out = <String>[];
+
+    if (kDebugMode) {
+      debugPrint('🔍 Raw subjects for ${row['name']}: $subs (type: ${subs.runtimeType})');
+    }
+
+    if (subs is List) {
+      // Handle native List format
+      for (final e in subs) {
+        final s = e.toString().trim();
+        if (s.isNotEmpty && !out.contains(s)) {
+          out.add(s);
+          if (kDebugMode) debugPrint('  ✓ Added from List: "$s"');
+        }
+      }
+    } else if (subs is String && subs.isNotEmpty) {
+      // Handle JSON string format: '["GCC TBC ENG 40","GCC TBC ENG 30"]'
+      String cleaned = subs.trim();
+
+      // Remove outer brackets and quotes
+      if (cleaned.startsWith('[') && cleaned.endsWith(']')) {
+        cleaned = cleaned.substring(1, cleaned.length - 1);
+      } else if (cleaned.startsWith('{') && cleaned.endsWith('}')) {
+        cleaned = cleaned.substring(1, cleaned.length - 1);
+      }
+
+      // Split by comma and clean each item
+      if (cleaned.isNotEmpty) {
+        final parts = cleaned.split(',');
+        for (final p in parts) {
+          var trimmed = p.trim();
+          // Remove quotes from JSON strings
+          if (trimmed.startsWith('"') && trimmed.endsWith('"')) {
+            trimmed = trimmed.substring(1, trimmed.length - 1);
+          }
+          if (trimmed.isNotEmpty && !out.contains(trimmed)) {
+            out.add(trimmed);
+            if (kDebugMode) debugPrint('  ✓ Added from String: "$trimmed"');
+          }
+        }
+      }
+    }
+
+    // Remove duplicates (case-insensitive comparison)
+    final deduplicated = <String>[];
+    for (final s in out) {
+      if (!deduplicated.any((existing) => existing.toLowerCase() == s.toLowerCase())) {
+        deduplicated.add(s);
+      }
+    }
+
+    // Fallback to subject column if no subjects array found
+    if (deduplicated.isEmpty) {
+      final single = row['subject']?.toString().trim() ?? '';
+      if (single.isNotEmpty) {
+        deduplicated.add(single);
+        if (kDebugMode) debugPrint('  ⚠️  Fallback to subject column: "$single"');
+      }
+    }
+
+    if (kDebugMode && deduplicated.isNotEmpty) {
+      debugPrint('✅ Final ${deduplicated.length} subjects for ${row['name']}: $deduplicated');
+    }
+
+    return deduplicated;
+  }
+
+  /// 🔄 Fetch CURRENT student subjects from database (FRESH, not cached)
+  /// Call this BEFORE calculating exit window to ensure allocation is based on CURRENT data
+  /// If student subjects change in database, we'll get the updated count here
+  Future<List<String>> _fetchCurrentStudentSubjectsFromDb(String srNo) async {
+    try {
+      if (_instituteId == null || srNo.trim().isEmpty) return [];
+
+      // Query current student data
+      var student = await appDb
+          .from('students')
+          .select('subjects, subject')
+          .eq('institute_id', _instituteId!)
+          .eq('sr_no', srNo.trim())
+          .maybeSingle();
+
+      // Fallback: try by user_id
+      student ??= await appDb
+          .from('students')
+          .select('subjects, subject')
+          .eq('institute_id', _instituteId!)
+          .eq('user_id', srNo.trim())
+          .maybeSingle();
+
+      if (student == null) {
+        if (kDebugMode) debugPrint('⚠️ Student not found for fresh subject fetch: $srNo');
+        return [];
+      }
+
+      // Try subjects array first (newer format with multiple subjects)
+      final subjects = student['subjects'];
+      if (subjects is List && subjects.isNotEmpty) {
+        final freshSubjects = subjects
+            .map((s) => s.toString().trim())
+            .where((s) => s.isNotEmpty)
+            .toList();
+        if (kDebugMode) {
+          debugPrint('✅ Fresh subjects fetched: $freshSubjects (count=${freshSubjects.length})');
+        }
+        // Cache for future use
+        _freshSubjectsCache[srNo] = freshSubjects;
+        return freshSubjects;
+      }
+
+      // Fallback to single subject column
+      final singleSubject = student['subject']?.toString().trim();
+      if (singleSubject != null && singleSubject.isNotEmpty) {
+        if (kDebugMode) {
+          debugPrint('✅ Fresh subject fetched from column: $singleSubject (count=1)');
+        }
+        final fresh = [singleSubject];
+        _freshSubjectsCache[srNo] = fresh;
+        return fresh;
+      }
+
+      if (kDebugMode) debugPrint('⚠️ No subjects found for $srNo');
+      return [];
+    } catch (e) {
+      if (kDebugMode) debugPrint('❌ Error fetching fresh subjects: $e');
+      return [];
+    }
+  }
+
+  /// Get fresh subject count (from cache if available, fallback to display data)
+  int _getFreshSubjectCount(String rollKey, List<String> displaySubjectsList) {
+    // If we have cached fresh subjects, use them
+    if (_freshSubjectsCache.containsKey(rollKey)) {
+      final cached = _freshSubjectsCache[rollKey]!;
+      if (cached.isNotEmpty) {
+        if (kDebugMode) {
+          debugPrint('✅ Using cached fresh subjects for $rollKey: ${cached.length}');
+        }
+        return cached.length;
+      }
+    }
+    // Fallback to display data
+    return displaySubjectsList.length;
+  }
+
+  bool _sliceHasEntry(Map<String, dynamic>? slice) {
+    if (slice == null) return false;
+    return teacherPayloadHasAnySubjectEntry(slice);
+  }
+
+  bool _sliceComplete(Map<String, dynamic>? slice) {
+    if (slice == null) return false;
+    if (!teacherPayloadHasAnySubjectEntry(slice)) return false;
+    // If top-level exitTime is present the exit row is in attendance_in_out —
+    // treat as complete regardless of subjectSessions (which only track teacher_attendance entries).
+    if (sessionHasExitMap(slice)) return true;
+    return !teacherPayloadHasPendingExit(slice);
+  }
+
+  /// Merge `teacher_attendance.payload` so Entry/Exit match [InlineStudentAttendanceService.markForRoll].
+  void _mergeTeacherAttendanceIntoSlice(Map<String, dynamic> slice, Map<String, dynamic> tp) {
+    const keys = <String>[
+      'entryPhoto',
+      'entryPhotoPath',
+      'photoUrl',
+      'entryTime',
+      'timestamp',
+      'exitPhoto',
+      'exitPhotoPath',
+      'exitTime',
+      'status',
+      'subjectSessions',
+    ];
+    for (final k in keys) {
+      if (!tp.containsKey(k)) continue;
+      final v = tp[k];
+      if (v == null) continue;
+      if (v is String && v.trim().isEmpty) continue;
+      slice[k] = v;
+    }
+    final active = teacherPayloadActiveSessionSlice(tp);
+    if (active != null) {
+      for (final k in keys) {
+        if (k == 'subjectSessions') continue;
+        if (!active.containsKey(k)) continue;
+        final v = active[k];
+        if (v == null) continue;
+        if (v is String && v.trim().isEmpty) continue;
+        if (!slice.containsKey(k)) slice[k] = v;
+      }
+    }
+  }
+
+  Future<void> _openAutoFaceScan({String? studentName}) async {
+    if (_instituteId == null || _instituteId!.isEmpty) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Institute not loaded. Pull to refresh and try again.'),
+            backgroundColor: Colors.orange,
+          ),
+        );
+      }
+      return;
+    }
+
+    final hasPinSession = await PinSessionManager.hasActivePinSession();
+    if (hasPinSession) {
+      final verification = await LocationVerificationService.verifyLocationNow(
+        instituteId: _instituteId!,
+      );
+      if (!verification.isWithinRadius) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                verification.error ??
+                    'Cannot open auto face attendance outside institute GPS zone.',
+              ),
+              backgroundColor: AppTheme.accentRed,
+            ),
+          );
+        }
+        return;
+      }
+    }
+
+    if (studentName != null && studentName.isNotEmpty && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Auto scan — ask $studentName to stand in front of the camera'),
+          duration: const Duration(seconds: 3),
+          backgroundColor: AppTheme.primaryGreen,
+        ),
+      );
+    }
+
+    if (!mounted) return;
+    await Navigator.pushNamed(
+      context,
+      AutoFaceScanScreen.routeName,
+      arguments: {'instituteId': _instituteId},
+    );
+    if (mounted) {
+      await _loadHeaderStats();
+      _refreshTodayPayloadsForVisibleStudents();
+    }
+  }
+
+  String? _durationChipText(Map<String, dynamic>? p) {
+    if (p == null) return null;
+    Duration? dur;
+    final h = p['hours'];
+    if (h is num) {
+      dur = Duration(seconds: (h.toDouble() * 3600).round());
+    } else {
+      final et = parseAnyTimestamp(p['entryTime']);
+      final xt = parseAnyTimestamp(p['exitTime']);
+      if (et != null && xt != null && !xt.isBefore(et)) {
+        dur = xt.difference(et);
+      }
+    }
+    if (dur == null) return null;
+    return 'Duration: ${formatSeatedDurationHuman(dur)}';
+  }
+
+  /// Calculate remaining time in exit window (using fresh subject count from cache)
+  String? _getExitTimeRemaining(Map<String, dynamic>? slice, String rollKey, List<String> displaySubjectsList) {
+    if (slice == null) return null;
+    final entryTime = parseAnyTimestamp(slice['entryTime']) ?? parseAnyTimestamp(slice['timestamp']);
+    if (entryTime == null) return null;
+
+    // 🔄 Use fresh subject count from cache (or fallback to display data)
+    final enrolledSubjectCount = _getFreshSubjectCount(rollKey, displaySubjectsList);
+
+    final windowHours = attendanceWindowHoursForSubjectCount(enrolledSubjectCount);
+    final windowDuration = Duration(minutes: (windowHours * 60).round());
+    final deadlineUtc = entryTime.toUtc().add(windowDuration);
+    final nowUtc = DateTime.now().toUtc();
+
+    if (nowUtc.isAfter(deadlineUtc)) return '⏰ Time is up';
+
+    final remaining = deadlineUtc.difference(nowUtc);
+    final hours = remaining.inHours;
+    final minutes = remaining.inMinutes % 60;
+    return '${hours}h ${minutes}m';
+  }
+
+  bool _isExitWindowExpired(Map<String, dynamic>? slice, String rollKey, List<String> displaySubjectsList) {
+    if (slice == null) return false;
+    final entryTime =
+        parseAnyTimestamp(slice['entryTime']) ?? parseAnyTimestamp(slice['timestamp']);
+    if (entryTime == null) return false;
+
+    // 🔄 Use fresh subject count from cache (or fallback to display data)
+    final enrolledSubjectCount = _getFreshSubjectCount(rollKey, displaySubjectsList);
+
+    return isPastAttendanceExitDeadline(
+      entryTime.toUtc(),
+      DateTime.now().toUtc(),
+      enrolledSubjectCount,
+    );
+  }
+
+  Widget _buildAttendanceThumb({
+    required String label,
+    required Color borderColor,
+    required String? imageUrl,
+    String? storagePath,
+    required String time,
+    required bool isDark,
+    VoidCallback? onTap,
+    bool dimmed = false,
+  }) {
+    final hasImage = (imageUrl != null && imageUrl.isNotEmpty) ||
+        (storagePath != null && storagePath.isNotEmpty);
+    final box = Container(
+      height: 48,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: borderColor, width: 2),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: hasImage
+          ? SecureNetworkImage(
+              imageUrl: (imageUrl != null && imageUrl.isNotEmpty) ? imageUrl : null,
+              storagePath: (storagePath != null && storagePath.isNotEmpty) ? storagePath : null,
+              width: double.infinity,
+              height: 48,
+              fit: BoxFit.cover,
+              placeholder: ColoredBox(color: borderColor.withValues(alpha: 0.08)),
+              errorWidget: ColoredBox(
+                color: borderColor.withValues(alpha: 0.08),
+                child: Icon(Icons.broken_image_outlined, color: borderColor, size: 22),
+              ),
+            )
+          : ColoredBox(
+              color: isDark ? Colors.white.withValues(alpha: 0.06) : AppTheme.backgroundGrey,
+              child: Icon(Icons.photo_camera_outlined, color: borderColor.withValues(alpha: 0.65), size: 22),
+            ),
+    );
+
+    Widget thumb = onTap != null
+        ? Material(
+            color: Colors.transparent,
+            child: InkWell(
+              onTap: onTap,
+              borderRadius: BorderRadius.circular(8),
+              child: box,
+            ),
+          )
+        : box;
+
+    if (dimmed) {
+      thumb = Opacity(opacity: 0.42, child: thumb);
+    }
+
+    return Expanded(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            label,
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontSize: 10,
+              fontWeight: FontWeight.w800,
+              color: borderColor,
+            ),
+          ),
+          const SizedBox(height: 4),
+          thumb,
+          const SizedBox(height: 2),
+          Text(
+            time,
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontSize: 9,
+              fontWeight: FontWeight.w600,
+              color: isDark ? Colors.white70 : AppTheme.textGray,
+            ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Bottom inset for scroll content above the bottom nav / gesture bar.
+  EdgeInsets _studentListOuterPadding(BuildContext context) {
+    final safeBottom = MediaQuery.paddingOf(context).bottom;
+    final horizontal = context.vw(4).clamp(12.0, 24.0);
+    final top = context.vh(1.5).clamp(10.0, 20.0);
+    final bottomBase = context.vh(2).clamp(12.0, 24.0);
+    return EdgeInsets.fromLTRB(
+      horizontal,
+      top,
+      horizontal,
+      bottomBase + safeBottom,
+    );
+  }
+
+  List<Widget> _buildStudentContentSlivers(
+    BuildContext context,
+    bool isDark,
+    List<Map<String, dynamic>> visibleStudents,
+  ) {
+    if (_instituteId == null) {
+      return [
+        SliverFillRemaining(
+          hasScrollBody: false,
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Center(
+              child: _buildModernCard(
+                isDark: isDark,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.error_outline,
+                        size: 60, color: AppTheme.accentRed),
+                    const SizedBox(height: 16),
+                    Text(
+                      'Institute not found',
+                      style: TextStyle(
+                        color: isDark ? Colors.white : AppTheme.textDark,
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Please login again or contact support',
+                      style: TextStyle(
+                        color: isDark ? Colors.white70 : AppTheme.textGray,
+                        fontSize: 14,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ];
+    }
+
+    if (_isLoadingStudents) {
+      return [
+        SliverPadding(
+          padding: _studentListOuterPadding(context),
+          sliver: SliverList(
+            delegate: SliverChildBuilderDelegate(
+              (ctx, index) => Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: ShimmerListItem().stagger(index: index),
+              ),
+              childCount: 5,
+            ),
+          ),
+        ),
+      ];
+    }
+
+    if (_students.isEmpty && !_isLoadingStudents) {
+      return [
+        SliverFillRemaining(
+          hasScrollBody: false,
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Center(
+              child: _buildModernCard(
+                isDark: isDark,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(_searchQuery.isNotEmpty ? Icons.search_off : Icons.school,
+                        size: 60, color: AppTheme.primaryBlue),
+                    const SizedBox(height: 16),
+                    Text(
+                      _searchQuery.isNotEmpty ? 'No students found' : 'No students yet',
+                      style: TextStyle(
+                        color: isDark ? Colors.white : AppTheme.textDark,
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      _searchQuery.isNotEmpty
+                          ? 'Try a different search term'
+                          : 'Student records from your institute appear here.',
+                      style: TextStyle(
+                        color: isDark ? Colors.white70 : AppTheme.textGray,
+                        fontSize: 14,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ];
+    }
+
+    if (visibleStudents.isEmpty) {
+      final filterLabel = _attendanceFilterLabel(_attendanceFilter);
+      return [
+        SliverFillRemaining(
+          hasScrollBody: false,
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Center(
+              child: _buildModernCard(
+                isDark: isDark,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      _attendanceFilter == _StudentAttendanceFilter.present
+                          ? Icons.check_circle_outline
+                          : Icons.person_off_outlined,
+                      size: 60,
+                      color: AppTheme.primaryBlue,
+                    ),
+                    const SizedBox(height: 16),
+                    Text(
+                      'No $filterLabel students found',
+                      style: TextStyle(
+                        color: isDark ? Colors.white : AppTheme.textDark,
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      _hasMore
+                          ? 'Load more students to check more records.'
+                          : 'No students match this filter right now.',
+                      style: TextStyle(
+                        color: isDark ? Colors.white70 : AppTheme.textGray,
+                        fontSize: 14,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ];
+    }
+
+    return [
+      // Pagination info bar
+      SliverToBoxAdapter(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            decoration: BoxDecoration(
+              color: AppTheme.primaryBlue.withOpacity(0.08),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: AppTheme.primaryBlue.withOpacity(0.2)),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Expanded(
+                  child: Text(
+                    _attendanceFilter == _StudentAttendanceFilter.all
+                        ? 'Showing ${visibleStudents.length} of $_studentCount students'
+                        : 'Showing ${visibleStudents.length} ${_attendanceFilterLabel(_attendanceFilter)} students from ${_students.length} loaded',
+                    style: TextStyle(
+                      color: AppTheme.primaryBlue,
+                      fontWeight: FontWeight.w600,
+                      fontSize: 13,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                if (_hasMore || _isLoadingMore)
+                  Expanded(
+                    child: Text(
+                      _attendanceFilter == _StudentAttendanceFilter.all
+                          ? 'Scroll down to load more ↓'
+                          : 'Load more to check more ↓',
+                      style: TextStyle(
+                        color: AppTheme.textGray,
+                        fontSize: 12,
+                        fontStyle: FontStyle.italic,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  )
+                else
+                  const Icon(Icons.check_circle, size: 16, color: Colors.green),
+              ],
+            ),
+          ),
+        ),
+      ),
+      SliverPadding(
+        padding: _studentListOuterPadding(context),
+        sliver: SliverList(
+          delegate: SliverChildBuilderDelegate(
+            (ctx, index) {
+              if (index == visibleStudents.length) {
+                // Show pagination control instead of just spinner
+                return Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 20),
+                  child: Column(
+                    children: [
+                      if (_isLoadingMore)
+                        const Center(child: CircularProgressIndicator(strokeWidth: 2))
+                      else if (_hasMore)
+                        Center(
+                          child: ElevatedButton.icon(
+                            onPressed: _loadStudents,
+                            icon: const Icon(Icons.arrow_downward),
+                            label: Text(
+                              'Load More Students (${_students.length}/${_studentCount})',
+                              style: const TextStyle(fontSize: 14),
+                            ),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: AppTheme.primaryBlue,
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                            ),
+                          ),
+                        )
+                      else
+                        Center(
+                          child: Text(
+                            _attendanceFilter == _StudentAttendanceFilter.all
+                                ? '✅ Showing all ${visibleStudents.length} students'
+                                : '✅ Checked all loaded students for ${_attendanceFilterLabel(_attendanceFilter)}',
+                            style: TextStyle(
+                              color: AppTheme.textGray,
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                );
+              }
+              return _buildStudentListItem(
+                context,
+                visibleStudents[index],
+                isDark,
+              );
+            },
+            childCount:
+                visibleStudents.length + 1, // Always show pagination control at bottom
+          ),
+        ),
+      ),
+    ];
+  }
+
+  Widget _buildStudentListItem(
+    BuildContext context,
+    Map<String, dynamic> data,
+    bool isDark,
+  ) {
+    final name = data['name'] ?? 'Unknown';
+    final srNo = data['srNo']?.toString() ?? '';
+    final rollNumber = srNo.isNotEmpty ? srNo : (data['userId'] ?? '');
+    final subject = data['subject'] ?? '';
+    // ✅ FIXED: Use 'photoUrl' key (from _mapStudentRow), not 'face_photo_url'
+    final profileUrl = (data['photoUrl'] as String?) ?? '';
+    final hasPhoto = profileUrl.isNotEmpty;
+    final studentId = data['id']?.toString() ?? '';
+    final markRollKey = _canonicalAttendanceRollKey(data);
+    final rollKey = markRollKey.isNotEmpty ? markRollKey : rollNumber.toString().trim();
+    final payload = studentId.isNotEmpty ? _todayPayloadByStudentId[studentId] : null;
+    final hasFaceEmbedding = data['hasFaceEmbedding'] == true;
+    final facePhotoChangedOnce = data['facePhotoChangedOnce'] == true;
+    final canChangePhotoOnce = hasFaceEmbedding && !facePhotoChangedOnce;
+    final rawSubs = data['subjectsList'];
+    final photoThumbnail = data['photoThumbnail'] as String?;
+    final photoVersion = data['photoVersion'] as String?;
+    final subjectsList = rawSubs is List
+        ? rawSubs.map((e) => e.toString().trim()).where((s) => s.isNotEmpty).toList()
+        : <String>[];
+
+    // ⏸️ DISABLED: Background subject fetch was firing DB query for EVERY student during scroll!
+    // This blocked the main thread (nativePoll 99% CPU)
+    // Subjects are fetched only when needed (marking attendance)
+    // if (_freshSubjectsCache[rollKey] == null && rollKey.isNotEmpty) {
+    //   _fetchCurrentStudentSubjectsFromDb(rollKey).catchError((e) {...});
+    // }
+    final slice = payload;
+    final displaySlice = teacherPayloadActiveSessionSlice(slice) ?? slice;
+    final exitRemainingLabel = _getExitTimeRemaining(displaySlice, rollKey, subjectsList);
+    final isExitExpired = _isExitWindowExpired(displaySlice, rollKey, subjectsList);
+    final entryPhotoUrl = slice != null ? _entryPhotoUrl(slice) : null;
+    final exitPhotoUrl = slice != null ? _exitPhotoUrl(slice) : null;
+    final hasEntryPhoto = entryPhotoUrl != null && entryPhotoUrl.isNotEmpty;
+    final hasExitPhoto = exitPhotoUrl != null && exitPhotoUrl.isNotEmpty;
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: _buildModernCard(
+        isDark: isDark,
+        child: IntrinsicHeight(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(10, 10, 6, 10),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Photo and Timer column on left
+                Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(12),
+                      child: SizedBox(
+                        width: 72,
+                        height: 72,
+                        child: hasPhoto
+                            ? SecureNetworkImage(
+                                key: ValueKey('student_face_$studentId'),
+                                cacheKey: 'student_face_$studentId',
+                                imageUrl: profileUrl.isNotEmpty ? profileUrl : null,
+                                width: 72,
+                                height: 72,
+                                version: photoVersion ?? '0',
+                                fit: BoxFit.cover,
+                                placeholder: photoThumbnail != null && photoThumbnail.isNotEmpty
+                                    ? Image.memory(
+                                        base64Decode(photoThumbnail),
+                                        width: 72,
+                                        height: 72,
+                                        fit: BoxFit.cover,
+                                        cacheWidth: 72,
+                                        cacheHeight: 72,
+                                        errorBuilder: (context, error, stackTrace) {
+                                          if (kDebugMode) {
+                                            debugPrint('❌ Invalid student photo thumbnail for $name: $error');
+                                          }
+                                          return Container(
+                                            color: AppTheme.primaryBlue.withValues(alpha: 0.1),
+                                            child: const Icon(Icons.person, color: AppTheme.primaryBlue, size: 32),
+                                          );
+                                        },
+                                      )
+                                    : Container(
+                                        color: AppTheme.primaryBlue.withValues(alpha: 0.1),
+                                        child: const Center(
+                                          child: SizedBox(
+                                            width: 22,
+                                            height: 22,
+                                            child: CircularProgressIndicator(strokeWidth: 2),
+                                          ),
+                                        ),
+                                      ),
+                                errorWidget: Container(
+                                  color: AppTheme.primaryBlue.withValues(alpha: 0.1),
+                                  child: const Icon(Icons.person, color: AppTheme.primaryBlue, size: 32),
+                                ),
+                              )
+                            : Container(
+                                color: AppTheme.primaryBlue.withValues(alpha: 0.1),
+                                child: const Icon(Icons.person, color: AppTheme.primaryBlue, size: 32),
+                              ),
+                      ),
+                    ),
+                    // Timer below photo: show only while exit is pending.
+                    if (slice != null &&
+                        _sliceHasEntry(slice) &&
+                        !_sliceComplete(slice))
+                      Padding(
+                        padding: const EdgeInsets.only(top: 6),
+                        child: Column(
+                          children: [
+                            Text(
+                              '⏱️',
+                              style: const TextStyle(fontSize: 18),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              exitRemainingLabel ?? '—',
+                              style: TextStyle(
+                                fontSize: 9,
+                                fontWeight: FontWeight.bold,
+                                color: isExitExpired
+                                    ? Colors.red
+                                    : AppTheme.primaryBlue,
+                              ),
+                              textAlign: TextAlign.center,
+                            ),
+                          ],
+                        ),
+                      ),
+                  ],
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        name,
+                        style: TextStyle(
+                          color: isDark ? Colors.white : AppTheme.textDark,
+                          fontWeight: FontWeight.w700,
+                          fontSize: 15,
+                        ),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'SR NO: ${_formatSrDisplay(srNo)}',
+                        style: TextStyle(
+                          color: isDark ? Colors.white70 : AppTheme.textGray,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      if (subjectsList.isNotEmpty) ...[
+                        const SizedBox(height: 6),
+                        Text(
+                          'Subjects',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                            color: isDark ? Colors.white70 : AppTheme.textGray,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Wrap(
+                          spacing: 6,
+                          runSpacing: 6,
+                          children: subjectsList
+                              .map(
+                                (s) => Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 10,
+                                    vertical: 6,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: isDark
+                                        ? Colors.white.withValues(alpha: 0.08)
+                                        : AppTheme.primaryBlueLight.withValues(alpha: 0.2),
+                                    borderRadius: BorderRadius.circular(10),
+                                    border: Border.all(
+                                      color: isDark
+                                          ? Colors.white.withValues(alpha: 0.16)
+                                          : AppTheme.primaryBlue.withValues(alpha: 0.16),
+                                    ),
+                                  ),
+                                  child: Text(
+                                    s,
+                                    style: TextStyle(
+                                      color: isDark ? Colors.white : AppTheme.textDark,
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                ),
+                              )
+                              .toList(),
+                        ),
+                      ] else if (subject.toString().trim().isNotEmpty) ...[
+                        const SizedBox(height: 6),
+                        Text(
+                          'Subject',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                            color: isDark ? Colors.white70 : AppTheme.textGray,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 6,
+                          ),
+                          decoration: BoxDecoration(
+                            color: isDark
+                                ? Colors.white.withValues(alpha: 0.08)
+                                : AppTheme.primaryBlueLight.withValues(alpha: 0.2),
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(
+                              color: isDark
+                                  ? Colors.white.withValues(alpha: 0.16)
+                                  : AppTheme.primaryBlue.withValues(alpha: 0.16),
+                            ),
+                          ),
+                          child: Text(
+                            subject.toString().trim(),
+                            style: TextStyle(
+                              color: isDark ? Colors.white : AppTheme.textDark,
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                            ),
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ] else ...[
+                        const SizedBox(height: 4),
+                        Text(
+                          'No subjects — edit student to assign subjects.',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.orange.shade700,
+                          ),
+                        ),
+                      ],
+                      const SizedBox(height: 8),
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          _buildAttendanceThumb(
+                            label: 'Entry',
+                            borderColor: AppTheme.primaryGreen,
+                            imageUrl: entryPhotoUrl,
+                            storagePath: slice != null ? _attendancePhotoPath(slice, isEntry: true) : null,
+                            time: _formatPayloadTime(slice, true),
+                            isDark: isDark,
+                            dimmed: !hasEntryPhoto,
+                          ),
+                          const SizedBox(width: 6),
+                          _buildAttendanceThumb(
+                            label: 'Exit',
+                            borderColor: _exitAttendanceMarkColor,
+                            imageUrl: exitPhotoUrl,
+                            storagePath: slice != null ? _attendancePhotoPath(slice, isEntry: false) : null,
+                            time: _formatPayloadTime(slice, false),
+                            isDark: isDark,
+                            dimmed: !hasExitPhoto,
+                          ),
+                        ],
+                      ),
+                      if (_durationChipText(slice ?? payload) != null) ...[
+                        const SizedBox(height: 8),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                          decoration: BoxDecoration(
+                            color: AppTheme.primaryBlue.withValues(alpha: 0.12),
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.schedule, size: 14, color: AppTheme.primaryBlue),
+                              const SizedBox(width: 6),
+                              Flexible(
+                                child: Text(
+                                  _durationChipText(slice ?? payload)!,
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w700,
+                                    color: AppTheme.primaryBlue,
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+                Column(
+                  mainAxisSize: MainAxisSize.min,
+                  mainAxisAlignment: MainAxisAlignment.start,
+                  children: [
+                    IconButton(
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
+                      icon: Icon(
+                        hasFaceEmbedding ? Icons.check_circle : Icons.face_retouching_natural,
+                        color: hasFaceEmbedding
+                            ? (isDark ? Colors.white38 : AppTheme.textLightGray)
+                            : AppTheme.primaryGreen,
+                        size: 22,
+                      ),
+                      tooltip: hasFaceEmbedding
+                          ? 'Face registered'
+                          : 'Register face (duplicate-checked for this institute)',
+                      onPressed: hasFaceEmbedding ||
+                              rollKey.isEmpty ||
+                              studentId.isEmpty ||
+                              _instituteId == null
+                          ? null
+                          : () async {
+                              await Navigator.push<void>(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) => StudentFaceRegistrationWrapper(
+                                    studentId: studentId,
+                                    studentName: name.toString(),
+                                    srNo: markRollKey.isNotEmpty ? markRollKey : rollKey,
+                                    instituteId: _instituteId!,
+                                    onRegistrationSuccess: () {},
+                                  ),
+                                ),
+                              );
+                              if (mounted) {
+                                await _loadStudents(reset: true);
+                                await _loadHeaderStats();
+                                _refreshTodayPayloadsForVisibleStudents();
+                              }
+                            },
+                    ),
+                    if (canChangePhotoOnce)
+                      IconButton(
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
+                        tooltip:
+                            'Change registration photo once (old photo kept on record)',
+                        icon: Text(
+                          '🔄',
+                          style: TextStyle(
+                            fontSize: 20,
+                            color: isDark ? Colors.white70 : AppTheme.primaryBlue,
+                          ),
+                        ),
+                        onPressed: rollKey.isEmpty ||
+                                studentId.isEmpty ||
+                                _instituteId == null
+                            ? null
+                            : () async {
+                                await Navigator.push<void>(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (_) => StudentFaceRegistrationWrapper(
+                                      studentId: studentId,
+                                      studentName: name.toString(),
+                                      srNo: markRollKey.isNotEmpty ? markRollKey : rollKey,
+                                      instituteId: _instituteId!,
+                                      changePhotoOnce: true,
+                                      onRegistrationSuccess: () {},
+                                    ),
+                                  ),
+                                );
+                                if (mounted) {
+                                  await _loadStudents(reset: true);
+                                  await _loadHeaderStats();
+                                  _refreshTodayPayloadsForVisibleStudents();
+                                }
+                              },
+                      ),
+                    IconButton(
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
+                      tooltip: 'Photos',
+                      icon: Icon(Icons.photo_library, color: isDark ? Colors.white70 : AppTheme.primaryBlue, size: 20),
+                      onPressed: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (ctx) => StudentPhotosScreen(
+                              studentName: name,
+                              studentId: studentId,
+                              rollNumber: rollKey,
+                              instituteId: _instituteId!,
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSearchBar() {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    
+    return Container(
+      padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 12.h),
+      decoration: BoxDecoration(
+        color: isDark ? Colors.white.withOpacity(0.05) : Colors.white,
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 4,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: TextField(
+        controller: _searchController,
+        onChanged: (_) {
+          if (mounted) setState(() {});
+        },
+        decoration: InputDecoration(
+          hintText: 'Search by name, SR no., year, subject…',
+          hintStyle: TextStyle(
+            color: isDark ? Colors.white.withOpacity(0.5) : AppTheme.textGray,
+            fontSize: 14.sp,
+          ),
+          prefixIcon: Icon(
+            Icons.search,
+            color: isDark ? Colors.white.withOpacity(0.7) : AppTheme.primaryBlue,
+            size: 24.sp,
+          ),
+          suffixIcon: _searchController.text.isNotEmpty
+              ? IconButton(
+                  icon: Icon(
+                    Icons.clear,
+                    color: isDark ? Colors.white.withOpacity(0.7) : AppTheme.textGray,
+                    size: 20.sp,
+                  ),
+                  onPressed: () {
+                    _debounce?.cancel();
+                    _searchController.clear();
+                    setState(() {
+                      _searchQuery = '';
+                      _page = 0;
+                      _students.clear();
+                      _hasMore = true;
+                    });
+                    _loadStudents(reset: true);
+                  },
+                )
+              : null,
+          filled: true,
+          fillColor: isDark 
+              ? Colors.white.withOpacity(0.1) 
+              : AppTheme.backgroundGrey,
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12.r),
+            borderSide: BorderSide(
+              color: isDark 
+                  ? Colors.white.withOpacity(0.2) 
+                  : AppTheme.primaryBlue.withOpacity(0.3),
+            ),
+          ),
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12.r),
+            borderSide: BorderSide(
+              color: isDark 
+                  ? Colors.white.withOpacity(0.2) 
+                  : AppTheme.primaryBlue.withOpacity(0.3),
+            ),
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12.r),
+            borderSide: BorderSide(
+              color: isDark ? Colors.white : AppTheme.primaryBlue,
+              width: 2,
+            ),
+          ),
+          contentPadding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 14.h),
+        ),
+        style: TextStyle(
+          color: isDark ? Colors.white : AppTheme.textDark,
+          fontSize: 14.sp,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildAttendanceFilterBar() {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    Widget chip({
+      required _StudentAttendanceFilter filter,
+      required String label,
+      required int count,
+    }) {
+      final selected = _attendanceFilter == filter;
+      return ChoiceChip(
+        label: Text('$label ($count)'),
+        selected: selected,
+        onSelected: (_) {
+          if (_attendanceFilter == filter) return;
+          setState(() => _attendanceFilter = filter);
+        },
+        labelStyle: TextStyle(
+          fontWeight: FontWeight.w700,
+          color: selected
+              ? Colors.white
+              : (isDark ? Colors.white70 : AppTheme.primaryBlue),
+        ),
+        selectedColor: AppTheme.primaryBlue,
+        backgroundColor:
+            isDark ? Colors.white.withValues(alpha: 0.06) : Colors.white,
+        side: BorderSide(
+          color: selected
+              ? AppTheme.primaryBlue
+              : AppTheme.primaryBlue.withValues(alpha: 0.25),
+        ),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(24),
+        ),
+        showCheckmark: false,
+      );
+    }
+
+    return Padding(
+      padding: EdgeInsets.fromLTRB(16.w, 8.h, 16.w, 0),
+      child: Wrap(
+        spacing: 8,
+        runSpacing: 8,
+        children: [
+          chip(
+            filter: _StudentAttendanceFilter.all,
+            label: 'All',
+            count: _statsTotal,
+          ),
+          chip(
+            filter: _StudentAttendanceFilter.present,
+            label: 'Present',
+            count: _statsPresentToday,
+          ),
+          chip(
+            filter: _StudentAttendanceFilter.absent,
+            label: 'Absent',
+            count: _statsAbsentToday,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAutoFaceScanBanner() {
+    return Padding(
+      padding: EdgeInsets.fromLTRB(16.w, 12.h, 16.w, 0),
+      child: Material(
+        color: AppTheme.primaryGreen,
+        borderRadius: BorderRadius.circular(14.r),
+        elevation: 2,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(14.r),
+          onTap: _instituteId == null ? null : () => _openAutoFaceScan(),
+          child: Padding(
+            padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 14.h),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.2),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(
+                    Icons.face_retouching_natural,
+                    color: Colors.white,
+                    size: 28.sp,
+                  ),
+                ),
+                SizedBox(width: 12.w),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Auto Face Attendance',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 16.sp,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                      SizedBox(height: 4.h),
+                      Text(
+                        'Tap here — ${DistanceCheckService.recommendedDistanceShort}. '
+                        'Entry/exit marked automatically.',
+                        style: TextStyle(
+                          color: Colors.white.withValues(alpha: 0.92),
+                          fontSize: 12.sp,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Icon(Icons.chevron_right, color: Colors.white, size: 26.sp),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// ✅ Permanent static photo instructions card
+  Widget _buildPhotoInstructionsCard() {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return Container(
+      margin: EdgeInsets.symmetric(horizontal: 16.w, vertical: 12.h),
+      padding: EdgeInsets.all(14.w),
+      decoration: BoxDecoration(
+        color: AppTheme.primaryBlue.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(12.r),
+        border: Border.all(
+          color: AppTheme.primaryBlue.withValues(alpha: 0.3),
+          width: 1.5,
+        ),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Title
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(
+                Icons.camera_alt_rounded,
+                color: AppTheme.primaryBlue,
+                size: 20.sp,
+              ),
+              SizedBox(width: 8.w),
+              Expanded(
+                child: Text(
+                  'Photo Instructions for Face Recognition',
+                  style: TextStyle(
+                    fontSize: 13.sp,
+                    fontWeight: FontWeight.w700,
+                    color: isDark ? Colors.white : AppTheme.textDark,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          SizedBox(height: 12.h),
+
+          // Instructions grid
+          Column(
+            children: [
+              _buildInstructionRow(
+                icon: '✓',
+                title: '3 ft from phone',
+                description: DistanceCheckService.recommendedDistanceDetail,
+                isDark: isDark,
+              ),
+              SizedBox(height: 8.h),
+              _buildInstructionRow(
+                icon: '✓',
+                title: 'Good closeup',
+                description: 'Face clear in the circle — not the whole screen',
+                isDark: isDark,
+              ),
+              SizedBox(height: 8.h),
+              _buildInstructionRow(
+                icon: '✓',
+                title: 'Clear Light',
+                description: 'Ensure good lighting without harsh shadows',
+                isDark: isDark,
+              ),
+              SizedBox(height: 8.h),
+              _buildInstructionRow(
+                icon: '✓',
+                title: 'No Mask',
+                description: 'Face must be fully visible without mask',
+                isDark: isDark,
+              ),
+              SizedBox(height: 8.h),
+              _buildInstructionRow(
+                icon: '✓',
+                title: 'Face in Focus',
+                description: 'Entire face should be clear and in focus',
+                isDark: isDark,
+              ),
+              SizedBox(height: 8.h),
+              _buildInstructionRow(
+                icon: '🔄',
+                title: 'Change photo (once)',
+                description:
+                    'After face is registered, tap 🔄 next to the check mark to replace the photo one time. The app shows the latest photo; the old one stays on the MSCE website.',
+                isDark: isDark,
+              ),
+              SizedBox(height: 12.h),
+              Text(
+                'Student face registration',
+                style: TextStyle(
+                  fontSize: 12.sp,
+                  fontWeight: FontWeight.w700,
+                  color: isDark ? Colors.white : AppTheme.textDark,
+                ),
+              ),
+              SizedBox(height: 6.h),
+              _buildInstructionRow(
+                icon: '✓',
+                title: 'Liveness — two times',
+                description:
+                    'Close your eyes, then open them after about 1 second. Repeat that full close-and-open cycle two times (two times total).',
+                isDark: isDark,
+              ),
+              SizedBox(height: 8.h),
+              _buildInstructionRow(
+                icon: 'ℹ',
+                title: 'Note — background (registration)',
+                description:
+                    'For accurate attendance later, the registration capture should show a clear background with no other people or distracting objects in the frame; otherwise marking may be inaccurate.',
+                isDark: isDark,
+              ),
+              SizedBox(height: 12.h),
+              Text(
+                'Mark attendance (automatic)',
+                style: TextStyle(
+                  fontSize: 12.sp,
+                  fontWeight: FontWeight.w700,
+                  color: isDark ? Colors.white : AppTheme.textDark,
+                ),
+              ),
+              SizedBox(height: 6.h),
+              _buildInstructionRow(
+                icon: '✓',
+                title: 'Auto Face Attendance',
+                description:
+                    'Use the green Auto Face Attendance banner or bottom button. '
+                    '${DistanceCheckService.recommendedDistanceShort} — same as registration. '
+                    'No per-student tap; one scan marks whoever matches. Entry/exit photos update on cards.',
+                isDark: isDark,
+              ),
+              SizedBox(height: 8.h),
+              _buildInstructionRow(
+                icon: '✓',
+                title: 'Entry & Exit photos',
+                description:
+                    'After auto scan marks attendance, entry and exit thumbnails on each student card update automatically (display only).',
+                isDark: isDark,
+              ),
+              SizedBox(height: 8.h),
+              _buildInstructionRow(
+                icon: 'ℹ',
+                title: 'Note — background (attendance)',
+                description:
+                    'For accurate attendance, the capture should have a clear background with no other people in the frame.',
+                isDark: isDark,
+              ),
+            ],
+          ),
+
+          SizedBox(height: 12.h),
+
+          // Tip
+          Container(
+            padding: EdgeInsets.all(10.w),
+            decoration: BoxDecoration(
+              color: Colors.amber.withValues(alpha: 0.15),
+              borderRadius: BorderRadius.circular(8.r),
+              border: Border.all(
+                color: Colors.amber.withValues(alpha: 0.3),
+                width: 1,
+              ),
+            ),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '💡',
+                  style: TextStyle(fontSize: 14.sp),
+                ),
+                SizedBox(width: 8.w),
+                Expanded(
+                  child: Text(
+                    'Position yourself with light from the front. Make sure your face fills most of the frame.',
+                    style: TextStyle(
+                      fontSize: 11.sp,
+                      color: isDark ? Colors.white70 : Colors.amber.shade900,
+                      height: 1.4,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Helper widget for instruction rows
+  Widget _buildInstructionRow({
+    required String icon,
+    required String title,
+    required String description,
+    required bool isDark,
+  }) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          icon,
+          style: TextStyle(
+            fontSize: 14.sp,
+            fontWeight: FontWeight.bold,
+            color: Colors.green,
+          ),
+        ),
+        SizedBox(width: 10.w),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                title,
+                style: TextStyle(
+                  fontSize: 12.sp,
+                  fontWeight: FontWeight.w600,
+                  color: isDark ? Colors.white : AppTheme.textDark,
+                ),
+              ),
+              SizedBox(height: 2.h),
+              Text(
+                description,
+                style: TextStyle(
+                  fontSize: 10.sp,
+                  color: isDark ? Colors.white70 : AppTheme.textGray,
+                  height: 1.3,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildListProgressHint(int visibleCount) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final searching = _searchQuery.trim().isNotEmpty;
+    final tail = _hasMore
+        ? (_attendanceFilter == _StudentAttendanceFilter.all
+            ? ' · Scroll for more'
+            : ' · Load more to check more')
+        : '';
+    final noun = searching ? 'matches' : 'students';
+    final text = _attendanceFilter == _StudentAttendanceFilter.all
+        ? 'Showing $visibleCount of $_studentCount $noun$tail'
+        : 'Showing $visibleCount ${_attendanceFilterLabel(_attendanceFilter)} students from ${_students.length} loaded$tail';
+    return Padding(
+      padding: EdgeInsets.fromLTRB(16.w, 0, 16.w, 6.h),
+      child: Text(
+        text,
+        style: TextStyle(
+          fontSize: 12.sp,
+          color: isDark ? Colors.white54 : AppTheme.textGray,
+          fontWeight: FontWeight.w500,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildModernCard({required Widget child, required bool isDark}) {
+    return Container(
+      decoration: BoxDecoration(
+        color: isDark ? Colors.white.withOpacity(0.05) : Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+          child: child,
+    );
+  }
+
+}
+/// Lightweight value object returned by server-side paginated student queries.
+class _StudentPage {
+  final List<Map<String, dynamic>> rows;
+  final int total;
+  final bool hasMore;
+
+  const _StudentPage({
+    required this.rows,
+    required this.total,
+    required this.hasMore,
+  });
+}

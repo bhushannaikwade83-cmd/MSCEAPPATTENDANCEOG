@@ -1,0 +1,35 @@
+{
+  "firestore": {
+    "rules": "firestore.rules",
+    "indexes": "firestore.indexes.json"
+  },
+  "storage": [
+    {
+      "bucket": "msce-attendace-app.firebasestorage.app",
+      "rules": "storage.rules"
+    }
+  ],
+  "flutter": {
+    "platforms": {
+      "android": {
+        "default": {
+          "projectId": "msce-attendace-app",
+          "appId": "1:719857616327:android:0639dc706728cb171345e2",
+          "fileOutput": "android/app/google-services.json"
+        }
+      },
+      "dart": {
+        "lib/firebase_options.dart": {
+          "projectId": "msce-attendace-app",
+          "configurations": {
+            "android": "1:976619927198:android:bab862c7dc3156f60fed8f",
+            "ios": "1:976619927198:ios:8d5ea611741582950fed8f",
+            "macos": "1:976619927198:ios:8d5ea611741582950fed8f",
+            "web": "1:976619927198:web:e68057911688b2e90fed8f",
+            "windows": "1:976619927198:web:78220a84c0cf28d70fed8f"
+          }
+        }
+      }
+    }
+  }
+}

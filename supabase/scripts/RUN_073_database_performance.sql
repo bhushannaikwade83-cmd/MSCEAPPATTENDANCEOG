@@ -1,0 +1,3 @@
+-- Run in Supabase SQL Editor: copy/paste the full contents of
+-- supabase/migrations/073_database_performance_optimization.sql
+-- (Supabase SQL Editor does not support \i includes.)

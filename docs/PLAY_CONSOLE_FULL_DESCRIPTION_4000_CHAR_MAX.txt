@@ -1,0 +1,22 @@
+MSCE GCC-TBC Attendance supports authorised institute staff in recording and reviewing learner attendance consistently with procedures approved for your centre under the Maharashtra State Council of Examination (MSCE) GCC-TBC attendance programme.
+
+WHO THIS APP IS FOR
+The application is intended for registered GCC-TBC institutes and authorised personnel—institute administrators and designated attendance-only staff—after provisioning by administration. Access is institute-scoped: users should only handle data belonging to their own centre.
+
+DAY-TO-DAY WORKFLOW (AT A HIGH LEVEL)
+Maintain an up-to-date learner roster aligned with institute records; locate students quickly via roster search during peak periods; mark attendance using the workflows your administration enables.
+
+KEY FEATURES
+Student roster with search; attendance marking with location verification when your institute has configured an approved GPS attendance zone; role-based access for administrators and attendance-only staff; daily attendance visibility and reporting for supervisory review subject to institute policy; institutional sign-in and session handling suited to supervised environments.
+
+GEOLOCATION AND DEVICE USE
+Location may be required when your institute’s policy mandates a GPS attendance zone. If checks are enforced, marking may not be permitted until institute-defined conditions are met. Coordinators should verify device permissions, time/date accuracy, and that the institute zone has been properly locked according to administrator instructions.
+
+CAMERA USE (WHERE ENABLED)
+Camera access may apply only where your institute activates verification steps (for example confirming presence during marking). Follow institute instructions for acceptable use.
+
+DATA AND PRIVACY
+Handling of operational data follows your published Privacy Policy linked in-store. Administrators are responsible for safeguarding credentials (including PINs for attendance staff), updating access when roles change, and meeting institute information-handling obligations.
+
+Support: MSCEGCCCTBCSUPPORT@GMAIL.COM
+Maharashtra State Council of Examination | महाराष्ट्र राज्य परीक्षा परिषद
