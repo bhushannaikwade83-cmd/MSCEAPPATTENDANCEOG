@@ -53,7 +53,11 @@ class _LiveAntiSpoofCameraScreenState extends State<LiveAntiSpoofCameraScreen>
   // Detection Locking
   bool _isProcessingFrame = false;
   int _frameSkipCounter = 0;
+  int _consecutiveFaceFrames = 0; // Track stable face detection
+  int _framesSinceLastDetection = 0; // Reset if no detection for X frames
   static const int FRAME_SKIP = 4; // Process every 5th frame (much faster)
+  static const int FACE_STABILITY_FRAMES = 2; // Need 2 consecutive detections
+  static const int FACE_TIMEOUT_FRAMES = 20; // Disable if no detection for 20 frames
 
   @override
   void initState() {
@@ -145,20 +149,34 @@ class _LiveAntiSpoofCameraScreenState extends State<LiveAntiSpoofCameraScreen>
       if (mounted && !_isCapturing) {
         setState(() {
           _detectedFaces = faces.length;
+          _framesSinceLastDetection++;
 
           if (faces.isEmpty) {
-            _faceDetected = false;
-            _faceBoundingBox = null;
+            _consecutiveFaceFrames = 0;
             _currentStage = 'No Face Detected';
+            // Disable button only after X frames of no detection
+            if (_framesSinceLastDetection > FACE_TIMEOUT_FRAMES) {
+              _faceDetected = false;
+              _faceBoundingBox = null;
+            }
           } else if (faces.length > 1) {
+            _consecutiveFaceFrames = 0;
             _faceDetected = false;
             _faceBoundingBox = null;
             _currentStage = 'Multiple Faces - Show Only 1';
           } else {
             final face = faces.first;
             _faceBoundingBox = face.boundingBox;
-            _faceDetected = true;
-            _currentStage = 'Face Detected ✓ - Press CAPTURE';
+            _framesSinceLastDetection = 0; // Reset timeout
+            _consecutiveFaceFrames++;
+
+            // Enable button only after consistent detection
+            if (_consecutiveFaceFrames >= FACE_STABILITY_FRAMES) {
+              _faceDetected = true;
+              _currentStage = 'Face Detected ✓ - Press CAPTURE';
+            } else {
+              _currentStage = 'Stabilizing... ${_consecutiveFaceFrames}/$FACE_STABILITY_FRAMES';
+            }
           }
         });
       }
@@ -467,12 +485,16 @@ class _LiveAntiSpoofCameraScreenState extends State<LiveAntiSpoofCameraScreen>
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  // CAPTURE Button (only enabled when face detected)
+                  // CAPTURE Button (real-time enable/disable based on face)
                   ElevatedButton(
                     onPressed: (_isCapturing || !_faceDetected) ? null : _startCapture,
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: _faceDetected ? Colors.green : Colors.grey,
-                      disabledBackgroundColor: Colors.orange,
+                      backgroundColor: _isCapturing
+                          ? Colors.orange
+                          : (_faceDetected ? Colors.green : Colors.red.withOpacity(0.6)),
+                      disabledBackgroundColor: _isCapturing
+                          ? Colors.orange
+                          : Colors.red.withOpacity(0.6),
                       padding: const EdgeInsets.symmetric(
                         horizontal: 40,
                         vertical: 16,
@@ -484,7 +506,7 @@ class _LiveAntiSpoofCameraScreenState extends State<LiveAntiSpoofCameraScreen>
                     child: Text(
                       _isCapturing
                           ? 'CAPTURING... $_captureCountdown'
-                          : 'CAPTURE',
+                          : (_faceDetected ? '✅ CAPTURE' : '❌ NO FACE'),
                       style: const TextStyle(
                         color: Colors.white,
                         fontSize: 18,
