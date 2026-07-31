@@ -342,32 +342,95 @@ class _LiveAntiSpoofCameraScreenState extends State<LiveAntiSpoofCameraScreen>
                     ],
                   ),
                   const SizedBox(height: 16),
-                  // Status Message
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: _canCapture
-                          ? Colors.green.withOpacity(0.1)
-                          : Colors.blue.withOpacity(0.1),
-                      border: Border.all(
-                        color: _canCapture
-                            ? Colors.green.withOpacity(0.5)
-                            : Colors.blue.withOpacity(0.5),
-                        width: 1,
+                  // Spoof Status Box (Green/Red indicator)
+                  if (_faceDetected && _isRealFace != null)
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 14,
                       ),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Text(
-                      _status,
-                      style: TextStyle(
-                        color: _canCapture ? Colors.greenAccent : Colors.blue,
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
+                      decoration: BoxDecoration(
+                        color: _isRealFace
+                            ? Colors.green.withOpacity(0.15)
+                            : Colors.red.withOpacity(0.15),
+                        border: Border.all(
+                          color: _isRealFace ? Colors.green : Colors.red,
+                          width: 2.5,
+                        ),
+                        borderRadius: BorderRadius.circular(12),
+                        boxShadow: [
+                          BoxShadow(
+                            color: (_isRealFace ? Colors.green : Colors.red)
+                                .withOpacity(0.3),
+                            blurRadius: 10,
+                            spreadRadius: 2,
+                          ),
+                        ],
                       ),
-                      textAlign: TextAlign.center,
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Row(
+                            children: [
+                              Container(
+                                width: 12,
+                                height: 12,
+                                decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  color: _isRealFace ? Colors.green : Colors.red,
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Text(
+                                _isRealFace
+                                    ? '✓ Real Face (Live)'
+                                    : '✗ Spoof Detected (Fake)',
+                                style: TextStyle(
+                                  color: _isRealFace
+                                      ? Colors.greenAccent
+                                      : Colors.redAccent,
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ],
+                          ),
+                          Text(
+                            '${(_confidence * 100).toStringAsFixed(1)}%',
+                            style: TextStyle(
+                              color: _isRealFace
+                                  ? Colors.greenAccent
+                                  : Colors.redAccent,
+                              fontSize: 14,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ],
+                      ),
+                    )
+                  else
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Colors.blue.withOpacity(0.1),
+                        border: Border.all(
+                          color: Colors.blue.withOpacity(0.5),
+                          width: 1,
+                        ),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Text(
+                        _status,
+                        style: TextStyle(
+                          color: Colors.blueAccent,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
                     ),
-                  ),
                 ],
               ),
             ),
