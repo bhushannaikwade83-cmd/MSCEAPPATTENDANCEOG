@@ -141,35 +141,37 @@ class _LiveAntiSpoofCameraScreenState extends State<LiveAntiSpoofCameraScreen>
             _canCapture = false;
           });
         } else {
+          final isRealFromBackend = result['is_real'] as bool? ?? false;
           final confidence = (result['confidence'] as num?)?.toDouble() ?? 0.0;
 
           // Collect frame scores for 3 seconds
           _frameCollectionStartTime ??= DateTime.now();
-          _frameScores.add(confidence);
+          _frameScores.add(isRealFromBackend ? 0.0 : 1.0); // 0 = real, 1 = spoof for averaging
 
           final elapsed = DateTime.now().difference(_frameCollectionStartTime!);
           final isCollectionComplete = elapsed.inSeconds >= 3;
 
           if (isCollectionComplete && _frameScores.isNotEmpty) {
-            // Calculate average score over 3 seconds
-            final avgScore = _frameScores.reduce((a, b) => a + b) / _frameScores.length;
-            final avgScorePercent = avgScore * 100;
+            // Calculate average spoof score over 3 seconds (0 = all real, 1 = all spoof)
+            final avgSpoofScore = _frameScores.reduce((a, b) => a + b) / _frameScores.length;
+            final avgSpoofPercent = avgSpoofScore * 100;
 
-            // Threshold: 0-15% = REAL, 15%+ = SPOOF
-            final isReal = avgScorePercent <= 15.0;
+            // Use backend is_real flag: if majority of frames are real, accept as real
+            final isReal = avgSpoofScore < 0.5; // Less than 50% spoof votes = REAL
 
             if (isReal) {
               print('═════════════════════════════════════════════');
               print('✅ LIVE FACE DETECTED (3-second average)');
               print('   Frames analyzed: ${_frameScores.length}');
-              print('   Avg Spoof Score: ${avgScorePercent.toStringAsFixed(1)}%');
+              print('   Real votes: ${_frameScores.where((s) => s == 0.0).length}');
+              print('   Avg Spoof Score: ${avgSpoofPercent.toStringAsFixed(1)}%');
               print('   Status: Face Verified ✓');
               print('═════════════════════════════════════════════');
 
               setState(() {
                 _isRealFace = true;
-                _confidence = avgScore;
-                _score = avgScore;
+                _confidence = 1.0 - avgSpoofScore; // Live confidence
+                _score = 1.0 - avgSpoofScore;
                 _status = 'Face Verified ✓';
                 _realCount++;
                 _canCapture = true;
@@ -184,14 +186,15 @@ class _LiveAntiSpoofCameraScreenState extends State<LiveAntiSpoofCameraScreen>
               print('═════════════════════════════════════════════');
               print('❌ SPOOF DETECTED (3-second average)');
               print('   Frames analyzed: ${_frameScores.length}');
-              print('   Avg Spoof Score: ${avgScorePercent.toStringAsFixed(1)}%');
+              print('   Spoof votes: ${_frameScores.where((s) => s == 1.0).length}');
+              print('   Avg Spoof Score: ${avgSpoofPercent.toStringAsFixed(1)}%');
               print('   Status: Fake photo/video/screen detected');
               print('═════════════════════════════════════════════');
 
               setState(() {
                 _isRealFace = false;
-                _confidence = avgScore;
-                _score = avgScore;
+                _confidence = avgSpoofScore; // Spoof confidence
+                _score = avgSpoofScore;
                 _status = 'Spoof Detected';
                 _spoofCount++;
                 _canCapture = false;
@@ -203,8 +206,9 @@ class _LiveAntiSpoofCameraScreenState extends State<LiveAntiSpoofCameraScreen>
             _frameCollectionStartTime = null;
           } else if (_frameScores.length == 1) {
             // Show collecting status on first frame
+            final voteType = isRealFromBackend ? '✅ Real' : '❌ Spoof';
             setState(() {
-              _status = 'Collecting frames... ${elapsed.inSeconds}s';
+              _status = 'Collecting frames... ${elapsed.inSeconds}s ($voteType)';
             });
           }
         }
