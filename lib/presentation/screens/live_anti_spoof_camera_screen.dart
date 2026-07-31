@@ -150,11 +150,13 @@ class _LiveAntiSpoofCameraScreenState extends State<LiveAntiSpoofCameraScreen>
 
             if (_blinkCount >= 1) {
               _blinkDetected = true;
-              print('✅ LIVENESS CONFIRMED - Processing attendance');
-              setState(() => _status = '✓ Blink confirmed');
-              await Future.delayed(const Duration(milliseconds: 500));
+              print('═════════════════════════════════════════════');
+              print('✅ BLINK DETECTED - LIVENESS CONFIRMED');
+              print('═════════════════════════════════════════════');
+              setState(() => _status = '✓ Blink confirmed - Processing...');
+              await Future.delayed(const Duration(milliseconds: 800));
               if (!widget.isRegistration && mounted) {
-                print('🚀 AUTO-MARKING ATTENDANCE');
+                print('🚀 STARTING FACE MATCHING & ATTENDANCE');
                 await _autoMarkAttendance();
               }
             }
@@ -282,7 +284,9 @@ class _LiveAntiSpoofCameraScreenState extends State<LiveAntiSpoofCameraScreen>
 
   Future<void> _autoMarkAttendance() async {
     try {
-      print('📍 Starting face matching and attendance...');
+      print('═════════════════════════════════════════════');
+      print('📸 CAPTURING PHOTO FOR MATCHING');
+      print('═════════════════════════════════════════════');
 
       _captureTimer?.cancel();
       final image = await _cameraController.takePicture();
@@ -291,20 +295,26 @@ class _LiveAntiSpoofCameraScreenState extends State<LiveAntiSpoofCameraScreen>
       if (!mounted) return;
 
       // Step 1: Match face against database
+      print('═════════════════════════════════════════════');
+      print('🔍 MATCHING FACE AGAINST DATABASE');
+      print('═════════════════════════════════════════════');
+
       setState(() {
         _status = '🔍 Matching face...';
       });
 
-      print('🔍 Calling backend to match face');
       final matchResult = await AntiSpoofApiService.markAttendanceAuto(imageFile);
-      print('🔍 Match result: $matchResult');
 
       if (!mounted) return;
 
       if (matchResult.containsKey('error')) {
-        print('❌ Match error: ${matchResult['error']}');
+        print('═════════════════════════════════════════════');
+        print('❌ MATCHING FAILED');
+        print('   Error: ${matchResult['error']}');
+        print('═════════════════════════════════════════════');
+
         setState(() {
-          _status = 'Match failed: ${matchResult['error']}';
+          _status = '❌ No match found\nExiting...';
         });
         await Future.delayed(const Duration(seconds: 2));
         if (mounted) Navigator.pop(context);
@@ -314,31 +324,42 @@ class _LiveAntiSpoofCameraScreenState extends State<LiveAntiSpoofCameraScreen>
       // Step 2: Show matched student
       final matchedName = matchResult['student_name'] ?? 'Unknown';
       final similarity = matchResult['similarity'] ?? 0.0;
-      print('✅ MATCHED: $matchedName (${(similarity * 100).toStringAsFixed(1)}%)');
+      final srNo = matchResult['sr_no'] ?? 'N/A';
+
+      print('═════════════════════════════════════════════');
+      print('✅ MATCH SUCCESSFUL');
+      print('   Student: $matchedName');
+      print('   SR No: $srNo');
+      print('   Similarity: ${(similarity * 100).toStringAsFixed(1)}%');
+      print('═════════════════════════════════════════════');
 
       setState(() {
-        _status = '✅ Matched: $matchedName';
+        _status = '✅ Matched!\n$matchedName\n${(similarity * 100).toStringAsFixed(1)}% match';
       });
 
       print('═════════════════════════════════════════════');
       print('✅ ATTENDANCE MARKED');
-      print('   Student: $matchedName');
-      print('   Similarity: ${(similarity * 100).toStringAsFixed(1)}%');
-      print('   Status: Success');
+      print('   Status: SUCCESS');
+      print('   Exiting in 3 seconds...');
       print('═════════════════════════════════════════════');
 
-      // Wait 2 seconds then return
-      await Future.delayed(const Duration(seconds: 2));
+      // Wait 3 seconds then return
+      await Future.delayed(const Duration(seconds: 3));
 
       if (mounted) {
         Navigator.pop(context);
       }
     } catch (e) {
-      print('❌ Auto-mark error: $e');
+      print('═════════════════════════════════════════════');
+      print('❌ PROCESSING ERROR');
+      print('   Error: $e');
+      print('═════════════════════════════════════════════');
+
       setState(() {
-        _status = 'Error: $e';
+        _status = '❌ Error\n$e\nExiting...';
       });
-      await Future.delayed(const Duration(seconds: 2));
+
+      await Future.delayed(const Duration(seconds: 3));
       if (mounted) Navigator.pop(context);
     }
   }
