@@ -745,13 +745,13 @@ class FaceRecognitionService {
 
     final rows = await appDb
         .from('students')
-        .select('id, user_id, sr_no, name, face_embedding, face_photo_url')
+        .select('id, user_id, sr_no, fname, lname, face_embedding_front, face_embedding_left, face_embedding_right, face_photo_url')
         .inFilter('institute_id', keys.toList())
-        .not('face_embedding', 'is', null);
+        .or('face_embedding_front.not.is.null,face_embedding_left.not.is.null,face_embedding_right.not.is.null');
 
     final result = rows
         .map((raw) => Map<String, dynamic>.from(raw as Map))
-        .where((row) => studentHasNonEmptyFaceEmbedding(row['face_embedding']))
+        .where((row) => (row['face_embedding_front'] != null) || (row['face_embedding_left'] != null) || (row['face_embedding_right'] != null))
         .toList();
 
     _enrolledCacheInstId = instId;
@@ -1238,7 +1238,7 @@ class FaceRecognitionService {
       debugPrint('🔍 Checking if face matches any other registered student...');
     }
 
-    final rows = await appDb.from('students').select('id, user_id, sr_no, name, face_embedding').eq('institute_id', instId);
+    final rows = await appDb.from('students').select('id, user_id, sr_no, fname, lname, face_embedding_front, face_embedding_left, face_embedding_right').eq('institute_id', instId);
 
     if (kDebugMode) {
       debugPrint('📊 Comparing against ${rows.length} registered students');
@@ -1305,7 +1305,7 @@ class FaceRecognitionService {
       if (rowId.isNotEmpty) {
         final fetched = await appDb
             .from('students')
-            .select('id, user_id, sr_no, name, year, subject, subjects, face_photo_url, face_embedding')
+            .select('id, user_id, sr_no, fname, lname, year, subject, subjects, face_photo_url, face_embedding_front, face_embedding_left, face_embedding_right')
             .eq('institute_id', instId)
             .eq('id', rowId)
             .maybeSingle();

@@ -39,10 +39,10 @@ class FaceDebugService {
         );
       }
 
-      // Fetch student's registered photo from database
+      // Fetch student's registered photo from database (3-angle embeddings)
       final studentData = await appDb
           .from('students')
-          .select('id, name, sr_no, face_embedding')
+          .select('id, fname, lname, sr_no, face_embedding_front, face_embedding_left, face_embedding_right')
           .eq('institute_id', instituteId)
           .eq('sr_no', studentSrNo)
           .maybeSingle();
@@ -54,7 +54,7 @@ class FaceDebugService {
         );
       }
 
-      final faceEmbed = studentData['face_embedding'];
+      final faceEmbed = studentData['face_embedding_front'] ?? studentData['face_embedding_left'] ?? studentData['face_embedding_right'];
       if (faceEmbed == null) {
         return (
           similarity: 0.0,
@@ -153,17 +153,17 @@ class FaceDebugService {
         return [];
       }
 
-      // Fetch all students
+      // Fetch all students (3-angle embeddings)
       final students = await appDb
           .from('students')
-          .select('id, sr_no, name, face_embedding')
+          .select('id, sr_no, fname, lname, face_embedding_front, face_embedding_left, face_embedding_right')
           .eq('institute_id', instituteId);
 
       final results = <Map<String, dynamic>>[];
 
       for (final student in students) {
         try {
-          final faceEmbed = student['face_embedding'];
+          final faceEmbed = student['face_embedding_front'] ?? student['face_embedding_left'] ?? student['face_embedding_right'];
           if (faceEmbed == null) continue;
 
           Map<String, dynamic>? embedMap;
