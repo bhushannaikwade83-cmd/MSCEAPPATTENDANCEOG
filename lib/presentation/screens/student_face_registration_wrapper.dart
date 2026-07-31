@@ -246,38 +246,38 @@ class _StudentFaceRegistrationWrapperState
       bool photosUploadedSuccessfully = false;
 
       try {
-        final frontFile = File(photos[0].path);
-        final leftFile = File(photos[1].path);
-        final rightFile = File(photos[2].path);
+        // Compress each photo first
+        final frontBytes = await PhotoCompressionService.compressPhoto(photos[0].path);
+        final leftBytes = await PhotoCompressionService.compressPhoto(photos[1].path);
+        final rightBytes = await PhotoCompressionService.compressPhoto(photos[2].path);
 
-        // Compress each photo to <100KB
-        final frontBytes = await _compressPhotoToBytes(frontFile, 100);
-        final leftBytes = await _compressPhotoToBytes(leftFile, 100);
-        final rightBytes = await _compressPhotoToBytes(rightFile, 100);
+        print('  ✅ Front: ${(frontBytes.length / 1024).toStringAsFixed(1)}KB');
+        print('  ✅ Left: ${(leftBytes.length / 1024).toStringAsFixed(1)}KB');
+        print('  ✅ Right: ${(rightBytes.length / 1024).toStringAsFixed(1)}KB');
 
         // Generate path: instituteId/studentName/photo-registration/
         final photoPath = '${widget.instituteId}/${widget.studentName}/photo-registration';
 
         // Upload front photo (primary registration photo)
-        facePhotoUrl = await B2BStorageService.uploadPhotoBytes(
-          bytes: frontBytes,
-          bucketPath: '$photoPath/front.jpg',
+        facePhotoUrl = await B2BStorageService.uploadFile(
+          '$photoPath/front.jpg',
+          frontBytes,
           contentType: 'image/jpeg',
         );
         print('✅ Front photo uploaded: $facePhotoUrl');
 
         // Upload left photo
-        await B2BStorageService.uploadPhotoBytes(
-          bytes: leftBytes,
-          bucketPath: '$photoPath/left.jpg',
+        await B2BStorageService.uploadFile(
+          '$photoPath/left.jpg',
+          leftBytes,
           contentType: 'image/jpeg',
         );
         print('✅ Left photo uploaded');
 
         // Upload right photo
-        await B2BStorageService.uploadPhotoBytes(
-          bytes: rightBytes,
-          bucketPath: '$photoPath/right.jpg',
+        await B2BStorageService.uploadFile(
+          '$photoPath/right.jpg',
+          rightBytes,
           contentType: 'image/jpeg',
         );
         print('✅ Right photo uploaded');
@@ -718,33 +718,4 @@ class _StudentFaceRegistrationWrapperState
     );
   }
 
-  /// Compress photo to target size (<100KB) and return bytes
-  Future<List<int>> _compressPhotoToBytes(File photoFile, int maxKB) async {
-    try {
-      final bytes = await photoFile.readAsBytes();
-      final originalSize = bytes.length;
-
-      // If already under limit, return as-is
-      if (originalSize <= maxKB * 1024) {
-        print('  ✅ Photo ${(originalSize / 1024).toStringAsFixed(1)}KB (within limit)');
-        return bytes;
-      }
-
-      // Use PhotoCompressionService if available
-      try {
-        final compressed = await PhotoCompressionService.compressPhoto(
-          photoFile,
-          targetSizeKB: maxKB,
-        );
-        print('  ✅ Compressed: ${(originalSize / 1024).toStringAsFixed(1)}KB → ${(compressed.length / 1024).toStringAsFixed(1)}KB');
-        return compressed;
-      } catch (e) {
-        print('  ⚠️ Compression service failed, returning original: $e');
-        return bytes;
-      }
-    } catch (e) {
-      print('  ❌ Photo compression error: $e');
-      return [];
-    }
-  }
 }
