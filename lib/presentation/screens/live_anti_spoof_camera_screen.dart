@@ -52,6 +52,8 @@ class _LiveAntiSpoofCameraScreenState extends State<LiveAntiSpoofCameraScreen>
 
   // Detection Locking
   bool _isProcessingFrame = false;
+  int _frameSkipCounter = 0;
+  static const int FRAME_SKIP = 2; // Process every 3rd frame
 
   @override
   void initState() {
@@ -92,8 +94,9 @@ class _LiveAntiSpoofCameraScreenState extends State<LiveAntiSpoofCameraScreen>
 
       _faceDetector = FaceDetector(
         options: FaceDetectorOptions(
-          enableLandmarks: true,
-          enableClassification: true,
+          enableLandmarks: false,
+          enableClassification: false,
+          enableTracking: true,
         ),
       );
 
@@ -110,6 +113,14 @@ class _LiveAntiSpoofCameraScreenState extends State<LiveAntiSpoofCameraScreen>
 
   Future<void> _processImageStream(CameraImage cameraImage) async {
     if (_isProcessingFrame || _isCapturing) return;
+
+    // Skip frames for faster detection
+    _frameSkipCounter++;
+    if (_frameSkipCounter % FRAME_SKIP != 0) {
+      _updateFPS();
+      return;
+    }
+
     _isProcessingFrame = true;
 
     try {
