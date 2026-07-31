@@ -114,7 +114,7 @@ class StudentValidationService {
       // Check if student exists
       final student = await appDb
           .from('students')
-          .select('id, name, face_embedding')
+          .select('id, fname, lname, face_embedding_front, face_embedding_left, face_embedding_right')
           .eq('id', studentId)
           .eq('institute_id', instituteId)
           .maybeSingle();
@@ -123,9 +123,12 @@ class StudentValidationService {
         return '❌ Student not found in database';
       }
 
-      // Check if student has face registered
-      final faceEmbedding = student['face_embedding'];
-      if (faceEmbedding == null) {
+      // Check if student has face registered (at least one angle)
+      final front = student['face_embedding_front'];
+      final left = student['face_embedding_left'];
+      final right = student['face_embedding_right'];
+
+      if (front == null && left == null && right == null) {
         return '❌ Student face not registered. Register face first before marking attendance.';
       }
 
