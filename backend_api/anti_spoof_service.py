@@ -1,6 +1,6 @@
 """
 AI Anti-Spoof Detection Service
-FAST MODE: Simple liveness detection (no feature extraction)
+SIMPLIFIED: Laplacian variance only (fast & reliable)
 """
 
 import cv2
@@ -13,8 +13,9 @@ logger = logging.getLogger(__name__)
 
 class AntiSpoofService:
     """
-    Fast anti-spoofing detection using image properties
-    No heavy feature extraction - responds in < 1 second
+    Fast anti-spoofing detection using Laplacian variance
+    Real faces: high variance (lots of texture/detail)
+    Photos: lower variance (smooth/flat)
     """
 
     initialized = False
@@ -24,7 +25,7 @@ class AntiSpoofService:
         """Initialize anti-spoof service"""
         try:
             cls.initialized = True
-            logger.info("✅ Fast Anti-Spoof Service initialized")
+            logger.info("✅ Anti-Spoof Service initialized")
         except Exception as e:
             logger.error(f"❌ Failed to initialize: {e}")
             cls.initialized = False
@@ -32,8 +33,9 @@ class AntiSpoofService:
     @classmethod
     def detect_spoof(cls, image_data: bytes) -> Dict:
         """
-        FAST spoof detection using simple image analysis
-        Returns: {'is_real': bool, 'confidence': float (0-1), 'label': str}
+        SIMPLE spoof detection: Laplacian variance
+        High variance = Real face
+        Low variance = Photo/screen
         """
         try:
             # Decode image
@@ -46,57 +48,37 @@ class AntiSpoofService:
                     'confidence': 1.0,
                     'score': 0.0,
                     'label': 'invalid',
-                    'details': {'error': 'Failed to decode image'}
                 }
 
-            # Multi-check spoof detection
+            # Convert to grayscale
             gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
 
-            # 1. Laplacian variance (edge sharpness)
+            # Laplacian variance - ONLY metric
+            # Real faces: 150-500+ (high detail/texture)
+            # Photos: 50-150 (smooth/flat)
+            # Screens: 50-200 (artificial patterns)
             laplacian_var = cv2.Laplacian(gray, cv2.CV_64F).var()
 
-            # 2. Brightness check
-            brightness = np.mean(gray)
+            # Simple threshold
+            # Real if Laplacian > 80, Photo if < 80
+            is_real = bool(laplacian_var > 80)
 
-            # 3. Color saturation (photos have different saturation than skin)
-            hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
-            saturation = hsv[:, :, 1]
-            avg_saturation = np.mean(saturation)
-
-            # 4. Texture via edges (real faces have specific edge distribution)
-            edges = cv2.Canny(gray, 100, 200)
-            edge_ratio = np.sum(edges > 0) / (gray.shape[0] * gray.shape[1])
-
-            # Multi-factor decision - STRICT MODE
-            # Real faces must pass ALL checks
-            is_real = bool(
-                (laplacian_var > 200) and  # High sharpness (stricter than 100)
-                (50 < brightness < 200) and  # Normal lighting
-                (80 < avg_saturation < 150) and  # Normal skin saturation
-                (0.05 < edge_ratio < 0.20)  # Natural edge distribution
-            )
-
-            # Confidence = average of multiple factors (0-1)
-            laplacian_score = min(1.0, laplacian_var / 500.0)
-            saturation_score = 1.0 if (80 < avg_saturation < 150) else 0.0
-            edge_score = 1.0 if (0.05 < edge_ratio < 0.20) else 0.0
-            confidence = float((laplacian_score + saturation_score + edge_score) / 3.0)
+            # Confidence (0-1): how confident we are it's real
+            # Higher Laplacian = more real
+            confidence = min(1.0, laplacian_var / 300.0)
 
             return {
                 'is_real': is_real,
-                'confidence': confidence,
-                'score': confidence,
+                'confidence': float(confidence),
+                'score': float(confidence),
                 'label': 'live' if is_real else 'spoof',
                 'details': {
                     'laplacian_variance': float(laplacian_var),
-                    'brightness': float(brightness),
-                    'avg_saturation': float(avg_saturation),
-                    'edge_ratio': float(edge_ratio),
                 }
             }
 
         except Exception as e:
-            logger.error(f"❌ Error in spoof detection: {e}")
+            logger.error(f"❌ Error: {e}")
             return {
                 'is_real': True,
                 'confidence': 0.5,
