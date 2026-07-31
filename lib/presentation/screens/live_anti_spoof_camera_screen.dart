@@ -1,4 +1,3 @@
-import 'dart:async';
 import 'dart:io';
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
@@ -23,53 +22,30 @@ class LiveAntiSpoofCameraScreen extends StatefulWidget {
       _LiveAntiSpoofCameraScreenState();
 }
 
-class _LiveAntiSpoofCameraScreenState extends State<LiveAntiSpoofCameraScreen>
-    with WidgetsBindingObserver {
+class _LiveAntiSpoofCameraScreenState extends State<LiveAntiSpoofCameraScreen> {
   late CameraController _cameraController;
   late FaceDetector _faceDetector;
   bool _cameraInitialized = false;
   List<CameraDescription> _cameras = [];
 
-  // Face Detection
-  int _detectedFaces = 0;
-  Rect? _faceBoundingBox;
-  bool _faceDetected = false;
-
   // UI State
-  int _fps = 0;
-  DateTime _lastFrameTime = DateTime.now();
-  int _frameCount = 0;
   String _currentStage = 'Initializing...';
   bool _isCapturing = false;
   int _captureCountdown = 0;
-  Timer? _countdownTimer;
 
   // Recognition
   String _matchedStudentName = '';
   double _similarityScore = 0.0;
   String _srNo = '';
-  String _attendanceType = ''; // entry or exit
-
-  // Detection Locking
-  bool _isProcessingFrame = false;
-  int _frameSkipCounter = 0;
-  int _consecutiveFaceFrames = 0; // Track stable face detection
-  int _framesSinceLastDetection = 0; // Reset if no detection for X frames
-  static const int FRAME_SKIP = 2; // Process every 3rd frame (balance speed & stability)
-  static const int FACE_STABILITY_FRAMES = 1; // Need 1 detection (since we process often)
-  static const int FACE_TIMEOUT_FRAMES = 10; // Disable if no detection for 10 frames
 
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addObserver(this);
     _initializeCamera();
   }
 
   @override
   void dispose() {
-    WidgetsBinding.instance.removeObserver(this);
-    _countdownTimer?.cancel();
     _cameraController.dispose();
     _faceDetector.close();
     super.dispose();
@@ -91,7 +67,6 @@ class _LiveAntiSpoofCameraScreenState extends State<LiveAntiSpoofCameraScreen>
       _cameraController = CameraController(
         frontCamera,
         ResolutionPreset.high,
-        imageFormatGroup: ImageFormatGroup.nv21,
       );
 
       await _cameraController.initialize();
@@ -100,7 +75,6 @@ class _LiveAntiSpoofCameraScreenState extends State<LiveAntiSpoofCameraScreen>
         options: FaceDetectorOptions(
           enableLandmarks: false,
           enableClassification: false,
-          enableTracking: true,
         ),
       );
 
@@ -109,117 +83,36 @@ class _LiveAntiSpoofCameraScreenState extends State<LiveAntiSpoofCameraScreen>
       });
 
       _setStatus('🎥 Ready - Press CAPTURE');
-      _cameraController.startImageStream(_processImageStream);
     } catch (e) {
       _setStatus('❌ Error: $e');
     }
   }
 
-  Future<void> _processImageStream(CameraImage cameraImage) async {
-    if (_isProcessingFrame || _isCapturing) return;
-
-    _updateFPS();
-
-    // Always increment timeout counter, even during skipped frames
-    _framesSinceLastDetection++;
-
-    // Skip frames for faster detection
-    _frameSkipCounter++;
-    if (_frameSkipCounter % FRAME_SKIP != 0) {
-      // Check face timeout even on skipped frames
-      if (_framesSinceLastDetection > FACE_TIMEOUT_FRAMES && _faceDetected) {
-        if (mounted) {
-          setState(() {
-            _faceDetected = false;
-            _faceBoundingBox = null;
-            _currentStage = 'Face Lost - Show Again';
-          });
-        }
-      }
-      return;
-    }
-
-    _isProcessingFrame = true;
-
-    try {
-      _updateFPS();
-
-      // Use lower resolution for faster detection (480p instead of full resolution)
-      final inputImage = InputImage.fromBytes(
-        bytes: cameraImage.planes[0].bytes,
-        metadata: InputImageMetadata(
-          size: Size(
-            cameraImage.width.toDouble(),
-            cameraImage.height.toDouble(),
-          ),
-          rotation: InputImageRotation.rotation0deg,
-          format: InputImageFormat.nv21,
-          bytesPerRow: cameraImage.planes[0].bytesPerRow,
-        ),
-      );
-
-      final faces = await _faceDetector.processImage(inputImage);
-
-      if (mounted && !_isCapturing) {
-        setState(() {
-          _detectedFaces = faces.length;
-          _framesSinceLastDetection++;
-
-          if (faces.isEmpty) {
-            _currentStage = 'No Face Detected';
-          } else if (faces.length > 1) {
-            _faceDetected = false;
-            _faceBoundingBox = null;
-            _currentStage = 'Multiple Faces - Show Only 1';
-          } else {
-            final face = faces.first;
-            _faceBoundingBox = face.boundingBox;
-            _framesSinceLastDetection = 0; // Reset timeout
-            _faceDetected = true;
-            _currentStage = 'Face Detected ✓ - Press CAPTURE';
-          }
-        });
-      }
-    } catch (e) {
-      debugPrint('Frame processing error: $e');
-    } finally {
-      _isProcessingFrame = false;
-    }
-  }
-
-  void _startCapture() {
-    if (!_faceDetected) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('❌ Face not detected')),
-      );
-      return;
-    }
-
+  void _startCapture() async {
     setState(() {
       _isCapturing = true;
       _captureCountdown = 2;
-      _currentStage = 'Capturing in ${_captureCountdown}...';
+      _currentStage = 'Capturing in 2...';
     });
 
-    _countdownTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+    for (int i = 2; i > 0; i--) {
+      await Future.delayed(const Duration(seconds: 1));
       if (mounted) {
         setState(() {
-          _captureCountdown--;
-          _currentStage = _captureCountdown > 0
-              ? 'Capturing in ${_captureCountdown}...'
-              : 'Capturing...';
+          _captureCountdown = i - 1;
+          _currentStage = i > 1 ? 'Capturing in $i...' : 'Capturing...';
         });
-
-        if (_captureCountdown <= 0) {
-          timer.cancel();
-          _performCapture();
-        }
       }
-    });
+    }
+
+    if (mounted) {
+      await _performCapture();
+    }
   }
 
   Future<void> _performCapture() async {
     try {
+      // Single frame capture (like registration)
       final picture = await _cameraController.takePicture();
       final imageFile = File(picture.path);
 
@@ -227,25 +120,43 @@ class _LiveAntiSpoofCameraScreenState extends State<LiveAntiSpoofCameraScreen>
         _currentStage = 'Matching Face...';
       });
 
-      final result = await AntiSpoofApiService.markAttendanceAuto(imageFile);
+      // Detect face in captured image
+      final inputImage = InputImage.fromFilePath(imageFile.path);
+      final faces = await _faceDetector.processImage(inputImage);
 
-      if (mounted) {
-        if (result.containsKey('error')) {
-          setState(() {
-            _currentStage = '❌ No Match Found';
-          });
-          await Future.delayed(const Duration(seconds: 2));
-        } else {
-          _matchedStudentName = result['student_name'] ?? 'Unknown';
-          _similarityScore = result['similarity'] ?? 0.0;
-          _srNo = result['sr_no'] ?? 'N/A';
-          _attendanceType = result['record_type'] ?? 'entry';
+      if (!mounted) return;
 
-          setState(() {
-            _currentStage = '✅ ${_attendanceType.toUpperCase()} Marked';
-          });
+      if (faces.isEmpty) {
+        setState(() {
+          _currentStage = '❌ No Face Detected';
+        });
+        await Future.delayed(const Duration(seconds: 2));
+      } else if (faces.length > 1) {
+        setState(() {
+          _currentStage = '❌ Multiple Faces - Show Only 1';
+        });
+        await Future.delayed(const Duration(seconds: 2));
+      } else {
+        // Face detected - send to API
+        final result = await AntiSpoofApiService.markAttendanceAuto(imageFile);
 
-          await Future.delayed(const Duration(seconds: 2));
+        if (mounted) {
+          if (result.containsKey('error')) {
+            setState(() {
+              _currentStage = '❌ No Match Found';
+            });
+            await Future.delayed(const Duration(seconds: 2));
+          } else {
+            _matchedStudentName = result['student_name'] ?? 'Unknown';
+            _similarityScore = result['similarity'] ?? 0.0;
+            _srNo = result['sr_no'] ?? 'N/A';
+
+            setState(() {
+              _currentStage = '✅ Attendance Marked';
+            });
+
+            await Future.delayed(const Duration(seconds: 2));
+          }
         }
       }
 
@@ -265,27 +176,10 @@ class _LiveAntiSpoofCameraScreenState extends State<LiveAntiSpoofCameraScreen>
     if (mounted) {
       setState(() {
         _isCapturing = false;
-        _detectedFaces = 0;
-        _faceBoundingBox = null;
-        _faceDetected = false;
         _matchedStudentName = '';
         _similarityScore = 0.0;
         _srNo = '';
         _currentStage = 'Ready for Next Student';
-      });
-    }
-  }
-
-  void _updateFPS() {
-    _frameCount++;
-    final now = DateTime.now();
-    final diff = now.difference(_lastFrameTime);
-
-    if (diff.inMilliseconds >= 1000) {
-      setState(() {
-        _fps = _frameCount;
-        _frameCount = 0;
-        _lastFrameTime = now;
       });
     }
   }
@@ -330,217 +224,120 @@ class _LiveAntiSpoofCameraScreenState extends State<LiveAntiSpoofCameraScreen>
           // Camera Feed
           SizedBox.expand(child: CameraPreview(_cameraController)),
 
-          // Face Bounding Box
-          if (_faceBoundingBox != null)
-            Positioned(
-              left: _faceBoundingBox!.left,
-              top: _faceBoundingBox!.top,
-              width: _faceBoundingBox!.width,
-              height: _faceBoundingBox!.height,
-              child: Container(
-                decoration: BoxDecoration(
-                  border: Border.all(
-                    color: _faceDetected ? Colors.green : Colors.red,
-                    width: 3,
-                  ),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-              ),
-            ),
-
-          // Top Status Bar
+          // Top Status
           Positioned(
-            top: 0,
-            left: 0,
-            right: 0,
+            top: 16,
+            left: 16,
+            right: 16,
             child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: [
-                    Colors.black.withOpacity(0.6),
-                    Colors.transparent,
-                  ],
-                ),
+                color: Colors.black.withOpacity(0.6),
+                borderRadius: BorderRadius.circular(8),
               ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Flexible(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(
-                          _currentStage,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        Text(
-                          'Faces: $_detectedFaces | FPS: $_fps',
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            color: Colors.grey,
-                            fontSize: 12,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
                   Text(
-                    DateTime.now().toString().split('.')[0],
+                    _currentStage,
                     style: const TextStyle(
                       color: Colors.white,
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
                     ),
                   ),
+                  if (_matchedStudentName.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 8),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Student: $_matchedStudentName',
+                            style: const TextStyle(
+                              color: Colors.greenAccent,
+                              fontSize: 14,
+                            ),
+                          ),
+                          Text(
+                            'SR No: $_srNo',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 12,
+                            ),
+                          ),
+                          Text(
+                            'Match: ${(_similarityScore * 100).toStringAsFixed(1)}%',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
                 ],
               ),
             ),
           ),
 
-          // Student Details Card (on success)
-          if (_matchedStudentName.isNotEmpty)
-            Positioned(
-              top: screenSize.height * 0.15,
-              left: screenSize.width * 0.05,
-              right: screenSize.width * 0.05,
-              child: Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: Colors.green.withOpacity(0.2),
-                  border: Border.all(color: Colors.green, width: 2),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Student: $_matchedStudentName',
-                      style: const TextStyle(
-                        color: Colors.greenAccent,
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      'SR No: $_srNo',
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 14,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      'Match: ${(_similarityScore * 100).toStringAsFixed(1)}%',
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 14,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      'Type: ${_attendanceType.toUpperCase()}',
-                      style: TextStyle(
-                        color: _attendanceType == 'entry'
-                            ? Colors.blueAccent
-                            : Colors.orangeAccent,
-                        fontSize: 14,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-
-          // Bottom Control Panel
+          // Bottom Controls
           Positioned(
-            bottom: 0,
-            left: 0,
-            right: 0,
-            child: Container(
-              padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.bottomCenter,
-                  end: Alignment.topCenter,
-                  colors: [
-                    Colors.black.withOpacity(0.8),
-                    Colors.transparent,
-                  ],
+            bottom: 20,
+            left: 20,
+            right: 20,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // CAPTURE Button
+                ElevatedButton(
+                  onPressed: _isCapturing ? null : _startCapture,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: _isCapturing ? Colors.orange : Colors.green,
+                    disabledBackgroundColor: Colors.orange,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 40,
+                      vertical: 16,
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                  child: Text(
+                    _isCapturing ? 'CAPTURING... $_captureCountdown' : '✅ CAPTURE',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 2,
+                    ),
+                  ),
                 ),
-              ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  // CAPTURE Button (real-time enable/disable based on face)
-                  ElevatedButton(
-                    onPressed: (_isCapturing || !_faceDetected) ? null : _startCapture,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: _isCapturing
-                          ? Colors.orange
-                          : (_faceDetected ? Colors.green : Colors.red.withOpacity(0.6)),
-                      disabledBackgroundColor: _isCapturing
-                          ? Colors.orange
-                          : Colors.red.withOpacity(0.6),
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 40,
-                        vertical: 16,
-                      ),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
+                const SizedBox(height: 12),
+                // EXIT Button
+                ElevatedButton(
+                  onPressed: () => Navigator.pop(context),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.red.withOpacity(0.7),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 40,
+                      vertical: 12,
                     ),
-                    child: Text(
-                      _isCapturing
-                          ? 'CAPTURING... $_captureCountdown'
-                          : (_faceDetected ? '✅ CAPTURE' : '❌ NO FACE'),
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                        letterSpacing: 2,
-                      ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
                     ),
                   ),
-                  const SizedBox(height: 16),
-                  // Close Button
-                  ElevatedButton(
-                    onPressed: () => Navigator.pop(context),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.red.withOpacity(0.7),
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 40,
-                        vertical: 12,
-                      ),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                    ),
-                    child: const Text(
-                      'EXIT',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                        letterSpacing: 1.5,
-                      ),
+                  child: const Text(
+                    'EXIT',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 1.5,
                     ),
                   ),
-                ],
-              ),
+                ),
+              ],
             ),
           ),
         ],
