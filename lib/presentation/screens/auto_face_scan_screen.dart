@@ -84,6 +84,14 @@ class _AutoFaceScanScreenState extends State<AutoFaceScanScreen>
   String? _lastAutoMarkedStudentId;
   DateTime? _lastAutoMarkAt;
 
+  // Marked attendance details
+  String? _markedStudentName;
+  String? _markedSrNo;
+  String? _markedInstituteId;
+  DateTime? _markedTimestamp;
+  String? _markedRecordType; // 'entry' or 'exit'
+  double? _markedSimilarityScore;
+
   late PreCaptureLivenessTracker _livenessTracker;
 
   bool _padInFlight = false;
@@ -636,19 +644,28 @@ class _AutoFaceScanScreenState extends State<AutoFaceScanScreen>
       }
 
       if (mounted) {
+        final now = DateTime.now();
         setState(() {
           _attendanceStatus = '✓ Entry marked';
           _statusMessage = 'Done — next student can scan';
           _lastAutoMarkedStudentId = studentId;
-          _lastAutoMarkAt = DateTime.now();
+          _lastAutoMarkAt = now;
+          // Store marked attendance details
+          _markedStudentName = fullName;
+          _markedSrNo = srNo;
+          _markedInstituteId = _instituteId;
+          _markedTimestamp = now;
+          _markedRecordType = 'entry';
+          _markedSimilarityScore = result.similarity ?? 0.0;
         });
 
-        await Future.delayed(const Duration(milliseconds: 1500));
+        await Future.delayed(const Duration(milliseconds: 3000));
         if (mounted) {
           setState(() {
             _identifiedStudent = null;
             _lastPipelineResult = null;
             _attendanceStatus = null;
+            // Keep marked details visible temporarily
           });
           _livenessTracker.reset();
           _startFaceDetection();
@@ -930,10 +947,49 @@ class _AutoFaceScanScreenState extends State<AutoFaceScanScreen>
                   _MetricRow(
                     label: 'Attendance',
                     value: _attendanceStatus ?? 'Pending',
-                    valueColor: _attendanceStatus == 'Attendance marked'
+                    valueColor: _attendanceStatus?.contains('✓') == true
                         ? Colors.greenAccent
+                        : _attendanceStatus?.contains('✗') == true
+                        ? Colors.redAccent
                         : Colors.white,
                   ),
+                  if (_markedTimestamp != null) ...[
+                    const Divider(color: Colors.white24, height: 12),
+                    _MetricRow(
+                      label: 'Name',
+                      value: _markedStudentName ?? '—',
+                    ),
+                    _MetricRow(
+                      label: 'SR No',
+                      value: _markedSrNo ?? '—',
+                    ),
+                    _MetricRow(
+                      label: 'Institute',
+                      value: (_markedInstituteId?.length ?? 0) > 12
+                          ? '${_markedInstituteId?.substring(0, 12)}…'
+                          : _markedInstituteId ?? '—',
+                    ),
+                    _MetricRow(
+                      label: 'Type',
+                      value: '${_markedRecordType?.toUpperCase() ?? '—'}',
+                      valueColor: Colors.blueAccent,
+                    ),
+                    _MetricRow(
+                      label: 'Marked At',
+                      value: _markedTimestamp != null
+                          ? DateFormat('HH:mm:ss').format(_markedTimestamp!)
+                          : '—',
+                    ),
+                    _MetricRow(
+                      label: 'Match Score',
+                      value: _markedSimilarityScore != null
+                          ? '${(_markedSimilarityScore! * 100).toStringAsFixed(1)}%'
+                          : '—',
+                      valueColor: _markedSimilarityScore != null && _markedSimilarityScore! > 0.8
+                          ? Colors.greenAccent
+                          : Colors.white,
+                    ),
+                  ],
                 ],
               ),
             ),
