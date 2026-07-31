@@ -415,6 +415,32 @@ async def startup_event():
     # ⚡ Load embedding cache (FAST matching, no DB queries)
     await _load_embeddings_cache()
 
+    # 🔥 TEST: Verify ArcFace model is actually working (generates different embeddings)
+    print("\n" + "="*80)
+    print("🔥 ARCFACE MODEL VERIFICATION TEST")
+    print("="*80)
+    try:
+        face_service_instance = _ensure_face_service()
+
+        # Create two different test images (all zeros and all ones)
+        import numpy as np
+        test_img1 = np.zeros((224, 224, 3), dtype=np.uint8)
+        test_img2 = np.ones((224, 224, 3), dtype=np.uint8) * 255
+
+        emb1 = await face_service_instance.generate_embedding(cv2.imencode('.jpg', test_img1)[1].tobytes())
+        emb2 = await face_service_instance.generate_embedding(cv2.imencode('.jpg', test_img2)[1].tobytes())
+
+        if emb1 is not None and emb2 is not None:
+            sim = np.dot(emb1, emb2)
+            print(f"✅ ArcFace working: Test1 vs Test2 similarity = {sim:.4f}")
+            if abs(sim - 1.0) < 0.01:
+                print(f"⚠️ WARNING: Embeddings are IDENTICAL! Model may be broken!")
+        else:
+            print(f"❌ ArcFace test failed: emb1={emb1 is None}, emb2={emb2 is None}")
+    except Exception as e:
+        print(f"❌ ArcFace test error: {e}")
+    print("="*80 + "\n")
+
     # Initialize vector_db (lightweight)
     if vector_db is not None:
         try:
