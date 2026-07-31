@@ -1618,7 +1618,7 @@ async def mark_attendance_auto(
             # Get all students with embeddings for this institute
             response = supabase.table('students').select(
                 'id, sr_no, fname, lname, face_embedding_average'
-            ).eq('inst_id', institute_id).execute()
+            ).eq('institute_id', institute_id).execute()
 
             students = response.data if response.data else []
             print(f"📊 Found {len(students)} students in institute {institute_id}")
