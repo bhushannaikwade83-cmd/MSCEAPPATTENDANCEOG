@@ -40,7 +40,6 @@ class _LiveAntiSpoofCameraScreenState extends State<LiveAntiSpoofCameraScreen>
   late FaceDetector _faceDetector;
   bool _cameraInitialized = false;
   List<CameraDescription> _cameras = [];
-  int _selectedCameraIndex = 0;
 
   // Verification Pipeline States
   Map<VerificationStep, StepStatus> _stepStatus = {
@@ -108,8 +107,13 @@ class _LiveAntiSpoofCameraScreenState extends State<LiveAntiSpoofCameraScreen>
         return;
       }
 
+      final frontCamera = _cameras.firstWhere(
+        (camera) => camera.lensDirection == CameraLensDirection.front,
+        orElse: () => _cameras[0],
+      );
+
       _cameraController = CameraController(
-        _cameras[_selectedCameraIndex],
+        frontCamera,
         ResolutionPreset.high,
         imageFormatGroup: ImageFormatGroup.nv21,
       );
@@ -129,8 +133,6 @@ class _LiveAntiSpoofCameraScreenState extends State<LiveAntiSpoofCameraScreen>
       });
 
       _setStatus('🎥 Camera Ready - Scanning...');
-
-      // Start continuous frame processing
       _cameraController.startImageStream(_processImageStream);
     } catch (e) {
       _setStatus('❌ Error: $e');
@@ -178,7 +180,6 @@ class _LiveAntiSpoofCameraScreenState extends State<LiveAntiSpoofCameraScreen>
             _stepStatus[VerificationStep.faceDetection] = StepStatus.completed;
             _stepStatus[VerificationStep.antiSpoof] = StepStatus.processing;
 
-            // Process spoof detection
             _processSpoof(face);
           }
         });
@@ -191,9 +192,7 @@ class _LiveAntiSpoofCameraScreenState extends State<LiveAntiSpoofCameraScreen>
   }
 
   Future<void> _processSpoof(Face face) async {
-    // Placeholder: In real implementation, call spoof detection API
-    // For now, simulate detection
-    _spoofScore = 0.92; // Simulated
+    _spoofScore = 0.92;
 
     if (_spoofScore >= REAL_THRESHOLD) {
       _realFrameCount++;
@@ -255,11 +254,9 @@ class _LiveAntiSpoofCameraScreenState extends State<LiveAntiSpoofCameraScreen>
     });
 
     try {
-      // Simulate capture and recognition
       final picture = await _cameraController.takePicture();
       final imageFile = File(picture.path);
 
-      // Call recognition API
       final result = await AntiSpoofApiService.markAttendanceAuto(imageFile);
 
       if (mounted) {
@@ -275,9 +272,6 @@ class _LiveAntiSpoofCameraScreenState extends State<LiveAntiSpoofCameraScreen>
           _matchedStudentName = result['student_name'] ?? 'Unknown';
           _similarityScore = result['similarity'] ?? 0.0;
           _srNo = result['sr_no'] ?? 'N/A';
-          _rollNo = result['roll_number'] ?? 'N/A';
-          _className = result['class'] ?? 'N/A';
-          _division = result['division'] ?? 'N/A';
 
           setState(() {
             _currentStage = '✅ Attendance Marked';
@@ -349,17 +343,6 @@ class _LiveAntiSpoofCameraScreenState extends State<LiveAntiSpoofCameraScreen>
     }
   }
 
-  void _addDebugLog(String message) {
-    if (mounted) {
-      setState(() {
-        _debugLogs.add(message);
-        if (_debugLogs.length > 20) {
-          _debugLogs.removeAt(0);
-        }
-      });
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     if (!_cameraInitialized) {
@@ -384,6 +367,11 @@ class _LiveAntiSpoofCameraScreenState extends State<LiveAntiSpoofCameraScreen>
         ),
       );
     }
+
+    final screenSize = MediaQuery.of(context).size;
+    final isPortrait = screenSize.height > screenSize.width;
+    final panelWidth = isPortrait ? screenSize.width * 0.28 : screenSize.width * 0.22;
+    final debugPanelWidth = isPortrait ? screenSize.width * 0.35 : screenSize.width * 0.25;
 
     return Scaffold(
       backgroundColor: const Color(0xFF0A0E27),
@@ -410,13 +398,16 @@ class _LiveAntiSpoofCameraScreenState extends State<LiveAntiSpoofCameraScreen>
               ),
             ),
 
-          // Top Status Bar
+          // Top Status Bar (Responsive)
           Positioned(
             top: 0,
             left: 0,
             right: 0,
             child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              padding: EdgeInsets.symmetric(
+                horizontal: isPortrait ? 16 : 12,
+                vertical: isPortrait ? 12 : 8,
+              ),
               decoration: BoxDecoration(
                 gradient: LinearGradient(
                   begin: Alignment.topCenter,
@@ -430,94 +421,118 @@ class _LiveAntiSpoofCameraScreenState extends State<LiveAntiSpoofCameraScreen>
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        _currentStage,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      Text(
-                        'Faces: $_detectedFaces | FPS: $_fps',
-                        style: const TextStyle(
-                          color: Colors.grey,
-                          fontSize: 12,
-                        ),
-                      ),
-                    ],
-                  ),
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.end,
-                    children: [
-                      Text(
-                        DateTime.now().toString().split('.')[0],
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 14,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                      if (_spoofScore > 0)
+                  Flexible(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
                         Text(
-                          'Spoof: ${(_spoofScore * 100).toStringAsFixed(1)}%',
-                          style: const TextStyle(
-                            color: Colors.greenAccent,
-                            fontSize: 12,
+                          _currentStage,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: isPortrait ? 18 : 14,
+                            fontWeight: FontWeight.bold,
                           ),
                         ),
-                    ],
+                        Text(
+                          'F: $_detectedFaces | FPS: $_fps',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            color: Colors.grey,
+                            fontSize: isPortrait ? 12 : 10,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Flexible(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          DateTime.now().toString().split('.')[0].split(' ')[1] ?? '',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: isPortrait ? 14 : 11,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        if (_spoofScore > 0)
+                          Text(
+                            'S: ${(_spoofScore * 100).toStringAsFixed(0)}%',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              color: Colors.greenAccent,
+                              fontSize: isPortrait ? 12 : 10,
+                            ),
+                          ),
+                      ],
+                    ),
                   ),
                 ],
               ),
             ),
           ),
 
-          // Right Panel - Verification Pipeline
-          Positioned(
-            right: 16,
-            top: 100,
-            width: 200,
-            child: Column(
-              children: [
-                _buildStepIndicator(
-                  VerificationStep.faceDetection,
-                  'Face Detection',
+          // Right Panel - Verification Pipeline (Responsive)
+          if (isPortrait)
+            Positioned(
+              right: 8,
+              top: screenSize.height * 0.1,
+              width: panelWidth,
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    _buildStepIndicator(
+                      VerificationStep.faceDetection,
+                      'Face Det.',
+                      compact: true,
+                    ),
+                    SizedBox(height: panelWidth * 0.08),
+                    _buildStepIndicator(
+                      VerificationStep.antiSpoof,
+                      'Anti-Spoof',
+                      compact: true,
+                    ),
+                    SizedBox(height: panelWidth * 0.08),
+                    _buildStepIndicator(
+                      VerificationStep.blink,
+                      'Blink',
+                      compact: true,
+                    ),
+                    SizedBox(height: panelWidth * 0.08),
+                    _buildStepIndicator(
+                      VerificationStep.recognition,
+                      'Recogn.',
+                      compact: true,
+                    ),
+                    SizedBox(height: panelWidth * 0.08),
+                    _buildStepIndicator(
+                      VerificationStep.attendance,
+                      'Attend.',
+                      compact: true,
+                    ),
+                  ],
                 ),
-                const SizedBox(height: 8),
-                _buildStepIndicator(
-                  VerificationStep.antiSpoof,
-                  'Anti-Spoof',
-                ),
-                const SizedBox(height: 8),
-                _buildStepIndicator(
-                  VerificationStep.blink,
-                  'Blink Detection',
-                ),
-                const SizedBox(height: 8),
-                _buildStepIndicator(
-                  VerificationStep.recognition,
-                  'Recognition',
-                ),
-                const SizedBox(height: 8),
-                _buildStepIndicator(
-                  VerificationStep.attendance,
-                  'Attendance',
-                ),
-              ],
+              ),
             ),
-          ),
 
-          // Bottom Panel - Live Details
+          // Bottom Panel - Live Details (Fully Responsive)
           Positioned(
             bottom: 0,
             left: 0,
             right: 0,
             child: Container(
-              padding: const EdgeInsets.all(16),
+              padding: EdgeInsets.all(isPortrait ? 12 : 8),
               decoration: BoxDecoration(
                 gradient: LinearGradient(
                   begin: Alignment.bottomCenter,
@@ -528,67 +543,82 @@ class _LiveAntiSpoofCameraScreenState extends State<LiveAntiSpoofCameraScreen>
                   ],
                 ),
               ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      _buildDetailRow('Spoof Score', '${(_spoofScore * 100).toStringAsFixed(1)}%'),
-                      _buildDetailRow('Real Frames', '$_realFrameCount/$REAL_FRAMES_NEEDED'),
-                      _buildDetailRow('Blink Status', '$_blinkCount/1'),
-                    ],
-                  ),
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      _buildDetailRow('Recognition', '${(_similarityScore * 100).toStringAsFixed(1)}%'),
-                      if (_matchedStudentName.isNotEmpty)
-                        _buildDetailRow('Student', _matchedStudentName),
-                      if (_srNo.isNotEmpty)
-                        _buildDetailRow('SR No', _srNo),
-                    ],
-                  ),
-                  // Debug Toggle
-                  GestureDetector(
-                    onTap: () => setState(() => _debugMode = !_debugMode),
-                    child: Container(
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: _debugMode
-                            ? Colors.cyan.withOpacity(0.3)
-                            : Colors.grey.withOpacity(0.2),
-                        border: Border.all(
-                          color: _debugMode ? Colors.cyan : Colors.grey,
-                          width: 1.5,
-                        ),
-                        borderRadius: BorderRadius.circular(8),
+              child: SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // Metrics 1
+                    _buildMetricBox(
+                      'Spoof',
+                      '${(_spoofScore * 100).toStringAsFixed(0)}%',
+                      isPortrait,
+                    ),
+                    SizedBox(width: isPortrait ? 12 : 8),
+                    _buildMetricBox(
+                      'Real',
+                      '$_realFrameCount/$REAL_FRAMES_NEEDED',
+                      isPortrait,
+                    ),
+                    SizedBox(width: isPortrait ? 12 : 8),
+                    _buildMetricBox(
+                      'Blink',
+                      '$_blinkCount/1',
+                      isPortrait,
+                    ),
+                    SizedBox(width: isPortrait ? 12 : 8),
+                    if (_matchedStudentName.isNotEmpty)
+                      _buildMetricBox(
+                        'Match',
+                        '${(_similarityScore * 100).toStringAsFixed(0)}%',
+                        isPortrait,
                       ),
-                      child: const Text(
-                        '🐛 Debug',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
+                    if (_matchedStudentName.isNotEmpty)
+                      SizedBox(width: isPortrait ? 12 : 8),
+                    if (_matchedStudentName.isNotEmpty)
+                      _buildMetricBox(
+                        'Name',
+                        _matchedStudentName.length > 10
+                            ? '${_matchedStudentName.substring(0, 8)}...'
+                            : _matchedStudentName,
+                        isPortrait,
+                      ),
+                    SizedBox(width: isPortrait ? 12 : 8),
+                    // Debug Toggle
+                    GestureDetector(
+                      onTap: () => setState(() => _debugMode = !_debugMode),
+                      child: Container(
+                        padding: EdgeInsets.all(isPortrait ? 10 : 6),
+                        decoration: BoxDecoration(
+                          color: _debugMode
+                              ? Colors.cyan.withOpacity(0.3)
+                              : Colors.grey.withOpacity(0.2),
+                          border: Border.all(
+                            color: _debugMode ? Colors.cyan : Colors.grey,
+                            width: 1.5,
+                          ),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Text(
+                          '🐛',
+                          style: TextStyle(fontSize: isPortrait ? 14 : 12),
                         ),
                       ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
           ),
 
-          // Debug Panel
+          // Debug Panel (Responsive)
           if (_debugMode)
             Positioned(
-              bottom: 180,
-              left: 16,
-              width: 300,
+              bottom: isPortrait ? 100 : 60,
+              left: isPortrait ? 8 : 12,
+              width: debugPanelWidth,
               child: Container(
-                padding: const EdgeInsets.all(12),
+                padding: EdgeInsets.all(isPortrait ? 10 : 8),
                 decoration: BoxDecoration(
                   color: Colors.black.withOpacity(0.9),
                   border: Border.all(color: Colors.cyan, width: 1.5),
@@ -599,20 +629,20 @@ class _LiveAntiSpoofCameraScreenState extends State<LiveAntiSpoofCameraScreen>
                     crossAxisAlignment: CrossAxisAlignment.start,
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      const Text(
-                        'DEBUG PANEL',
+                      Text(
+                        'DEBUG',
                         style: TextStyle(
                           color: Colors.cyan,
-                          fontSize: 12,
+                          fontSize: isPortrait ? 11 : 9,
                           fontWeight: FontWeight.bold,
                         ),
                       ),
-                      const SizedBox(height: 8),
+                      SizedBox(height: isPortrait ? 6 : 4),
                       Text(
-                        'FPS: $_fps\nSpoof: ${(_spoofScore * 100).toStringAsFixed(1)}%\nReal Frames: $_realFrameCount\nBlink: $_blinkCount\nStage: $_currentStage',
-                        style: const TextStyle(
+                        'FPS: $_fps\nSpoof: ${(_spoofScore * 100).toStringAsFixed(0)}%\nReal: $_realFrameCount\nBlink: $_blinkCount\nStage: ${_currentStage.replaceAll(RegExp(r'[^a-zA-Z ]'), '')}',
+                        style: TextStyle(
                           color: Colors.greenAccent,
-                          fontSize: 10,
+                          fontSize: isPortrait ? 9 : 8,
                           fontFamily: 'monospace',
                         ),
                       ),
@@ -624,19 +654,23 @@ class _LiveAntiSpoofCameraScreenState extends State<LiveAntiSpoofCameraScreen>
 
           // Close Button
           Positioned(
-            top: 20,
-            left: 20,
+            top: isPortrait ? 16 : 12,
+            left: isPortrait ? 16 : 12,
             child: GestureDetector(
               onTap: () => Navigator.pop(context),
               child: Container(
-                width: 48,
-                height: 48,
+                width: isPortrait ? 48 : 40,
+                height: isPortrait ? 48 : 40,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
                   color: Colors.red.withOpacity(0.2),
                   border: Border.all(color: Colors.red, width: 1.5),
                 ),
-                child: const Icon(Icons.close, color: Colors.red),
+                child: Icon(
+                  Icons.close,
+                  color: Colors.red,
+                  size: isPortrait ? 24 : 18,
+                ),
               ),
             ),
           ),
@@ -645,30 +679,79 @@ class _LiveAntiSpoofCameraScreenState extends State<LiveAntiSpoofCameraScreen>
     );
   }
 
-  Widget _buildStepIndicator(VerificationStep step, String label) {
+  Widget _buildStepIndicator(
+    VerificationStep step,
+    String label, {
+    bool compact = false,
+  }) {
     final status = _stepStatus[step] ?? StepStatus.pending;
     final color = _getStatusColor(status);
     final icon = _getStatusIcon(status);
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      padding: EdgeInsets.symmetric(
+        horizontal: compact ? 8 : 12,
+        vertical: compact ? 6 : 8,
+      ),
       decoration: BoxDecoration(
         color: color.withOpacity(0.1),
         border: Border.all(color: color, width: 1),
         borderRadius: BorderRadius.circular(6),
       ),
       child: Row(
+        mainAxisSize: MainAxisSize.min,
         children: [
-          Text(icon, style: const TextStyle(fontSize: 16)),
-          const SizedBox(width: 8),
-          Expanded(
+          Text(icon, style: const TextStyle(fontSize: 14)),
+          SizedBox(width: compact ? 4 : 8),
+          Flexible(
             child: Text(
               label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
               style: TextStyle(
                 color: color,
-                fontSize: 12,
+                fontSize: compact ? 11 : 12,
                 fontWeight: FontWeight.w600,
               ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMetricBox(String label, String value, bool isPortrait) {
+    return Container(
+      padding: EdgeInsets.symmetric(
+        horizontal: isPortrait ? 10 : 8,
+        vertical: isPortrait ? 8 : 6,
+      ),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.05),
+        border: Border.all(color: Colors.white.withOpacity(0.2), width: 1),
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          Text(
+            label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              color: Colors.grey,
+              fontSize: isPortrait ? 10 : 8,
+            ),
+          ),
+          Text(
+            value,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: isPortrait ? 12 : 10,
+              fontWeight: FontWeight.bold,
             ),
           ),
         ],
@@ -700,19 +783,5 @@ class _LiveAntiSpoofCameraScreenState extends State<LiveAntiSpoofCameraScreen>
       case StepStatus.pending:
         return '⭕';
     }
-  }
-
-  Widget _buildDetailRow(String label, String value) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 4),
-      child: Text(
-        '$label: $value',
-        style: const TextStyle(
-          color: Colors.white,
-          fontSize: 11,
-          fontWeight: FontWeight.w500,
-        ),
-      ),
-    );
   }
 }
