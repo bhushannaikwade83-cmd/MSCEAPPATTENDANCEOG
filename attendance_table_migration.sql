@@ -1,4 +1,5 @@
 -- Create daily attendance table for entry/exit tracking
+-- SEPARATE records for entry and exit
 CREATE TABLE IF NOT EXISTS attendance (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
 
@@ -8,22 +9,22 @@ CREATE TABLE IF NOT EXISTS attendance (
   sr_no TEXT NOT NULL,
   student_name TEXT NOT NULL,
 
+  -- Date
   attendance_date DATE NOT NULL,
 
-  -- Entry details
-  entry_time TIMESTAMP,
-  entry_photo_url TEXT,
-  entry_embedding TEXT, -- 512-D ArcFace embedding (JSON array)
-  entry_confidence FLOAT,
+  -- Record type: 'entry' or 'exit'
+  record_type TEXT NOT NULL,  -- 'entry' or 'exit'
 
-  -- Exit details
-  exit_time TIMESTAMP,
-  exit_photo_url TEXT,
-  exit_embedding TEXT, -- 512-D ArcFace embedding (JSON array)
-  exit_confidence FLOAT,
+  -- Time & Photo
+  marked_time TIMESTAMP NOT NULL,
+  photo_url TEXT,
+
+  -- 512-D Embedding
+  embedding TEXT NOT NULL,  -- JSON array of 512 floats
+  similarity_score FLOAT,  -- Cosine similarity (0-1)
 
   -- Status
-  status TEXT DEFAULT 'present', -- 'present', 'absent', 'late', 'left-early'
+  status TEXT DEFAULT 'present',  -- 'present', 'absent', 'late'
   is_verified BOOLEAN DEFAULT FALSE,
 
   -- Timestamps
@@ -32,7 +33,7 @@ CREATE TABLE IF NOT EXISTS attendance (
 
   -- Constraints
   FOREIGN KEY (student_id) REFERENCES students(id) ON DELETE CASCADE,
-  UNIQUE(sr_no, institute_id, attendance_date)  -- One entry per sr_no per day per institute
+  UNIQUE(sr_no, institute_id, attendance_date, record_type)  -- One entry + One exit per student per day
 );
 
 -- Create index for faster queries

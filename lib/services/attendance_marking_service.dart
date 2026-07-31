@@ -115,7 +115,8 @@ class AttendanceMarkingService {
     return dotProduct / denominator;
   }
 
-  /// Save attendance record to database
+  /// Save attendance record to database (SEPARATE entry/exit records)
+  /// recordType: 'entry' or 'exit'
   /// Returns: {success, message, attendance_id}
   static Future<Map<String, dynamic>> markAttendance({
     required String studentId,
@@ -124,20 +125,26 @@ class AttendanceMarkingService {
     required String studentName,
     required String photoUrl,
     required List<double> embedding,
+    required double similarityScore,
     required DateTime timestamp,
+    required String recordType, // 'entry' or 'exit'
   }) async {
     try {
-      debugPrint('💾 Saving attendance record...');
+      debugPrint('💾 Saving $recordType record for $studentName...');
+
+      final attendanceDate = timestamp.toIso8601String().split('T')[0]; // YYYY-MM-DD
 
       final result = await appDb.from('attendance').upsert({
         'student_id': studentId,
         'institute_id': instituteId,
         'sr_no': srNo,
         'student_name': studentName,
-        'attendance_date': timestamp.toIso8601String().split('T')[0], // YYYY-MM-DD
-        'entry_time': timestamp.toIso8601String(),
-        'entry_photo_url': photoUrl,
-        'entry_embedding': jsonEncode(embedding),
+        'attendance_date': attendanceDate,
+        'record_type': recordType,  // 'entry' or 'exit'
+        'marked_time': timestamp.toIso8601String(),
+        'photo_url': photoUrl,
+        'embedding': jsonEncode(embedding),
+        'similarity_score': similarityScore,
         'status': 'present',
       }).select();
 
@@ -145,12 +152,14 @@ class AttendanceMarkingService {
         throw Exception('Failed to create attendance record');
       }
 
-      debugPrint('✅ Attendance marked for ${result[0]['sr_no']}');
+      final emoji = recordType == 'entry' ? '🚪➡️' : '🚪⬅️';
+      debugPrint('✅ $emoji $recordType marked for ${result[0]['sr_no']} at ${timestamp.hour}:${timestamp.minute}');
 
       return {
         'success': true,
-        'message': 'Attendance marked: $studentName',
+        'message': '$recordType marked: $studentName',
         'attendance_id': result[0]['id'],
+        'record_type': recordType,
       };
     } catch (e) {
       debugPrint('❌ Attendance save error: $e');
