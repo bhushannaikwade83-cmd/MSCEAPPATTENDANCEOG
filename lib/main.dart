@@ -48,6 +48,8 @@ import 'services/face_recognition_service.dart';
 import 'services/institute_notification_service.dart';
 import 'services/device_performance_service.dart';
 import 'services/device_security_service.dart';
+import 'services/anti_spoof_api_service.dart';
+import 'services/backend_monitor_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -106,6 +108,21 @@ Future<void> _warmUpHeavyServicesAfterFirstFrame() async {
     debugPrint('⚠️ Local notifications failed to initialize: $e');
     debugPrint('$st');
   }
+
+  // 🚀 Pre-warm backend (optional, models load on first registration anyway)
+  // Disabled for now - prewarm is not critical
+  // try {
+  //   unawaited(AntiSpoofApiService.prewarmModels());
+  // } catch (e, st) {
+  //   debugPrint('⚠️ Backend pre-warm failed (not critical): $e');
+  // }
+
+  // 🔍 Backend connection monitor disabled (network detection works on actual requests)
+  // try {
+  //   unawaited(BackendMonitorService.startMonitoring());
+  // } catch (e, st) {
+  //   debugPrint('⚠️ Backend monitor failed (not critical): $e');
+  // }
 }
 
 void _configureGlobalImageCache() {

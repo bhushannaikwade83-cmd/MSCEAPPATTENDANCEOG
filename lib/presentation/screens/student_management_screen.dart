@@ -31,6 +31,7 @@ import '../widgets/secure_network_image.dart';
 import '../../services/distance_check_service.dart';
 import 'auto_face_scan_screen.dart';
 import 'student_face_registration_wrapper.dart';
+import 'live_anti_spoof_camera_screen.dart';
 
 enum _StudentAttendanceFilter { all, present, absent }
 
@@ -74,7 +75,7 @@ class _StudentManagementScreenState extends State<StudentManagementScreen>
 
   /// Omit `face_embedding` / `photo_thumbnail` — they are large JSON and slow every list page.
   static const String _studentSelectCols =
-      'id,name,user_id,sr_no,year,subject,subjects,face_photo_url,photo_version,face_photo_changed_once';
+      'id,sr_no,fname,lname,mname,subject,subjects,sub1,sub2,sub3,sub4,sub5,sub6,sub7,sub8,form_serial_no,ph_name,mother_nm,ctcd,identy_no,face_photo_url,face_embedding_front,face_embedding_left,face_embedding_right,face_embedding_average,face_quality_front,face_quality_left,face_quality_right,average_face_quality,face_registered_at,face_registration_status,is_face_real,created_at,updated_at';
 
   /// Today's entry/exit UI state keyed by [students.id] only (avoids roll/userId collisions).
   Map<String, Map<String, dynamic>> _todayPayloadByStudentId = {};
@@ -865,7 +866,6 @@ class _StudentManagementScreenState extends State<StudentManagementScreen>
 
     final rows = await dataQ
         .order('sr_no', ascending: true, nullsFirst: false)
-        .order('name', ascending: true)
         .order('id', ascending: true)
         .range(from, from + _pageSize - 1);
 
@@ -1037,6 +1037,12 @@ class _StudentManagementScreenState extends State<StudentManagementScreen>
   }
 
   Map<String, dynamic> _mapStudentRow(Map<String, dynamic> row) {
+    // Construct name from fname, lname, mname
+    final fname = row['fname']?.toString().trim() ?? '';
+    final lname = row['lname']?.toString().trim() ?? '';
+    final mname = row['mname']?.toString().trim() ?? '';
+    final name = [fname, mname, lname].where((e) => e.isNotEmpty).join(' ').trim();
+
     String subject = row['subject']?.toString().trim() ?? '';
     final subs = row['subjects'];
     if (subject.isEmpty && subs is List && subs.isNotEmpty) {
@@ -1053,28 +1059,36 @@ class _StudentManagementScreenState extends State<StudentManagementScreen>
 
     if (kDebugMode && url.isEmpty) {
       debugPrint('⚠️ Student has no photo URL:');
-      debugPrint('   Name: ${row['name']}');
+      debugPrint('   Name: $name');
       debugPrint('   face_photo_url: EMPTY');
     } else if (kDebugMode && url.isNotEmpty) {
       debugPrint('✅ Student photo found:');
-      debugPrint('   Name: ${row['name']}');
+      debugPrint('   Name: $name');
       debugPrint('   Photo URL: $url');
     }
 
 
     return {
       'id': row['id'],
-      'name': row['name'],
-      'userId': row['user_id'] ?? row['sr_no'] ?? '',
+      'name': name,
+      'userId': row['sr_no'] ?? '',
       'srNo': srRaw,
       'subject': subject,
       'subjectsList': parsedSubs,
-      'year': row['year'],
+      'year': '',
       'photoUrl': url,
-      'photoThumbnail': row['photo_thumbnail'],
-      'photoVersion': row['photo_version']?.toString(),
+      'photoThumbnail': null,
+      'photoVersion': null,
       'hasFaceEmbedding': hasFaceEmb,
-      'facePhotoChangedOnce': row['face_photo_changed_once'] == true,
+      'facePhotoChangedOnce': false,
+      // ✅ NEW: Add face registration columns to the mapped row
+      'face_registration_status': row['face_registration_status'] ?? 'pending',
+      'is_face_real': row['is_face_real'] ?? false,
+      'average_face_quality': row['average_face_quality'] ?? 0.0,
+      'form_serial_no': row['form_serial_no'] ?? '',
+      'face_quality_front': row['face_quality_front'] ?? 0.0,
+      'face_quality_left': row['face_quality_left'] ?? 0.0,
+      'face_quality_right': row['face_quality_right'] ?? 0.0,
     };
   }
 
@@ -1368,9 +1382,20 @@ class _StudentManagementScreenState extends State<StudentManagementScreen>
   }
 
   List<String> _parseSubjectsList(Map<String, dynamic> row) {
-    final subs = row['subjects'];
     final out = <String>[];
 
+    // ✅ NEW: Parse sub1, sub2, sub3, ... sub8 columns
+    for (int i = 1; i <= 8; i++) {
+      final key = 'sub$i';
+      final sub = row[key]?.toString().trim() ?? '';
+      if (sub.isNotEmpty && !out.contains(sub)) {
+        out.add(sub);
+        if (kDebugMode) debugPrint('  ✓ Added from $key: "$sub"');
+      }
+    }
+
+    // Also check 'subjects' column (JSON array format)
+    final subs = row['subjects'];
     if (kDebugMode) {
       debugPrint('🔍 Raw subjects for ${row['name']}: $subs (type: ${subs.runtimeType})');
     }
@@ -1420,7 +1445,7 @@ class _StudentManagementScreenState extends State<StudentManagementScreen>
       }
     }
 
-    // Fallback to subject column if no subjects array found
+    // Fallback to subject column if no subjects found
     if (deduplicated.isEmpty) {
       final single = row['subject']?.toString().trim() ?? '';
       if (single.isNotEmpty) {
@@ -1607,11 +1632,19 @@ class _StudentManagementScreenState extends State<StudentManagementScreen>
     }
 
     if (!mounted) return;
-    await Navigator.pushNamed(
+
+    // ✅ NEW: Use LiveAntiSpoofCameraScreen with GREEN/RED boxes
+    await Navigator.push(
       context,
-      AutoFaceScanScreen.routeName,
-      arguments: {'instituteId': _instituteId},
+      MaterialPageRoute(
+        builder: (_) => LiveAntiSpoofCameraScreen(
+          studentName: studentName,
+          studentId: 'ATTENDANCE_MARK',
+          isRegistration: false,
+        ),
+      ),
     );
+
     if (mounted) {
       await _loadHeaderStats();
       _refreshTodayPayloadsForVisibleStudents();
@@ -2043,11 +2076,11 @@ class _StudentManagementScreenState extends State<StudentManagementScreen>
     bool isDark,
   ) {
     final name = data['name'] ?? 'Unknown';
-    final srNo = data['srNo']?.toString() ?? '';
+    final srNo = data['srNo']?.toString() ?? data['sr_no']?.toString() ?? '';
     final rollNumber = srNo.isNotEmpty ? srNo : (data['userId'] ?? '');
     final subject = data['subject'] ?? '';
     // ✅ FIXED: Use 'photoUrl' key (from _mapStudentRow), not 'face_photo_url'
-    final profileUrl = (data['photoUrl'] as String?) ?? '';
+    final profileUrl = (data['photoUrl'] as String?) ?? (data['face_photo_url'] as String?) ?? '';
     final hasPhoto = profileUrl.isNotEmpty;
     final studentId = data['id']?.toString() ?? '';
     final markRollKey = _canonicalAttendanceRollKey(data);
@@ -2058,10 +2091,16 @@ class _StudentManagementScreenState extends State<StudentManagementScreen>
     final canChangePhotoOnce = hasFaceEmbedding && !facePhotoChangedOnce;
     final rawSubs = data['subjectsList'];
     final photoThumbnail = data['photoThumbnail'] as String?;
-    final photoVersion = data['photoVersion'] as String?;
+    final photoVersion = data['photoVersion'] as String? ?? (data['photo_version'] as String?);
     final subjectsList = rawSubs is List
         ? rawSubs.map((e) => e.toString().trim()).where((s) => s.isNotEmpty).toList()
         : <String>[];
+
+    // ✅ NEW: Face registration columns
+    final faceRegistrationStatus = data['face_registration_status'] ?? 'pending';
+    final isFaceReal = data['is_face_real'] ?? false;
+    final averageFaceQuality = (data['average_face_quality'] as num?)?.toDouble() ?? 0.0;
+    final formSerialNo = data['form_serial_no'] ?? '';
 
     // ⏸️ DISABLED: Background subject fetch was firing DB query for EVERY student during scroll!
     // This blocked the main thread (nativePoll 99% CPU)
@@ -2180,25 +2219,139 @@ class _StudentManagementScreenState extends State<StudentManagementScreen>
                     mainAxisSize: MainAxisSize.min,
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        name,
-                        style: TextStyle(
-                          color: isDark ? Colors.white : AppTheme.textDark,
-                          fontWeight: FontWeight.w700,
-                          fontSize: 15,
-                        ),
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  name,
+                                  style: TextStyle(
+                                    color: isDark ? Colors.white : AppTheme.textDark,
+                                    fontWeight: FontWeight.w700,
+                                    fontSize: 15,
+                                  ),
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  'SR NO: ${_formatSrDisplay(srNo)}',
+                                  style: TextStyle(
+                                    color: isDark ? Colors.white70 : AppTheme.textGray,
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                                if (formSerialNo.isNotEmpty) ...[
+                                  const SizedBox(height: 3),
+                                  Text(
+                                    'Form: $formSerialNo',
+                                    style: TextStyle(
+                                      color: isDark ? Colors.white60 : AppTheme.textGray,
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
+                                ],
+                              ],
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.end,
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                decoration: BoxDecoration(
+                                  color: faceRegistrationStatus == 'registered'
+                                      ? Colors.green.withValues(alpha: 0.15)
+                                      : Colors.orange.withValues(alpha: 0.15),
+                                  borderRadius: BorderRadius.circular(8),
+                                  border: Border.all(
+                                    color: faceRegistrationStatus == 'registered'
+                                        ? Colors.green.withValues(alpha: 0.4)
+                                        : Colors.orange.withValues(alpha: 0.4),
+                                  ),
+                                ),
+                                child: Text(
+                                  faceRegistrationStatus == 'registered' ? '✅ Registered' : '⏳ Pending',
+                                  style: TextStyle(
+                                    color: faceRegistrationStatus == 'registered'
+                                        ? Colors.green
+                                        : Colors.orange.shade700,
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              if (isFaceReal)
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                  decoration: BoxDecoration(
+                                    color: Colors.blue.withValues(alpha: 0.15),
+                                    borderRadius: BorderRadius.circular(8),
+                                    border: Border.all(
+                                      color: Colors.blue.withValues(alpha: 0.4),
+                                    ),
+                                  ),
+                                  child: Text(
+                                    '✓ Real Face',
+                                    style: TextStyle(
+                                      color: Colors.blue.shade600,
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                                )
+                              else if (faceRegistrationStatus == 'registered')
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                  decoration: BoxDecoration(
+                                    color: Colors.red.withValues(alpha: 0.15),
+                                    borderRadius: BorderRadius.circular(8),
+                                    border: Border.all(
+                                      color: Colors.red.withValues(alpha: 0.4),
+                                    ),
+                                  ),
+                                  child: Text(
+                                    '⚠ Spoof',
+                                    style: TextStyle(
+                                      color: Colors.red.shade600,
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                                ),
+                              if (averageFaceQuality > 0) ...[
+                                const SizedBox(height: 4),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                  decoration: BoxDecoration(
+                                    color: AppTheme.primaryBlue.withValues(alpha: 0.15),
+                                    borderRadius: BorderRadius.circular(8),
+                                    border: Border.all(
+                                      color: AppTheme.primaryBlue.withValues(alpha: 0.4),
+                                    ),
+                                  ),
+                                  child: Text(
+                                    'Quality: ${(averageFaceQuality * 100).toStringAsFixed(0)}%',
+                                    style: TextStyle(
+                                      color: AppTheme.primaryBlue,
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ],
+                          ),
+                        ],
                       ),
-                      const SizedBox(height: 4),
-                      Text(
-                        'SR NO: ${_formatSrDisplay(srNo)}',
-                        style: TextStyle(
-                          color: isDark ? Colors.white70 : AppTheme.textGray,
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
+                      const SizedBox(height: 8),
                       if (subjectsList.isNotEmpty) ...[
                         const SizedBox(height: 6),
                         Text(

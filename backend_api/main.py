@@ -6,6 +6,7 @@ Supports 200,000+ students with high accuracy and fast search
 
 from fastapi import FastAPI, HTTPException, UploadFile, File, Form, Request, status
 from fastapi.middleware.cors import CORSMiddleware
+from dashboard import dashboard_app, log_request, log_event
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.exceptions import RequestValidationError
 from starlette.exceptions import HTTPException as StarletteHTTPException
@@ -47,6 +48,9 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 app = FastAPI(title="EduSetu Face Recognition API", version="1.0.0")
+
+# Mount dashboard
+app.mount("/dashboard", dashboard_app)
 
 # Validation error handler for 422 errors
 @app.exception_handler(RequestValidationError)
@@ -346,6 +350,26 @@ async def root():
             "verify": "/api/v1/verify",
             "update_student_id": "/api/v1/update-student-id"
         }
+    }
+
+@app.get("/api/health")
+async def health_check_simple():
+    """Simple health check (for app pre-warm)"""
+    return {"status": "healthy"}
+
+@app.get("/api/dashboard-data")
+async def get_dashboard_data_main():
+    """Dashboard data endpoint (mirrors dashboard app)"""
+    from dashboard import request_log, event_log
+    total = len(request_log)
+    success = sum(1 for r in request_log if r["status"] == "success")
+    success_rate = int((success / total * 100) if total > 0 else 0)
+
+    return {
+        "total_requests": total,
+        "success_rate": success_rate,
+        "requests": list(reversed(request_log))[:20],
+        "events": list(reversed(event_log))[:20],
     }
 
 @app.get("/api/v1/health")
@@ -944,6 +968,65 @@ async def verify_face_info():
         }
     }
 
+# 🔥 NEW ENDPOINT: Multi-angle registration (3 photos for front, left, right)
+@app.post("/api/v1/register-multi-angle")
+async def register_multi_angle_face(
+    front_photo: UploadFile = File(...),
+    left_photo: UploadFile = File(...),
+    right_photo: UploadFile = File(...),
+    institute_id: str = Form(...),
+    student_id: str = Form(...),
+    roll_number: str = Form(...),
+    name: str = Form(...),
+):
+    """
+    Register student with 3 photos (front, left, right) - generates 3 embeddings + average
+
+    Returns embeddings for each angle so Flutter can save to Supabase
+    """
+    try:
+        face_service_instance = _ensure_face_service()
+        if not face_service_instance.initialized:
+            await face_service_instance.initialize()
+
+        logger.info(f"📱 Multi-angle registration for {roll_number} ({name})")
+
+        embeddings_result = {}
+
+        # Process 3 photos
+        for angle, photo_file in [("front", front_photo), ("left", left_photo), ("right", right_photo)]:
+            image_data = await photo_file.read()
+            if len(image_data) == 0:
+                raise HTTPException(status_code=400, detail=f"Empty {angle} photo")
+
+            embedding = await face_service_instance.generate_embedding(image_data)
+            if embedding is None:
+                raise HTTPException(status_code=400, detail=f"No face detected in {angle} photo")
+
+            embeddings_result[f"face_embedding_{angle}"] = embedding.tolist()
+            logger.info(f"  ✅ Generated embedding for {angle} angle (512-dim)")
+
+        # Calculate average embedding
+        front = np.array(embeddings_result["face_embedding_front"])
+        left = np.array(embeddings_result["face_embedding_left"])
+        right = np.array(embeddings_result["face_embedding_right"])
+        average = (front + left + right) / 3.0
+        embeddings_result["face_embedding_average"] = average.tolist()
+
+        logger.info(f"✅ Multi-angle registration complete for {roll_number}")
+
+        return {
+            "success": True,
+            "message": f"Face registered for {roll_number}",
+            "embeddings": embeddings_result,  # Return embeddings for Flutter to save to Supabase
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"❌ Multi-angle registration error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 @app.post("/api/v1/verify", response_model=VerifyResponse)
 async def verify_face(
     file: UploadFile = File(...),
@@ -1278,4 +1361,5 @@ async def recognize_embedding(
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    # 🔥 Use port 5001 (matches Flutter app's BACKEND_URL)
+    uvicorn.run(app, host="0.0.0.0", port=5001)

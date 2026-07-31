@@ -8,18 +8,16 @@ import 'package:image_picker/image_picker.dart' show XFile;
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../core/app_db.dart';
-import '../../core/production_face_recognition_constants.dart';
 import '../../core/student_face_embedding_utils.dart';
 import '../../core/utils/professional_messaging.dart';
 import '../../services/b2b_storage_service.dart';
 import '../../services/face_recognition_service.dart';
 import '../../services/student_face_match_index.dart';
-import '../../services/photo_of_photo_detection_service.dart';
 import '../../services/photo_compression_service.dart';
 import '../../services/location_monitor_service.dart' show LocationVerificationService;
 import '../../services/pin_session_manager.dart';
-import '../widgets/session_monitor.dart';
 import '../../services/distance_check_service.dart';
+import '../../services/anti_spoof_api_service.dart';
 import 'attendance_camera_screen.dart';
 
 /// Postgres `uuid` column compatible (RFC 4122 variant 4).
@@ -79,16 +77,17 @@ class _StudentFaceRegistrationWrapperState
       final student = await appDb
           .from('students')
           .select(
-            'face_embedding, face_photo_url, face_photo_changed_once, registration_photo_path',
+            'face_embedding_front, face_photo_url, face_registration_status',
           )
           .eq('id', widget.studentId)
           .eq('institute_id', widget.instituteId)
           .maybeSingle();
 
-      final hasEmbedding = studentHasNonEmptyFaceEmbedding(
-        student?['face_embedding'],
-      );
-      final alreadyChanged = student?['face_photo_changed_once'] == true;
+      // Check if student has existing face registration
+      final hasEmbedding = student != null &&
+          (student['face_registration_status'] == 'registered' ||
+           student['face_embedding_front'] != null);
+      final alreadyChanged = false; // New system doesn't track this
 
       if (!mounted) return;
       if (widget.changePhotoOnce && alreadyChanged) {
@@ -151,128 +150,134 @@ class _StudentFaceRegistrationWrapperState
     setState(() => _isSaving = true);
 
     try {
-      // Single-session 3-pose capture: front (2 blinks) → left → right.
+      // 🔥 Use old AttendanceCameraScreen with multi-pose registration (3 photos: front, left, right)
       if (!mounted) return;
-      final pickedList = await Navigator.push<List<XFile>>(
+      final photos = await Navigator.push<List<XFile>>(
         context,
         MaterialPageRoute(
           builder: (_) => AttendanceCameraScreen(
             studentName: widget.studentName,
             studentId: widget.studentId,
-            appBarTitle: 'Face registration',
+            multiPoseRegistration: true,  // 🎯 3-angle registration mode
             autoCaptureWhenReady: true,
-            multiPoseRegistration: true,
+            requireBlink: true,
           ),
         ),
       );
 
-      if (pickedList == null || pickedList.length < 3) {
-        if (mounted) {
-          ProfessionalMessaging.showError(
-            context,
-            title: 'Registration cancelled',
-            message: 'All 3 photos (front, left, right) are required.',
-          );
-        }
+      if (photos == null || photos.length != 3) {
+        if (mounted) setState(() => _isSaving = false);
         return;
       }
 
-      final poses = ['front', 'left', 'right'];
-      final angleSamples = <({List<double> embedding, String pose})>[];
-      String? frontWorkPath;
+      print('✅ Got 3 photos from camera');
+      print('📸 Front: ${photos[0].path}');
+      print('📸 Left: ${photos[1].path}');
+      print('📸 Right: ${photos[2].path}');
 
-      for (var i = 0; i < pickedList.length; i++) {
-        final pose = poses[i];
-        final workPath =
-            await FaceRecognitionService.ensureNormalizedJpegForFacePipeline(
-              pickedList[i].path,
-            );
+      // 🔥 Send to backend for 512-D ArcFace embeddings (HIGH ACCURACY!)
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (_) => Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const CircularProgressIndicator(color: Colors.white),
+              const SizedBox(height: 20),
+              const Text(
+                'Generating 512-D ArcFace embeddings...',
+                style: TextStyle(color: Colors.white, fontSize: 16),
+              ),
+            ],
+          ),
+        ),
+      );
 
-        if (i == 0) frontWorkPath = workPath;
+      print('📤 Sending 3 photos to backend for ArcFace processing...');
+      final result = await AntiSpoofApiService.registerStudentFace(
+        studentId: widget.studentId,
+        studentName: widget.studentName,
+        frontPhoto: File(photos[0].path),
+        leftPhoto: File(photos[1].path),
+        rightPhoto: File(photos[2].path),
+        instituteId: widget.instituteId,
+      );
 
-        final blockExisting = i == 0 && !_allowReregister;
-        final prepared =
-            await FaceRecognitionService.prepareFaceRegistrationAnglePhoto(
-              workPath,
-              widget.instituteId,
-              widget.studentId,
-              blockIfStudentAlreadyEnrolled: blockExisting,
-              pose: pose,
-            );
+      if (!mounted) {
+        Navigator.pop(context);
+        return;
+      }
+      Navigator.pop(context); // Close loading dialog
 
-        if (prepared == null) {
-          throw Exception(
-            'Photo ${i + 1} ($pose): use one clear face, good light, and eyes open.',
-          );
-        }
+      // Check backend response
+      if (result['success'] != true) {
+        throw Exception(result['message'] ?? 'Backend registration failed');
+      }
 
-        final embeddingField = prepared.embeddingPayload['embedding'];
-        if (embeddingField is! List) {
-          throw Exception('Invalid embedding for photo ${i + 1}');
-        }
-        final embedding = List<double>.from(
-          embeddingField.map((e) => (e as num).toDouble()),
+      print('✅ Backend generated 512-D embeddings');
+      final embeddings = result['embeddings'] as Map<String, dynamic>?;
+      if (embeddings == null) {
+        throw Exception('No embeddings in response');
+      }
+
+      // Extract embeddings from backend response
+      final frontEmbedding = List<double>.from(
+        (embeddings['face_embedding_front'] as List?)?.map((x) => (x as num).toDouble()) ?? [],
+      );
+      final leftEmbedding = List<double>.from(
+        (embeddings['face_embedding_left'] as List?)?.map((x) => (x as num).toDouble()) ?? [],
+      );
+      final rightEmbedding = List<double>.from(
+        (embeddings['face_embedding_right'] as List?)?.map((x) => (x as num).toDouble()) ?? [],
+      );
+      final avgEmbedding = List<double>.from(
+        (embeddings['face_embedding_average'] as List?)?.map((x) => (x as num).toDouble()) ?? [],
+      );
+
+      print('✅ Front: ${frontEmbedding.length}-D');
+      print('✅ Left: ${leftEmbedding.length}-D');
+      print('✅ Right: ${rightEmbedding.length}-D');
+      print('✅ Average: ${avgEmbedding.length}-D');
+
+      // 💾 Save 512-D embeddings to database
+      print('💾 Saving 512-D ArcFace embeddings to database...');
+      await appDb.from('students').update({
+        'face_embedding_front': jsonEncode(frontEmbedding),
+        'face_embedding_left': jsonEncode(leftEmbedding),
+        'face_embedding_right': jsonEncode(rightEmbedding),
+        'face_embedding_average': jsonEncode(avgEmbedding),
+        'face_registration_status': 'registered',
+        'is_face_real': true,
+        'face_registered_at': DateTime.now().toIso8601String(),
+      }).eq('sr_no', widget.srNo);
+
+      print('✅ 512-D ArcFace embeddings saved! (HIGH ACCURACY FOR ATTENDANCE)');
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('✅ ${widget.studentName} registered with 3 embeddings!'),
+            backgroundColor: Colors.green,
+            duration: const Duration(seconds: 2),
+          ),
         );
-        angleSamples.add((embedding: embedding, pose: pose));
       }
 
-      if (frontWorkPath == null || angleSamples.length != 3) {
-        throw Exception('All 3 angle photos are required.');
+      widget.onRegistrationSuccess();
+      if (mounted) {
+        Navigator.pop(context, true);
       }
-
-      var photoBytes = await File(frontWorkPath).readAsBytes();
-      final tinyThumbnail =
-          await PhotoCompressionService.createTinyThumbnail(photoBytes);
-      photoBytes = await PhotoCompressionService.compressPhotoBytes(photoBytes);
-
-      final timestamp = DateTime.now().millisecondsSinceEpoch.toString();
-      final photoPath =
-          'registrations/${widget.instituteId}/${widget.studentId}_$timestamp.jpg';
-      final photoUrl = await B2BStorageService.uploadFile(
-        photoPath,
-        photoBytes,
-        contentType: 'image/jpeg',
-      );
-
-      final currentStudent = await appDb
-          .from('students')
-          .select(
-            'photo_version, face_photo_url, registration_photo_path, face_photo_changed_once, face_embedding',
-          )
-          .eq('id', widget.studentId)
-          .maybeSingle();
-      final int newVersion = (currentStudent?['photo_version'] as int? ?? 0) + 1;
-      final mergedEmbeddingPayload = buildTripleAngleEnrollmentPayload(angleSamples);
-
-      await _persistRegistration(
-        photoUrl: photoUrl,
-        photoPath: photoPath,
-        tinyThumbnail: tinyThumbnail,
-        newVersion: newVersion,
-        mergedEmbeddingPayload: mergedEmbeddingPayload,
-        primaryEmbedding: angleSamples.first.embedding,
-        currentStudent: currentStudent,
-        successTitle: _allowReregister ? 'Face updated' : 'Registration complete',
-        successMessage:
-            '${widget.studentName}\'s face was saved from 3 photos (front, left, right).\n\nReady for auto attendance.',
-        duplicateCheckEmbeddings:
-            angleSamples.map((s) => s.embedding).toList(),
-      );
-    } on DuplicateFaceRegistrationException catch (e) {
-      if (!mounted) return;
-      ProfessionalMessaging.showError(
-        context,
-        title: 'Duplicate face',
-        message: e.message,
-      );
     } catch (e) {
-      if (kDebugMode) debugPrint('❌ Face registration error: $e');
-      if (!mounted) return;
-      ProfessionalMessaging.showError(
-        context,
-        title: 'Registration failed',
-        message: ProfessionalMessaging.messageForFaceProcessingError(e),
-      );
+      if (kDebugMode) debugPrint('❌ Registration error: $e');
+      if (mounted) {
+        Navigator.of(context).pop(); // Close loading dialog if open
+        ProfessionalMessaging.showError(
+          context,
+          title: 'Registration failed',
+          message: e.toString(),
+        );
+      }
     } finally {
       if (mounted) setState(() => _isSaving = false);
     }
