@@ -30,6 +30,7 @@ class _LiveAntiSpoofCameraScreenState extends State<LiveAntiSpoofCameraScreen> {
   late FaceDetector _faceDetector;
   bool _cameraInitialized = false;
   List<CameraDescription> _cameras = [];
+  int _currentCameraIndex = 0; // 0 = front, 1 = back
 
   // UI State
   String _currentStage = 'Initializing...';
@@ -65,20 +66,12 @@ class _LiveAntiSpoofCameraScreenState extends State<LiveAntiSpoofCameraScreen> {
         return;
       }
 
-      final frontCamera = _cameras.firstWhere(
-        (camera) => camera.lensDirection == CameraLensDirection.front,
-        orElse: () => _cameras[0],
-      );
-      print('✅ [INIT] Using camera: ${frontCamera.name}');
+      // Print available cameras
+      for (var i = 0; i < _cameras.length; i++) {
+        print('   Camera $i: ${_cameras[i].name} (${_cameras[i].lensDirection})');
+      }
 
-      _cameraController = CameraController(
-        frontCamera,
-        ResolutionPreset.high,
-      );
-
-      print('📷 [INIT] Initializing CameraController...');
-      await _cameraController.initialize();
-      print('✅ [INIT] CameraController initialized');
+      await _setupCamera(_currentCameraIndex);
 
       print('🔍 [INIT] Initializing FaceDetector...');
       _faceDetector = FaceDetector(
@@ -98,6 +91,52 @@ class _LiveAntiSpoofCameraScreenState extends State<LiveAntiSpoofCameraScreen> {
     } catch (e) {
       print('❌ [INIT] Initialization error: $e');
       _setStatus('❌ Error: $e');
+    }
+  }
+
+  Future<void> _setupCamera(int cameraIndex) async {
+    try {
+      // Dispose old controller if exists
+      if (_cameraInitialized) {
+        await _cameraController.dispose();
+      }
+
+      final camera = _cameras[cameraIndex];
+      print('📷 [CAMERA] Setting up camera: ${camera.name}');
+
+      _cameraController = CameraController(
+        camera,
+        ResolutionPreset.high,
+      );
+
+      await _cameraController.initialize();
+      print('✅ [CAMERA] Camera initialized: ${camera.lensDirection}');
+    } catch (e) {
+      print('❌ [CAMERA] Setup error: $e');
+      throw e;
+    }
+  }
+
+  Future<void> _switchCamera() async {
+    if (_cameras.length < 2) {
+      print('⚠️ Only ${_cameras.length} camera available');
+      return;
+    }
+
+    try {
+      _currentCameraIndex = (_currentCameraIndex + 1) % _cameras.length;
+      print('🔄 [CAMERA] Switching to camera $_currentCameraIndex');
+
+      await _setupCamera(_currentCameraIndex);
+
+      setState(() {
+        _cameraInitialized = true;
+      });
+
+      print('✅ [CAMERA] Camera switched!');
+    } catch (e) {
+      print('❌ [CAMERA] Switch error: $e');
+      _setStatus('❌ Camera switch error: $e');
     }
   }
 
@@ -439,6 +478,25 @@ class _LiveAntiSpoofCameraScreenState extends State<LiveAntiSpoofCameraScreen> {
                   ),
                 ),
                 const SizedBox(height: 12),
+                // SWITCH Camera Button
+                if (_cameras.length > 1)
+                  ElevatedButton.icon(
+                    onPressed: _isCapturing ? null : _switchCamera,
+                    icon: const Icon(Icons.flip_camera_android),
+                    label: const Text('SWITCH CAMERA'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.blue,
+                      disabledBackgroundColor: Colors.grey,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 30,
+                        vertical: 12,
+                      ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                  ),
+                if (_cameras.length > 1) const SizedBox(height: 12),
                 // EXIT Button
                 ElevatedButton(
                   onPressed: () => Navigator.pop(context),
