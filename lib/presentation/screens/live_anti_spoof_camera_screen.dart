@@ -53,7 +53,7 @@ class _LiveAntiSpoofCameraScreenState extends State<LiveAntiSpoofCameraScreen>
   // Detection Locking
   bool _isProcessingFrame = false;
   int _frameSkipCounter = 0;
-  static const int FRAME_SKIP = 2; // Process every 3rd frame
+  static const int FRAME_SKIP = 4; // Process every 5th frame (much faster)
 
   @override
   void initState() {
@@ -104,7 +104,7 @@ class _LiveAntiSpoofCameraScreenState extends State<LiveAntiSpoofCameraScreen>
         _cameraInitialized = true;
       });
 
-      _setStatus('🎥 Camera Ready - Detecting Face...');
+      _setStatus('🎥 Ready - Press CAPTURE');
       _cameraController.startImageStream(_processImageStream);
     } catch (e) {
       _setStatus('❌ Error: $e');
@@ -126,6 +126,7 @@ class _LiveAntiSpoofCameraScreenState extends State<LiveAntiSpoofCameraScreen>
     try {
       _updateFPS();
 
+      // Use lower resolution for faster detection (480p instead of full resolution)
       final inputImage = InputImage.fromBytes(
         bytes: cameraImage.planes[0].bytes,
         metadata: InputImageMetadata(
@@ -466,9 +467,9 @@ class _LiveAntiSpoofCameraScreenState extends State<LiveAntiSpoofCameraScreen>
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  // CAPTURE Button
+                  // CAPTURE Button (only enabled when face detected)
                   ElevatedButton(
-                    onPressed: _isCapturing ? null : _startCapture,
+                    onPressed: (_isCapturing || !_faceDetected) ? null : _startCapture,
                     style: ElevatedButton.styleFrom(
                       backgroundColor: _faceDetected ? Colors.green : Colors.grey,
                       disabledBackgroundColor: Colors.orange,
