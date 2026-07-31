@@ -357,36 +357,50 @@ async def _get_embeddings_for_institute(institute_id: str):
         print(f"🔄 Loading embeddings for institute {institute_id}...")
 
         response = supabase.table('students').select(
-            'id, sr_no, fname, mname, lname, face_embedding_average'
+            'id, sr_no, fname, mname, lname, face_embedding_front, face_embedding_left, face_embedding_right'
         ).eq('institute_id', institute_id).eq('face_registration_status', 'registered').execute()
 
         students_data = response.data if response.data else []
         students = []
 
         for student in students_data:
-            embedding_data = student.get('face_embedding_average')
-            if not embedding_data:
-                continue
+            # Load all 3 embeddings (front, left, right)
+            embedding_front_data = student.get('face_embedding_front')
+            embedding_left_data = student.get('face_embedding_left')
+            embedding_right_data = student.get('face_embedding_right')
 
-            try:
-                if isinstance(embedding_data, str):
-                    embedding = np.array(json.loads(embedding_data), dtype='float32')
-                else:
-                    embedding = np.array(embedding_data, dtype='float32')
-
-                if embedding.shape[0] != 512:
+            # Parse embeddings
+            embeddings = {}
+            for angle, data in [('front', embedding_front_data), ('left', embedding_left_data), ('right', embedding_right_data)]:
+                if not data:
+                    embeddings[angle] = None
                     continue
+                try:
+                    if isinstance(data, str):
+                        embedding = np.array(json.loads(data), dtype='float32')
+                    else:
+                        embedding = np.array(data, dtype='float32')
 
-                students.append({
-                    'sr_no': student.get('sr_no'),
-                    'fname': student.get('fname', ''),
-                    'mname': student.get('mname', ''),
-                    'lname': student.get('lname', ''),
-                    'id': student.get('id'),
-                    'embedding': embedding,
-                })
-            except Exception as e:
+                    if embedding.shape[0] != 512:
+                        embeddings[angle] = None
+                        continue
+                    embeddings[angle] = embedding
+                except Exception:
+                    embeddings[angle] = None
+
+            # Only add if at least ONE embedding exists
+            if not any(embeddings.values()):
                 continue
+
+            students.append({
+                'sr_no': student.get('sr_no'),
+                'fname': student.get('fname', ''),
+                'mname': student.get('mname', ''),
+                'lname': student.get('lname', ''),
+                'id': student.get('id'),
+                'embeddings': embeddings,  # Store all 3
+            })
+
 
         # Cache it
         embedding_cache['by_institute'][institute_id] = {
@@ -1746,9 +1760,11 @@ async def mark_attendance_auto(
 
             SIMILARITY_THRESHOLD = 0.70
             valid_students = []
-            embeddings_matrix = []
+            embeddings_matrix_front = []
+            embeddings_matrix_left = []
+            embeddings_matrix_right = []
 
-            # Embeddings already parsed in cache, just collect them
+            # Parse all 3 embeddings for each student
             for student in students:
                 fname = student.get('fname', '')
                 mname = student.get('mname', '')
@@ -1756,23 +1772,32 @@ async def mark_attendance_auto(
                 name_parts = [p for p in [fname, mname, lname] if p]
                 full_name = ' '.join(name_parts)
 
-                embedding = student.get('embedding')
-                if embedding is None:
-                    print(f"⚠️ Student {full_name}: No embedding in cache")
+                embeddings = student.get('embeddings', {})
+                if not embeddings:
+                    print(f"⚠️ Student {full_name}: No embeddings in cache")
+                    continue
+
+                # Check if at least one embedding exists
+                emb_front = embeddings.get('front')
+                emb_left = embeddings.get('left')
+                emb_right = embeddings.get('right')
+
+                if not any([emb_front, emb_left, emb_right]):
+                    print(f"⚠️ Student {full_name}: No valid embeddings")
                     continue
 
                 try:
-                    if embedding.shape[0] != 512:
-                        print(f"⚠️ Student {full_name}: Wrong dimension {embedding.shape[0]}")
-                        continue
-
                     valid_students.append(student)
-                    embeddings_matrix.append(embedding)
+                    # Add embeddings (None padding if not available)
+                    embeddings_matrix_front.append(emb_front if emb_front is not None else np.zeros(512, dtype='float32'))
+                    embeddings_matrix_left.append(emb_left if emb_left is not None else np.zeros(512, dtype='float32'))
+                    embeddings_matrix_right.append(emb_right if emb_right is not None else np.zeros(512, dtype='float32'))
                 except Exception as e:
-                    print(f"❌ Error with embedding for {full_name}: {e}")
+                    print(f"❌ Error processing embeddings for {full_name}: {e}")
+                    valid_students.pop()
                     continue
 
-            if not embeddings_matrix:
+            if not valid_students:
                 logger.warning(f"❌ No valid embeddings found for institute {institute_id}")
                 return {
                     "error": "No matching student found",
@@ -1783,43 +1808,60 @@ async def mark_attendance_auto(
                     "record_type": None
                 }
 
-            # ⚡ Batch calculate all similarities at once (fast!)
-            embeddings_matrix = np.array(embeddings_matrix, dtype='float32')
+            # ⚡ Batch calculate similarities for all 3 angles
+            embeddings_matrix_front = np.array(embeddings_matrix_front, dtype='float32')
+            embeddings_matrix_left = np.array(embeddings_matrix_left, dtype='float32')
+            embeddings_matrix_right = np.array(embeddings_matrix_right, dtype='float32')
 
             # 🔍 Debug: Check embedding values in detail
-            print(f"\n🔎 EMBEDDING DEBUG:")
+            print(f"\n🔎 QUERY EMBEDDING DEBUG:")
             print(f"   Query embedding shape: {embedding.shape}")
             print(f"   Query embedding norm: {np.linalg.norm(embedding):.6f}")
             print(f"   Query embedding min/max: {np.min(embedding):.6f} / {np.max(embedding):.6f}")
             print(f"   Query embedding sum: {np.sum(embedding):.6f}")
             print(f"   Query embedding first 10: {embedding[:10]}")
-            print(f"   Query embedding FULL: {embedding}")
 
-            print(f"\n   Matrix shape: {embeddings_matrix.shape}")
-            if len(embeddings_matrix) > 0:
-                print(f"   First student embedding norm: {np.linalg.norm(embeddings_matrix[0]):.6f}")
-                print(f"   First student min/max: {np.min(embeddings_matrix[0]):.6f} / {np.max(embeddings_matrix[0]):.6f}")
-                print(f"   First student sum: {np.sum(embeddings_matrix[0]):.6f}")
-                print(f"   First student first 10: {embeddings_matrix[0][:10]}")
-                print(f"   First student FULL: {embeddings_matrix[0]}")
+            print(f"\n🔎 DATABASE EMBEDDINGS DEBUG:")
+            print(f"   Front matrix shape: {embeddings_matrix_front.shape}")
+            print(f"   Left matrix shape: {embeddings_matrix_left.shape}")
+            print(f"   Right matrix shape: {embeddings_matrix_right.shape}")
+            if len(embeddings_matrix_front) > 0:
+                print(f"   First student front norm: {np.linalg.norm(embeddings_matrix_front[0]):.6f}")
+                print(f"   First student left norm: {np.linalg.norm(embeddings_matrix_left[0]):.6f}")
+                print(f"   First student right norm: {np.linalg.norm(embeddings_matrix_right[0]):.6f}")
 
-                # Check if query == first student
-                if np.allclose(embedding, embeddings_matrix[0]):
+                # Check if query == first student (all 3 angles)
+                if (np.allclose(embedding, embeddings_matrix_front[0]) or
+                    np.allclose(embedding, embeddings_matrix_left[0]) or
+                    np.allclose(embedding, embeddings_matrix_right[0])):
                     print(f"   ⚠️ QUERY IS IDENTICAL TO FIRST STUDENT!")
                 else:
                     print(f"   ✅ Query is different from first student")
 
-            similarities = cosine_similarity(
-                embedding.reshape(1, -1),
-                embeddings_matrix
-            )[0]
+            # ⚡ Compute cosine similarity with all 3 angles
+            similarities_front = cosine_similarity(embedding.reshape(1, -1), embeddings_matrix_front)[0]
+            similarities_left = cosine_similarity(embedding.reshape(1, -1), embeddings_matrix_left)[0]
+            similarities_right = cosine_similarity(embedding.reshape(1, -1), embeddings_matrix_right)[0]
 
-            print(f"\n   Similarity values: min={np.min(similarities):.6f}, max={np.max(similarities):.6f}, mean={np.mean(similarities):.6f}")
-            print(f"   All similarities: {similarities}")
+            # 🔥 USE MAX SIMILARITY (best match from any angle)
+            max_similarities = np.maximum(similarities_front, np.maximum(similarities_left, similarities_right))
+
+            print(f"\n   Front similarities: min={np.min(similarities_front):.6f}, max={np.max(similarities_front):.6f}")
+            print(f"   Left similarities: min={np.min(similarities_left):.6f}, max={np.max(similarities_left):.6f}")
+            print(f"   Right similarities: min={np.min(similarities_right):.6f}, max={np.max(similarities_right):.6f}")
+            print(f"   MAX similarities: min={np.min(max_similarities):.6f}, max={np.max(max_similarities):.6f}")
 
             # Find best match
-            best_idx = np.argmax(similarities)
-            best_similarity = float(similarities[best_idx])
+            best_idx = np.argmax(max_similarities)
+            best_similarity = float(max_similarities[best_idx])
+
+            # Debug: Show which angle gave the best match
+            best_from = 'front' if similarities_front[best_idx] == best_similarity else ('left' if similarities_left[best_idx] == best_similarity else 'right')
+            print(f"\n✅ Best match from angle: {best_from}")
+            print(f"   Front: {similarities_front[best_idx]:.4f}")
+            print(f"   Left: {similarities_left[best_idx]:.4f}")
+            print(f"   Right: {similarities_right[best_idx]:.4f}")
+            print(f"   MAX (used): {best_similarity:.4f}")
 
             best_match = valid_students[best_idx]
             fname = best_match.get('fname', '')
@@ -1830,11 +1872,11 @@ async def mark_attendance_auto(
             student_name = ' '.join(name_parts)
 
             # 📊 Debug: Show top 5 scores
-            print(f"\n🔎 SIMILARITY SCORES (Threshold: {SIMILARITY_THRESHOLD})")
+            print(f"\n🔎 SIMILARITY SCORES (Threshold: {SIMILARITY_THRESHOLD}) - Using MAX of 3 angles")
             print(f"   Checked {len(valid_students)} students in institute {institute_id}")
-            top_indices = np.argsort(-similarities)[:5]
+            top_indices = np.argsort(-max_similarities)[:5]
             for i, idx in enumerate(top_indices, 1):
-                s = float(similarities[idx])
+                s = float(max_similarities[idx])
                 stu = valid_students[idx]
                 fname = stu.get('fname', '')
                 mname = stu.get('mname', '')
@@ -1842,7 +1884,11 @@ async def mark_attendance_auto(
                 name_parts = [p for p in [fname, mname, lname] if p]
                 s_name = ' '.join(name_parts)
                 status = "✅ MATCH" if s >= SIMILARITY_THRESHOLD else "❌ Below"
+                s_front = similarities_front[idx]
+                s_left = similarities_left[idx]
+                s_right = similarities_right[idx]
                 print(f"   {i}. {s_name}: {s:.4f} {status}")
+                print(f"      (F:{s_front:.4f} L:{s_left:.4f} R:{s_right:.4f})")
             print()
 
             if best_similarity < SIMILARITY_THRESHOLD:

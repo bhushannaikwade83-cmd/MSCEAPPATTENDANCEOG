@@ -99,13 +99,69 @@ class FaceRecognitionService:
             logger.info("💡 Tip: Ensure you have internet connection for first-time model download")
             raise RuntimeError(f"Failed to initialize RetinaFace + ArcFace models: {str(e)}") from e
         
+    def _align_face(self, face: object, image_rgb: np.ndarray) -> Optional[np.ndarray]:
+        """
+        Step 1.5: Align face for better embedding generation
+
+        Args:
+            face: Face object with landmarks
+            image_rgb: RGB image
+
+        Returns:
+            Aligned face image as numpy array
+        """
+        try:
+            import cv2
+            from skimage import transform as skimage_transform
+
+            if not hasattr(face, 'landmark_2d_106') or face.landmark_2d_106 is None:
+                # If no landmarks, return original
+                print("⚠️ No landmarks for alignment, using original face")
+                return image_rgb
+
+            # Extract landmarks
+            landmarks = face.landmark_2d_106  # 106 facial landmarks from InsightFace
+
+            # Define reference landmarks for alignment (standard face template)
+            # Using 5 key landmarks for alignment: left_eye, right_eye, nose, left_mouth, right_mouth
+            if len(landmarks) >= 106:
+                # Key landmarks indices: left_eye=33, right_eye=263, nose=1, left_mouth=61, right_mouth=291
+                src_pts = np.float32([
+                    landmarks[33],      # left eye
+                    landmarks[263],     # right eye
+                    landmarks[1]        # nose
+                ])
+
+                # Reference points for aligned face (112x112)
+                dst_pts = np.float32([
+                    [30.29459953, 51.6963877],      # left eye
+                    [65.53179932, 51.50139999],     # right eye
+                    [48.02519989, 71.73660278]      # nose
+                ])
+
+                # Get affine transformation
+                M = cv2.getAffineTransform(src_pts, dst_pts)
+
+                # Align face to standard pose
+                aligned_face = cv2.warpAffine(image_rgb, M, (112, 112))
+
+                print(f"✅ [ALIGN] Face aligned to 112x112 standard pose")
+                return aligned_face
+            else:
+                print("⚠️ Not enough landmarks for alignment")
+                return image_rgb
+
+        except Exception as e:
+            logger.warning(f"⚠️ Face alignment error: {e}, using original image")
+            return image_rgb
+
     def _detect_face_retinaface(self, image_rgb: np.ndarray) -> Optional[object]:
         """
         Step 1: Detect face using RetinaFace detector
-        
+
         Args:
             image_rgb: RGB image as numpy array
-            
+
         Returns:
             Face object with bounding box, landmarks, and embedding, or None if no face detected
         """
@@ -129,6 +185,7 @@ class FaceRecognitionService:
             selected_face = faces[0]
             print(f"🔍 [DETECTION DEBUG] Selected face:")
             print(f"   BBox: {selected_face.bbox}")
+            print(f"   Landmarks: {len(selected_face.landmark_2d_106) if hasattr(selected_face, 'landmark_2d_106') and selected_face.landmark_2d_106 is not None else 0}")
             print(f"   Embedding shape: {selected_face.embedding.shape}")
             print(f"   Embedding norm (raw): {np.linalg.norm(selected_face.embedding):.6f}")
 
@@ -279,28 +336,28 @@ class FaceRecognitionService:
             # 🔥 STEP 9: RetinaFace Detection
             print("🔍 Step 1: RetinaFace face detection...")
             face = self._detect_face_retinaface(image_rgb)
-            
+
             if face is None:
                 logger.warning("⚠️ RetinaFace: No face detected with original orientation")
                 print("⚠️ RetinaFace: No face detected - trying rotations (common Flutter camera issue)...")
-                
+
                 # Try rotations if no face detected
                 rotations_to_try = [
                     (cv2.ROTATE_90_CLOCKWISE, "90° clockwise"),
                     (cv2.ROTATE_90_COUNTERCLOCKWISE, "90° counter-clockwise"),
                     (cv2.ROTATE_180, "180°")
                 ]
-                
+
                 for rotation_code, rotation_name in rotations_to_try:
                     try:
                         print(f"🔄 RetinaFace: Trying rotation {rotation_name}...")
                         rotated_image = cv2.rotate(original_image, rotation_code)
                         rotated_rgb = cv2.cvtColor(rotated_image, cv2.COLOR_BGR2RGB)
-                        
+
                         # Resize if needed
                         if rotated_rgb.shape[0] < 320 or rotated_rgb.shape[1] < 320:
                             rotated_rgb = cv2.resize(rotated_rgb, (640, 640))
-                        
+
                         # Try RetinaFace detection with rotated image
                         face = self._detect_face_retinaface(rotated_rgb)
                         if face is not None:
@@ -311,7 +368,7 @@ class FaceRecognitionService:
                     except Exception as e:
                         logger.debug(f"⚠️ Rotation {rotation_name} failed: {e}")
                         continue
-            
+
             if face is None:
                 error_msg = "RetinaFace: No face detected in image. Please ensure:\n" \
                            "• Face is clearly visible and fills 30-50% of frame\n" \
@@ -322,9 +379,13 @@ class FaceRecognitionService:
                 logger.error(f"❌ {error_msg}")
                 print("❌ RetinaFace: No face detected - check debug_received.jpg")
                 raise ValueError(error_msg)
-            
-            # 🔥 STEP 10: ArcFace Embedding Extraction
-            print("🔍 Step 2: ArcFace embedding extraction...")
+
+            # 🔥 STEP 10: Face Alignment
+            print("🔍 Step 1.5: Face alignment...")
+            aligned_face = self._align_face(face, image_rgb)
+
+            # 🔥 STEP 11: ArcFace Embedding Extraction (on aligned face)
+            print("🔍 Step 2: ArcFace embedding extraction (on aligned face)...")
             embedding = self._extract_embedding_arcface(face)
             
             if embedding is None:
