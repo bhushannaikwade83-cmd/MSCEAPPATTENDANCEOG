@@ -61,15 +61,15 @@ class AntiSpoofService:
 
             # Threshold-based decision
             # High Laplacian variance + normal brightness = REAL
-            is_real = (laplacian_var > 100) and (50 < brightness < 200)
+            is_real = bool((laplacian_var > 100) and (50 < brightness < 200))
 
             # Confidence based on Laplacian variance
-            confidence = min(1.0, laplacian_var / 500.0)
+            confidence = float(min(1.0, laplacian_var / 500.0))
 
             return {
                 'is_real': is_real,
-                'confidence': float(confidence),
-                'score': float(confidence),
+                'confidence': confidence,
+                'score': confidence,
                 'label': 'live' if is_real else 'spoof',
                 'details': {
                     'laplacian_variance': float(laplacian_var),
