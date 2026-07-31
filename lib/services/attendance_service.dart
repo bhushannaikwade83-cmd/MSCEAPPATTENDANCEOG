@@ -76,4 +76,52 @@ class AttendanceService {
       return [];
     }
   }
+
+  /// Check today's attendance status and determine if next should be entry or exit
+  /// Returns: 'entry' if no record, 'exit' if entry exists, 'already_exit' if exit exists
+  static Future<String> getNextRecordType(
+    String srNo,
+    String instituteId,
+  ) async {
+    try {
+      print('🔍 [ATTENDANCE] Checking record type for $srNo...');
+
+      final today = DateTime.now().toString().split(' ')[0];
+
+      // Get today's records for this student
+      final response = await supabase
+          .from('attendance')
+          .select('record_type, marked_time')
+          .eq('sr_no', srNo)
+          .eq('institute_id', instituteId)
+          .eq('attendance_date', today)
+          .order('marked_time', ascending: false)
+          .execute();
+
+      final records = List<Map<String, dynamic>>.from(response.data ?? []);
+
+      if (records.isEmpty) {
+        print('   📌 No record found → ENTRY');
+        return 'entry';
+      }
+
+      // Get the latest record
+      final latestRecord = records.first;
+      final lastRecordType = latestRecord['record_type'] as String?;
+      final lastTime = latestRecord['marked_time'] as String?;
+
+      if (lastRecordType == 'entry') {
+        print('   ✅ Entry found at $lastTime → SHOULD BE EXIT');
+        return 'exit';
+      } else if (lastRecordType == 'exit') {
+        print('   ⚠️ Exit already marked at $lastTime → ALREADY DONE');
+        return 'already_exit';
+      }
+
+      return 'entry'; // Default
+    } catch (e) {
+      print('❌ [ATTENDANCE] Error checking record type: $e');
+      return 'entry'; // Default to entry on error
+    }
+  }
 }

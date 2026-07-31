@@ -5,6 +5,7 @@ import 'package:google_mlkit_face_detection/google_mlkit_face_detection.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../services/anti_spoof_api_service.dart';
 import '../../services/attendance_photo_service.dart';
+import '../../services/attendance_service.dart';
 
 class LiveAntiSpoofCameraScreen extends StatefulWidget {
   static const routeName = '/live-anti-spoof-camera';
@@ -179,7 +180,31 @@ class _LiveAntiSpoofCameraScreenState extends State<LiveAntiSpoofCameraScreen> {
             _matchedStudentName = result['student_name'] ?? 'Unknown';
             _similarityScore = result['similarity'] ?? 0.0;
             _srNo = result['sr_no'] ?? 'N/A';
-            final recordType = result['record_type'] ?? 'entry';
+
+            // 🔍 CHECK: Auto-detect entry vs exit based on today's attendance
+            print('🔍 [ATTENDANCE] Checking if entry or exit...');
+            String recordType = 'entry'; // Default
+            try {
+              final nextType = await AttendanceService.getNextRecordType(
+                _srNo,
+                '99099',
+              );
+
+              if (nextType == 'already_exit') {
+                print('⚠️ [ATTENDANCE] Already marked exit today!');
+                setState(() {
+                  _currentStage = '⚠️ Already marked EXIT today';
+                });
+                await Future.delayed(const Duration(seconds: 2));
+                _resetUI();
+                return;
+              }
+
+              recordType = nextType; // 'entry' or 'exit'
+            } catch (e) {
+              print('⚠️ [ATTENDANCE] Check failed, defaulting to entry: $e');
+              recordType = 'entry';
+            }
 
             print('✅ [MATCH] Student found: $_matchedStudentName');
             print('📊 [MATCH] SR No: $_srNo');
