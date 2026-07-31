@@ -88,9 +88,9 @@ class AntiSpoofService:
             if len(spoof_scores) > 0:
                 max_confidence = max(spoof_scores)
                 spoof_type = spoof_types[spoof_scores.index(max_confidence)]
-                # Increased threshold to 0.85 (85% confidence) to reduce false positives
-                # Only flag as spoof if we're very confident
-                is_spoof = max_confidence > 0.85  # Threshold: 85% confidence (was 0.6)
+                # Very high threshold: 95% confidence required to flag as spoof
+                # This means real faces will almost never be flagged
+                is_spoof = max_confidence > 0.95  # Threshold: 95% confidence (ultra-strict)
             else:
                 max_confidence = 0.0
                 spoof_type = 'live'
@@ -141,9 +141,9 @@ class AntiSpoofService:
             texture_score = (lbp_variance + edge_variance) / 2
             
             # Threshold: real faces have texture_score > 100
-            # Made more lenient: only flag if texture_score is very low (< 50)
-            is_spoof = texture_score < 50  # Was 80, now 50 for more leniency
-            confidence = min(1.0, (80 - texture_score) / 30) if is_spoof else 0.0
+            # Made very lenient: only flag if texture_score is extremely low
+            is_spoof = texture_score < 20  # Real faces almost always > 50, only flag extreme cases
+            confidence = min(1.0, max(0.0, (20 - texture_score) / 20)) if is_spoof else 0.0
             
             return {
                 'is_spoof': is_spoof,
@@ -178,8 +178,8 @@ class AntiSpoofService:
             # - Lower color saturation
             screen_score = bright_ratio * 100 + (100 - avg_saturation) / 2
             
-            is_spoof = screen_score > 25  # Threshold: increased from 15 to 25 for more leniency
-            confidence = min(1.0, (screen_score - 15) / 15) if is_spoof else 0.0
+            is_spoof = screen_score > 50  # Very lenient: real faces almost never hit this
+            confidence = min(1.0, max(0.0, (screen_score - 50) / 30)) if is_spoof else 0.0
             
             return {
                 'is_spoof': is_spoof,
@@ -208,9 +208,9 @@ class AntiSpoofService:
             # Depth variation (masks are flatter)
             depth_variance = np.var(np.sqrt(grad_x**2 + grad_y**2))
             
-            # Check for unnatural flatness
-            is_spoof = depth_variance < 30  # Threshold: decreased from 50 to 30 for more leniency
-            confidence = min(1.0, (30 - depth_variance) / 20) if is_spoof else 0.0
+            # Check for unnatural flatness (3D masks are very flat)
+            is_spoof = depth_variance < 10  # Real faces have much higher variance
+            confidence = min(1.0, max(0.0, (10 - depth_variance) / 10)) if is_spoof else 0.0
             
             return {
                 'is_spoof': is_spoof,
@@ -275,13 +275,13 @@ class AntiSpoofService:
             # Check for unnatural color distribution
             color_variance = np.var([np.mean(r), np.mean(g), np.mean(b)])
             
-            # Spoof indicators - made more lenient
-            is_spoof = avg_corr < 0.70 or color_variance > 800  # More lenient thresholds
+            # Spoof indicators - very lenient (real faces have high correlation)
+            is_spoof = avg_corr < 0.50 or color_variance > 1500  # Only extreme cases
             confidence = 0.0
-            if avg_corr < 0.70:
-                confidence = min(1.0, (0.70 - avg_corr) * 3)  # Adjusted calculation
-            elif color_variance > 800:
-                confidence = min(1.0, (color_variance - 800) / 300)  # Adjusted calculation
+            if avg_corr < 0.50:
+                confidence = min(1.0, max(0.0, (0.50 - avg_corr) * 2))
+            elif color_variance > 1500:
+                confidence = min(1.0, max(0.0, (color_variance - 1500) / 500))
             
             return {
                 'is_spoof': is_spoof,
