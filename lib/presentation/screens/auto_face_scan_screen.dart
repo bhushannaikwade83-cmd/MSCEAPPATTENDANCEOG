@@ -862,10 +862,12 @@ class _AutoFaceScanScreenState extends State<AutoFaceScanScreen>
             bottom: 0,
             left: 0,
             right: 0,
+            height: 120,
             child: Container(
-              maxHeight: 120,
               color: Colors.black.withValues(alpha: 0.85),
-              border: Border(top: BorderSide(color: Colors.cyan, width: 2)),
+              decoration: BoxDecoration(
+                border: Border(top: BorderSide(color: Colors.cyan, width: 2)),
+              ),
               child: Column(
                 children: [
                   Padding(
