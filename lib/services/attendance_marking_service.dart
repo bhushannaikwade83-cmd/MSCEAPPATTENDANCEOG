@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:math' show sqrt;
 import 'package:flutter/foundation.dart' show debugPrint;
 import '../../core/app_db.dart';
 
@@ -109,7 +110,7 @@ class AttendanceMarkingService {
       norm2 += vec2[i] * vec2[i];
     }
 
-    final denominator = (norm1 * norm2).sqrt();
+    final denominator = sqrt(norm1 * norm2);
     if (denominator == 0) return 0;
 
     return dotProduct / denominator;

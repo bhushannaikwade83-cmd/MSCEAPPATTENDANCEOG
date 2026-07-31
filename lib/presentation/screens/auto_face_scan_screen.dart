@@ -1,4 +1,5 @@
 import 'dart:async' show unawaited;
+import 'dart:convert' show jsonDecode;
 import 'dart:ui';
 
 import 'package:camera/camera.dart';
@@ -21,13 +22,16 @@ import '../../core/theme/app_ui.dart';
 import '../../services/device_performance_service.dart';
 import '../../services/distance_check_service.dart'
     show DistanceCheckService, DistanceProfile, DistanceStatus;
-import '../../services/inline_student_attendance_service.dart';
+import '../../services/attendance_marking_service.dart';
 import '../../services/anti_spoof_service.dart';
 import '../../services/pre_capture_liveness_tracker.dart';
 import '../../services/production_face_pipeline_service.dart';
 import '../../services/student_face_match_index.dart';
+import '../../services/b2b_storage_service.dart';
+import '../../services/photo_compression_service.dart';
 import '../widgets/face_tracking_box_overlay.dart';
 import '../widgets/secure_network_image.dart';
+import 'dart:io';
 
 /// Auto attendance scan pipeline:
 /// Camera → ML Kit face detection → TFLite anti-spoof (MiniFAS) →
@@ -199,14 +203,6 @@ class _AutoFaceScanScreenState extends State<AutoFaceScanScreen>
         _scheduleWarmFaceCache(widget.instituteId!);
         await AntiSpoofService.initializeForAutoScan();
         await _initializeCamera();
-        if (mounted) {
-          unawaited(
-            InlineStudentAttendanceService.warmGpsForInstitute(
-              context,
-              widget.instituteId!,
-            ),
-          );
-        }
         return;
       }
 
@@ -226,14 +222,6 @@ class _AutoFaceScanScreenState extends State<AutoFaceScanScreen>
           _scheduleWarmFaceCache(instituteId);
           await AntiSpoofService.initializeForAutoScan();
           await _initializeCamera();
-          if (mounted) {
-            unawaited(
-              InlineStudentAttendanceService.warmGpsForInstitute(
-                context,
-                instituteId,
-              ),
-            );
-          }
           return;
         }
       }
@@ -590,22 +578,66 @@ class _AutoFaceScanScreenState extends State<AutoFaceScanScreen>
 
     try {
       final student = result.student!;
-      final srNo = student['sr_no']?.toString() ?? '';
       final studentId = student['id']?.toString();
+      final srNo = student['sr_no']?.toString() ?? '';
+      final studentName = student['name']?.toString() ?? student['student_name']?.toString() ?? '';
 
-      await InlineStudentAttendanceService.markForRoll(
-        context,
+      if (studentId == null || studentId.isEmpty) {
+        throw Exception('Student ID not found');
+      }
+
+      // Get embedding from student record
+      final studentRecord = await appDb
+          .from('students')
+          .select('id, institute_id, sr_no, fname, lname, mname, face_embedding_average')
+          .eq('id', studentId)
+          .single();
+
+      final embeddingJson = studentRecord['face_embedding_average'] as String?;
+      if (embeddingJson == null || embeddingJson.isEmpty) {
+        throw Exception('No face embedding found for student');
+      }
+
+      final embedding = List<double>.from(
+        jsonDecode(embeddingJson).map((x) => (x as num).toDouble()),
+      );
+
+      // Compress and upload photo to B2
+      final photoBytes = await PhotoCompressionService.compressPhoto(result.photoPath!);
+      final photoUrl = await B2BStorageService.uploadFile(
+        '$_instituteId/$studentName/photo-attendance/${DateTime.now().toIso8601String()}.jpg',
+        photoBytes,
+        contentType: 'image/jpeg',
+      );
+
+      debugPrint('📸 Photo uploaded: $photoUrl');
+
+      // Get constructed student name
+      final fname = studentRecord['fname'] ?? '';
+      final lname = studentRecord['lname'] ?? '';
+      final mname = studentRecord['mname'] ?? '';
+      final fullName = '$fname ${mname.isNotEmpty ? '$mname ' : ''}$lname'.trim();
+
+      // Mark entry attendance
+      final markResult = await AttendanceMarkingService.markAttendance(
+        studentId: studentId,
         instituteId: _instituteId!,
         srNo: srNo,
-        studentId: studentId,
-        preCapturedPhotoPath: result.photoPath,
-        productionPipelineVerified: true,
-        productionSimilarity: result.similarity,
+        studentName: fullName,
+        photoUrl: photoUrl,
+        embedding: embedding,
+        similarityScore: result.similarity ?? 0.0,
+        timestamp: DateTime.now(),
+        recordType: 'entry',
       );
+
+      if (!markResult['success']) {
+        throw Exception(markResult['message'] ?? 'Failed to mark attendance');
+      }
 
       if (mounted) {
         setState(() {
-          _attendanceStatus = 'Attendance marked';
+          _attendanceStatus = '✓ Entry marked';
           _statusMessage = 'Done — next student can scan';
           _lastAutoMarkedStudentId = studentId;
           _lastAutoMarkAt = DateTime.now();
@@ -623,9 +655,10 @@ class _AutoFaceScanScreenState extends State<AutoFaceScanScreen>
         }
       }
     } catch (e) {
+      debugPrint('❌ Attendance marking error: $e');
       if (mounted) {
         setState(() {
-          _attendanceStatus = 'Mark failed';
+          _attendanceStatus = '✗ Mark failed';
           _statusMessage = e.toString().split('\n').first;
         });
         _livenessTracker.reset();
