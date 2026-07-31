@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:google_mlkit_face_detection/google_mlkit_face_detection.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../services/anti_spoof_api_service.dart';
+import '../../services/attendance_photo_service.dart';
 
 class LiveAntiSpoofCameraScreen extends StatefulWidget {
   static const routeName = '/live-anti-spoof-camera';
@@ -242,7 +243,25 @@ class _LiveAntiSpoofCameraScreenState extends State<LiveAntiSpoofCameraScreen> {
       final now = DateTime.now();
       final instituteId = "99099"; // From your app
 
-      // Insert into attendance table
+      // 📸 STEP 1: Compress and upload photo to B2
+      String? photoUrl;
+      try {
+        print('   📸 Uploading compressed photo to B2...');
+        final photoFile = File(photoPath);
+        if (photoFile.existsSync()) {
+          photoUrl = await AttendancePhotoService.uploadAttendancePhoto(
+            photoFile: photoFile,
+            srNo: srNo,
+            instituteId: instituteId,
+            recordType: recordType,
+          );
+        }
+      } catch (e) {
+        print('   ⚠️ Photo upload failed: $e');
+        photoUrl = null;
+      }
+
+      // 💾 STEP 2: Save attendance record with photo URL
       await supabase.from('attendance').insert({
         'sr_no': srNo,
         'student_name': _matchedStudentName,
@@ -251,7 +270,7 @@ class _LiveAntiSpoofCameraScreenState extends State<LiveAntiSpoofCameraScreen> {
         'record_type': recordType, // 'entry' or 'exit'
         'marked_time': now.toIso8601String(),
         'similarity_score': _similarityScore,
-        'photo_url': photoPath, // Store local path or B2 URL
+        'photo_url': photoUrl, // B2 public URL (compressed, <100KB)
         'embedding': '[]', // Optional: store ArcFace embedding
         'status': 'present',
         'is_verified': _similarityScore > 0.75,
@@ -264,6 +283,7 @@ class _LiveAntiSpoofCameraScreenState extends State<LiveAntiSpoofCameraScreen> {
       print('   Date: ${now.toString().split(' ')[0]}');
       print('   Time: $now');
       print('   Similarity: ${(_similarityScore * 100).toStringAsFixed(1)}%');
+      print('   Photo URL: $photoUrl');
     } catch (e) {
       print('❌ [SAVE] Error saving attendance: $e');
       print('📍 [SAVE] Stack: ${StackTrace.current}');
