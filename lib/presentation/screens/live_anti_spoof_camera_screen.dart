@@ -115,6 +115,7 @@ class _LiveAntiSpoofCameraScreenState extends State<LiveAntiSpoofCameraScreen>
 
       final inputImage = InputImage.fromFilePath(picture.path);
       final faces = await _faceDetector.processImage(inputImage);
+      print('🟢 [FRAME] Captured and analyzed. Faces found: ${faces.length}');
 
       if (faces.isEmpty) {
         if (mounted) {
@@ -125,15 +126,18 @@ class _LiveAntiSpoofCameraScreenState extends State<LiveAntiSpoofCameraScreen>
           });
         }
       } else {
+        print('🔵 [FACE DETECTED] Found ${faces.length} face(s), calling spoof detection API...');
         setState(() => _faceDetected = true);
 
         final result = await AntiSpoofApiService.detectFace(imageFile);
+        print('🔵 [API RESPONSE] Got result: $result');
 
         if (!mounted) return;
 
         if (result.containsKey('error')) {
+          print('❌ [API ERROR] ${result['error']}');
           setState(() {
-            _status = 'API Error';
+            _status = 'API Error: ${result['error']}';
             _canCapture = false;
           });
         } else {
