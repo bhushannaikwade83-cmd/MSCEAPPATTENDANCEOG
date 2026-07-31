@@ -324,8 +324,8 @@ class VerifyResponse(BaseModel):
 async def startup_event():
     """Initialize services on startup"""
     logger.info("🚀 Starting Face Recognition API...")
-    # Lazy load model on first request to avoid startup timeout
-    # Only initialize vector_db (lightweight)
+
+    # Initialize vector_db (lightweight)
     if vector_db is not None:
         try:
             await vector_db.load_index()
@@ -334,7 +334,19 @@ async def startup_event():
             logger.warning(f"⚠️ Vector DB initialization failed (will retry): {e}")
     else:
         logger.warning("⚠️ Vector DB dependency unavailable at startup")
-    logger.info("✅ API ready! Model will load on first request.")
+
+    # Pre-warm AntiSpoofService model (critical for mobile endpoint)
+    logger.info("🔥 Pre-warming AntiSpoofService model...")
+    try:
+        anti_spoof_service = _ensure_anti_spoof_service()
+        if anti_spoof_service.initialized:
+            logger.info("✅ AntiSpoofService model ready!")
+        else:
+            logger.warning("⏳ AntiSpoofService model loading in background...")
+    except Exception as e:
+        logger.warning(f"⚠️ AntiSpoofService pre-warm failed: {e}")
+
+    logger.info("✅ API ready!")
 
 @app.get("/")
 async def root():
@@ -499,15 +511,20 @@ async def detect_face_spoof(
         print(f"✅ AntiSpoofService loaded, initialized: {anti_spoof_service_instance.initialized}")
 
         if not anti_spoof_service_instance.initialized:
-            err = "Anti-spoof model not initialized - TFLite model loading..."
-            print(f"⚠️ {err}")
-            logger.warning(err)
-            return {
-                "error": err,
-                "is_real": None,
-                "status": "model_loading",
-                "message": "Model is loading, please try again in a few seconds"
-            }
+            err = "Anti-spoof model loading - please retry in 10-30 seconds"
+            print(f"⏳ {err}")
+            logger.warning(f"⏳ {err}")
+            # Return HTTP 503 (Service Unavailable) so client knows to retry
+            return JSONResponse(
+                status_code=503,
+                content={
+                    "error": err,
+                    "is_real": None,
+                    "status": "model_loading",
+                    "message": "Model is initializing. Please retry your request in a few seconds.",
+                    "retry_after": 10
+                }
+            )
 
         # Check for spoof
         print("🔍 Running spoof detection...")
