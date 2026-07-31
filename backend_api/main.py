@@ -478,22 +478,41 @@ async def detect_face_spoof(
     try:
         start_time = time.time()
 
+        print(f"🔵 /api/detect-face: Starting...")
+        logger.info(f"🔵 /api/detect-face: Starting...")
+
         # Read uploaded file
         file_bytes = await image.read()
+        print(f"📦 File received: {len(file_bytes)} bytes, type: {image.content_type}")
+
         if not file_bytes:
-            return {"error": "Empty file", "is_real": None}
+            err = "Empty file uploaded"
+            print(f"❌ {err}")
+            logger.error(err)
+            return {"error": err, "is_real": None, "status": "failed"}
 
         logger.info(f"🔍 Mobile detect-face: checking photo ({len(file_bytes)} bytes)...")
 
         # Load anti-spoof service
+        print("🔧 Loading AntiSpoofService...")
         anti_spoof_service_instance = _ensure_anti_spoof_service()
+        print(f"✅ AntiSpoofService loaded, initialized: {anti_spoof_service_instance.initialized}")
 
         if not anti_spoof_service_instance.initialized:
-            logger.error("❌ Anti-spoof model not initialized")
-            return {"error": "Model not ready", "is_real": None}
+            err = "Anti-spoof model not initialized - TFLite model loading..."
+            print(f"⚠️ {err}")
+            logger.warning(err)
+            return {
+                "error": err,
+                "is_real": None,
+                "status": "model_loading",
+                "message": "Model is loading, please try again in a few seconds"
+            }
 
         # Check for spoof
+        print("🔍 Running spoof detection...")
         result = anti_spoof_service_instance.predict(file_bytes)
+        print(f"📊 Spoof result: {result}")
 
         is_real = result.get("is_real", False)
         confidence = result.get("confidence", 0.0)
@@ -501,6 +520,7 @@ async def detect_face_spoof(
         elapsed = time.time() - start_time
 
         status_emoji = "✅" if is_real else "❌"
+        print(f"{status_emoji} Result: is_real={is_real}, confidence={confidence:.2f}, time={elapsed:.2f}s")
         logger.info(f"{status_emoji} Mobile detect-face: is_real={is_real}, confidence={confidence:.2f}, time={elapsed:.2f}s")
 
         log_request("POST", "/api/detect-face", "success")
@@ -510,13 +530,26 @@ async def detect_face_spoof(
             "confidence": confidence,
             "score": confidence,
             "label": "LIVE" if is_real else "SPOOF",
-            "processing_time_ms": int(elapsed * 1000)
+            "processing_time_ms": int(elapsed * 1000),
+            "status": "success"
         }
 
     except Exception as e:
-        logger.error(f"❌ Mobile detect-face error: {str(e)}")
-        log_request("POST", "/api/detect-face", "error", str(e))
-        return {"error": str(e), "is_real": None}
+        import traceback
+        err_msg = str(e)
+        tb = traceback.format_exc()
+        print(f"❌ ERROR in /api/detect-face:")
+        print(f"   {err_msg}")
+        print(f"   Traceback: {tb}")
+        logger.error(f"❌ Mobile detect-face error: {err_msg}")
+        logger.error(f"   Traceback: {tb}")
+        log_request("POST", "/api/detect-face", "error", err_msg)
+        return {
+            "error": err_msg,
+            "is_real": None,
+            "status": "error",
+            "traceback": tb[:200]  # First 200 chars of traceback for debugging
+        }
 
 
 @app.post("/api/v1/recognize", response_model=RecognizeResponse)
