@@ -18,17 +18,16 @@ class AttendanceService {
           .eq('institute_id', instituteId)
           .eq('status', 'present')
           .order('attendance_date', ascending: false)
-          .limit(1) // Get today's record
-          .execute();
+          .limit(1); // Get today's record
 
       print('✅ [ATTENDANCE] Fetched: ${response.toString()}');
 
-      if (response.data.isEmpty) {
+      if (response.isEmpty) {
         return {'entry': null, 'exit': null};
       }
 
       // Parse entry/exit from the records
-      final records = response.data as List;
+      final records = response as List;
       Map<String, dynamic> attendance = {'entry': null, 'exit': null};
 
       for (var record in records) {
@@ -67,10 +66,9 @@ class AttendanceService {
           .select()
           .eq('institute_id', instituteId)
           .eq('attendance_date', today)
-          .order('marked_time', ascending: false)
-          .execute();
+          .order('marked_time', ascending: false);
 
-      return List<Map<String, dynamic>>.from(response.data ?? []);
+      return List<Map<String, dynamic>>.from(response ?? []);
     } catch (e) {
       print('❌ [ATTENDANCE] Error fetching today: $e');
       return [];
@@ -95,10 +93,9 @@ class AttendanceService {
           .eq('sr_no', srNo)
           .eq('institute_id', instituteId)
           .eq('attendance_date', today)
-          .order('marked_time', ascending: false)
-          .execute();
+          .order('marked_time', ascending: false);
 
-      final records = List<Map<String, dynamic>>.from(response.data ?? []);
+      final records = List<Map<String, dynamic>>.from(response ?? []);
 
       if (records.isEmpty) {
         print('   📌 No record found → ENTRY');
