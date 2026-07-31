@@ -197,19 +197,14 @@ class _LiveAntiSpoofCameraScreenState extends State<LiveAntiSpoofCameraScreen>
             final isReal = isRealFromBackend;
 
             if (isReal) {
-              _addLog('✅ REAL FACE - Score: ${spoofPercent.toStringAsFixed(1)}%');
-              print('═════════════════════════════════════════════');
-              print('✅ LIVE FACE DETECTED');
-              print('   Spoof Score: ${spoofPercent.toStringAsFixed(1)}%');
-              print('   Status: Face Verified ✓');
-              print('🔍 NOW WAITING FOR BLINK FOR LIVENESS...');
-              print('═════════════════════════════════════════════');
+              _addLog('✅ REAL FACE DETECTED');
+              _addLog('📊 Score: ${spoofPercent.toStringAsFixed(1)}%');
 
               setState(() {
                 _isRealFace = true;
                 _confidence = confidence;
                 _score = confidence;
-                _status = 'Waiting for blink... 0/1';
+                _status = '✅ REAL FACE\nWaiting for blink...';
                 _realCount++;
                 _canCapture = false;
                 _blinkDetectionStartTime = DateTime.now();
@@ -295,9 +290,9 @@ class _LiveAntiSpoofCameraScreenState extends State<LiveAntiSpoofCameraScreen>
 
   Future<void> _autoMarkAttendance() async {
     try {
-      print('═════════════════════════════════════════════');
-      print('📸 CAPTURING PHOTO FOR MATCHING');
-      print('═════════════════════════════════════════════');
+      _addLog('📸 CAPTURING PHOTO');
+      setState(() => _status = '📸 Capturing photo...');
+      await Future.delayed(const Duration(milliseconds: 300));
 
       _captureTimer?.cancel();
       final image = await _cameraController.takePicture();
@@ -305,70 +300,75 @@ class _LiveAntiSpoofCameraScreenState extends State<LiveAntiSpoofCameraScreen>
 
       if (!mounted) return;
 
-      // Step 1: Match face against database
-      print('═════════════════════════════════════════════');
-      print('🔍 MATCHING FACE AGAINST DATABASE');
-      print('═════════════════════════════════════════════');
-
-      setState(() {
-        _status = '🔍 Matching face...';
-      });
+      _addLog('🔍 MATCHING FACE');
+      setState(() => _status = '🔍 Matching face\nagainst database...');
 
       final matchResult = await AntiSpoofApiService.markAttendanceAuto(imageFile);
 
       if (!mounted) return;
 
       if (matchResult.containsKey('error')) {
-        print('═════════════════════════════════════════════');
-        print('❌ MATCHING FAILED');
-        print('   Error: ${matchResult['error']}');
-        print('═════════════════════════════════════════════');
-
+        _addLog('❌ MATCH FAILED');
         setState(() {
-          _status = '❌ No match found\n${matchResult['error']}';
+          _status = '❌ NO MATCH FOUND\n${matchResult['error']}\n\nNext student ready';
           _canCapture = false;
+        });
+        await Future.delayed(const Duration(seconds: 3));
+        // Reset for next student
+        setState(() {
+          _isRealFace = false;
+          _blinkDetected = false;
+          _blinkCount = 0;
+          _status = 'Ready for next student';
         });
         return;
       }
 
-      // Step 2: Show matched student
+      // SUCCESS!
       final matchedName = matchResult['student_name'] ?? 'Unknown';
       final similarity = matchResult['similarity'] ?? 0.0;
       final srNo = matchResult['sr_no'] ?? 'N/A';
+      final simPercent = (similarity * 100).toStringAsFixed(1);
 
-      print('═════════════════════════════════════════════');
-      print('✅ MATCH SUCCESSFUL');
-      print('   Student: $matchedName');
-      print('   SR No: $srNo');
-      print('   Similarity: ${(similarity * 100).toStringAsFixed(1)}%');
-      print('═════════════════════════════════════════════');
+      _addLog('✅ MATCHED: $matchedName');
+      _addLog('📊 Similarity: $simPercent%');
+      _addLog('✅ ATTENDANCE MARKED');
 
       setState(() {
-        _status = '✅ Matched!\n$matchedName\n${(similarity * 100).toStringAsFixed(1)}% match';
+        _status = '✅ ATTENDANCE MARKED\n\n$matchedName\nSR: $srNo\n$simPercent% match\n\nNext student ready';
       });
 
-      print('═════════════════════════════════════════════');
-      print('✅ ATTENDANCE MARKED');
-      print('   Status: SUCCESS');
-      print('═════════════════════════════════════════════');
+      // Keep showing for 3 seconds
+      await Future.delayed(const Duration(seconds: 3));
 
-      // Keep camera open, show result
-      // User can manually close or continue
-      setState(() {
-        _canCapture = false; // Disable further captures
-        // Status already shows matched student
-      });
+      // Auto reset for next student
+      if (mounted) {
+        setState(() {
+          _isRealFace = false;
+          _blinkDetected = false;
+          _blinkCount = 0;
+          _confidence = 0.0;
+          _status = 'Ready for next student';
+          _faceDetected = false;
+        });
+      }
 
     } catch (e) {
-      print('═════════════════════════════════════════════');
-      print('❌ PROCESSING ERROR');
-      print('   Error: $e');
-      print('═════════════════════════════════════════════');
-
+      _addLog('❌ ERROR: $e');
       setState(() {
-        _status = '❌ Error: $e';
+        _status = '❌ ERROR\n$e\n\nNext student ready';
         _canCapture = false;
       });
+      await Future.delayed(const Duration(seconds: 2));
+      if (mounted) {
+        setState(() {
+          _isRealFace = false;
+          _blinkDetected = false;
+          _blinkCount = 0;
+          _status = 'Ready for next student';
+          _faceDetected = false;
+        });
+      }
     }
   }
 
