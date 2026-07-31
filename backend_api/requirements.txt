@@ -3,12 +3,10 @@ fastapi>=0.104.1,<0.137
 uvicorn[standard]>=0.24.0,<0.45
 python-multipart>=0.0.6,<0.1
 
-# Face Recognition - DeepFace (unified, reliable face recognition)
-# Supports multiple models: VGGFace2, ArcFace, Facenet, OpenFace, etc.
-deepface>=0.0.75  # Advanced face recognition with multiple models
+# Face Recognition - InsightFace (ArcFace + RetinaFace)
+insightface>=0.7.3  # ArcFace embeddings + RetinaFace detection
+onnxruntime>=1.16.0  # Required by InsightFace models
 opencv-python-headless>=4.8,<4.14  # Headless version for Cloud Run (no GUI)
-tensorflow>=2.13.0,<2.15  # Required by DeepFace for some models
-tf-keras>=2.13.0  # Keras for TensorFlow
 numpy>=1.24,<3
 Pillow>=10,<13
 scipy>=1.9.0  # Required by some ML libraries
