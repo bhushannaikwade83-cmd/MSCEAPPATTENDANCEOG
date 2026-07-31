@@ -51,6 +51,12 @@ class _LiveAntiSpoofCameraScreenState extends State<LiveAntiSpoofCameraScreen>
   List<double> _frameScores = [];
   DateTime? _frameCollectionStartTime;
 
+  // Blink detection for liveness
+  int _blinkCount = 0;
+  bool _eyesWereClosed = false;
+  bool _blinkDetected = false;
+  DateTime? _blinkDetectionStartTime;
+
   @override
   void initState() {
     super.initState();
@@ -126,13 +132,43 @@ class _LiveAntiSpoofCameraScreenState extends State<LiveAntiSpoofCameraScreen>
           });
         }
       } else {
-        print('🔵 [FACE DETECTED] Found ${faces.length} face(s), calling spoof detection API...');
+        print('🔵 [FACE DETECTED] Found ${faces.length} face(s)');
         setState(() => _faceDetected = true);
 
-        final result = await AntiSpoofApiService.detectFace(imageFile);
-        print('🔵 [API RESPONSE] Got result: $result');
+        // Check for blink if waiting for liveness confirmation
+        if (_isRealFace && _blinkDetectionStartTime != null && !_blinkDetected) {
+          final face = faces.first;
+          final eyesOpen = _checkIfEyesOpen(face);
 
-        if (!mounted) return;
+          if (!eyesOpen && !_eyesWereClosed) {
+            _eyesWereClosed = true;
+            print('👁️ [BLINK] Eyes closed');
+          } else if (eyesOpen && _eyesWereClosed) {
+            _blinkCount++;
+            _eyesWereClosed = false;
+            print('👁️ [BLINK] Blink #$_blinkCount');
+
+            if (_blinkCount >= 1) {
+              _blinkDetected = true;
+              print('✅ LIVENESS CONFIRMED - Processing attendance');
+              setState(() => _status = '✓ Blink confirmed');
+              await Future.delayed(const Duration(milliseconds: 500));
+              if (!widget.isRegistration && mounted) {
+                print('🚀 AUTO-MARKING ATTENDANCE');
+                await _autoMarkAttendance();
+              }
+            }
+          }
+
+          if (!_blinkDetected) {
+            setState(() => _status = 'Waiting for blink... $_blinkCount/1');
+          }
+        } else if (!_isRealFace) {
+          // Call spoof detection API
+          final result = await AntiSpoofApiService.detectFace(imageFile);
+          print('🔵 [API RESPONSE] Got result: $result');
+
+          if (!mounted) return;
 
         if (result.containsKey('error')) {
           print('❌ [API ERROR] ${result['error']}');
@@ -166,22 +202,18 @@ class _LiveAntiSpoofCameraScreenState extends State<LiveAntiSpoofCameraScreen>
               print('   Real votes: ${_frameScores.where((s) => s == 0.0).length}');
               print('   Avg Spoof Score: ${avgSpoofPercent.toStringAsFixed(1)}%');
               print('   Status: Face Verified ✓');
+              print('🔍 NOW WAITING FOR BLINK FOR LIVENESS...');
               print('═════════════════════════════════════════════');
 
               setState(() {
                 _isRealFace = true;
-                _confidence = 1.0 - avgSpoofScore; // Live confidence
+                _confidence = 1.0 - avgSpoofScore;
                 _score = 1.0 - avgSpoofScore;
-                _status = 'Face Verified ✓';
+                _status = 'Waiting for blink... 0/1';
                 _realCount++;
-                _canCapture = true;
+                _canCapture = false; // Don't capture until blink detected
+                _blinkDetectionStartTime = DateTime.now();
               });
-
-              // Auto-mark attendance if this is attendance mode (not registration)
-              if (!widget.isRegistration) {
-                print('🚀 AUTO-MARKING ATTENDANCE...');
-                await _autoMarkAttendance();
-              }
             } else {
               print('═════════════════════════════════════════════');
               print('❌ SPOOF DETECTED (3-second average)');
@@ -212,6 +244,7 @@ class _LiveAntiSpoofCameraScreenState extends State<LiveAntiSpoofCameraScreen>
             });
           }
         }
+        }
       }
 
       await imageFile.delete();
@@ -220,6 +253,16 @@ class _LiveAntiSpoofCameraScreenState extends State<LiveAntiSpoofCameraScreen>
     } finally {
       _isProcessing = false;
     }
+  }
+
+  bool _checkIfEyesOpen(Face face) {
+    // Check if left and right eyes are open based on landmarks
+    // ML Kit Face Detection provides eye open probabilities (0-1 confidence)
+    final leftEyeOpen = face.leftEyeOpenProbability ?? 0.5;
+    final rightEyeOpen = face.rightEyeOpenProbability ?? 0.5;
+
+    // Eyes are considered open if both have > 0.3 probability
+    return leftEyeOpen > 0.3 && rightEyeOpen > 0.3;
   }
 
   void _setStatus(String status) {
