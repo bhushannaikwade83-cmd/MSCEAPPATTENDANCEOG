@@ -1615,10 +1615,10 @@ async def mark_attendance_auto(
             supabase_key = os.getenv("SUPABASE_KEY")
             supabase: Client = create_client(supabase_url, supabase_key)
 
-            # Get all students with embeddings for this institute
+            # ⚡ OPTIMIZED: Only fetch registered students for this institute
             response = supabase.table('students').select(
                 'id, sr_no, fname, lname, face_embedding_average'
-            ).eq('institute_id', institute_id).execute()
+            ).eq('institute_id', institute_id).eq('face_registration_status', 'registered').execute()
 
             students = response.data if response.data else []
             print(f"📊 Found {len(students)} students in institute {institute_id}")
