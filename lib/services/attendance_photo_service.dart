@@ -1,16 +1,15 @@
 import 'dart:io';
 import 'dart:typed_data';
 import 'package:image/image.dart' as img;
-import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:path/path.dart' as path;
+import './b2b_storage_service.dart';
 
 class AttendancePhotoService {
-  // Direct Backblaze B2 bucket (already working in B2)
-  static const String STORAGE_BUCKET = 'attendance-photos';
+  // Backblaze B2 bucket (confirmed working)
   static const String STORAGE_PATH = 'attendance-photos';
   static const int MAX_SIZE_KB = 100;
 
-  /// Compress and upload attendance photo to B2
+  /// Compress and upload attendance photo to B2 (using working B2B service)
   static Future<String?> uploadAttendancePhoto({
     required File photoFile,
     required String srNo,
@@ -35,24 +34,18 @@ class AttendancePhotoService {
         print('   Final size: ${(ultraCompressed.length / 1024).toStringAsFixed(1)} KB');
       }
 
-      // 3. Upload to Supabase storage
+      // 3. Upload to B2 using working B2BStorageService
       final fileName = _generateFileName(srNo, instituteId, recordType);
       final filePath = '$STORAGE_PATH/$instituteId/$srNo/$fileName';
 
-      print('   📤 Uploading to bucket: $STORAGE_BUCKET, path: $filePath');
+      print('   📤 Uploading to B2: $filePath');
 
-      final supabase = Supabase.instance.client;
-      await supabase.storage.from(STORAGE_BUCKET).uploadBinary(
+      final publicUrl = await B2BStorageService.uploadFile(
         filePath,
         compressedBytes,
-        fileOptions: const FileOptions(
-          contentType: 'image/jpeg',
-          cacheControl: '3600',
-        ),
+        contentType: 'image/jpeg',
       );
 
-      // 4. Generate public URL
-      final publicUrl = supabase.storage.from(STORAGE_BUCKET).getPublicUrl(filePath);
       print('   ✅ [PHOTO] Upload successful!');
       print('   📷 URL: $publicUrl');
 
