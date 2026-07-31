@@ -1685,8 +1685,16 @@ async def mark_attendance_auto(
             lname = best_match.get('lname', '')
             student_name = f"{fname} {lname}".strip()
 
-            print(f"⚡ Checked {len(valid_students)} students")
-            print(f"   Best: {student_name} - {best_similarity:.4f}")
+            # 📊 Debug: Show top 5 scores
+            print(f"\n🔎 SIMILARITY SCORES (Threshold: {SIMILARITY_THRESHOLD})")
+            print(f"   Checked {len(valid_students)} students in institute {institute_id}")
+            top_indices = np.argsort(-similarities)[:5]
+            for i, idx in enumerate(top_indices, 1):
+                s = float(similarities[idx])
+                s_name = f"{valid_students[idx].get('fname', '')} {valid_students[idx].get('lname', '')}".strip()
+                status = "✅ MATCH" if s >= SIMILARITY_THRESHOLD else "❌ Below"
+                print(f"   {i}. {s_name}: {s:.4f} {status}")
+            print()
 
             if best_similarity < SIMILARITY_THRESHOLD:
                 logger.warning(f"❌ No matching student found (best: {best_similarity:.4f}, threshold: {SIMILARITY_THRESHOLD})")
