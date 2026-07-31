@@ -75,7 +75,7 @@ class _StudentManagementScreenState extends State<StudentManagementScreen>
 
   /// Omit `face_embedding` / `photo_thumbnail` — they are large JSON and slow every list page.
   static const String _studentSelectCols =
-      'id,sr_no,fname,lname,mname,subject,subjects,sub1,sub2,sub3,sub4,sub5,sub6,sub7,sub8,form_serial_no,ph_name,mother_nm,ctcd,identy_no,face_photo_url,face_embedding_front,face_embedding_left,face_embedding_right,face_embedding_average,face_quality_front,face_quality_left,face_quality_right,average_face_quality,face_registered_at,face_registration_status,is_face_real,created_at,updated_at';
+      'id,sr_no,fname,lname,mname,subject,subjects,sub1,sub2,sub3,sub4,sub5,sub6,sub7,sub8,form_serial_no,ph_name,mother_nm,ctcd,identy_no,face_photo_url,face_embedding_front,face_embedding_left,face_embedding_right,face_embedding_average,face_registered_at,face_registration_status,is_face_real,created_at,updated_at';
 
   /// Today's entry/exit UI state keyed by [students.id] only (avoids roll/userId collisions).
   Map<String, Map<String, dynamic>> _todayPayloadByStudentId = {};
@@ -1084,11 +1084,7 @@ class _StudentManagementScreenState extends State<StudentManagementScreen>
       // ✅ NEW: Add face registration columns to the mapped row
       'face_registration_status': row['face_registration_status'] ?? 'pending',
       'is_face_real': row['is_face_real'] ?? false,
-      'average_face_quality': row['average_face_quality'] ?? 0.0,
       'form_serial_no': row['form_serial_no'] ?? '',
-      'face_quality_front': row['face_quality_front'] ?? 0.0,
-      'face_quality_left': row['face_quality_left'] ?? 0.0,
-      'face_quality_right': row['face_quality_right'] ?? 0.0,
     };
   }
 
@@ -2099,7 +2095,7 @@ class _StudentManagementScreenState extends State<StudentManagementScreen>
     // ✅ NEW: Face registration columns
     final faceRegistrationStatus = data['face_registration_status'] ?? 'pending';
     final isFaceReal = data['is_face_real'] ?? false;
-    final averageFaceQuality = (data['average_face_quality'] as num?)?.toDouble() ?? 0.0;
+    final averageFaceQuality = 0.0; // Column not in DB yet, default to 0
     final formSerialNo = data['form_serial_no'] ?? '';
 
     // ⏸️ DISABLED: Background subject fetch was firing DB query for EVERY student during scroll!
