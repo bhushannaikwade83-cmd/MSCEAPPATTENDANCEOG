@@ -1606,32 +1606,91 @@ async def mark_attendance_auto(
 
         logger.info(f"✅ Embedding generated: {embedding.shape}")
 
-        # Search for match in vector database
-        logger.info(f"🔎 Searching vector database for institute {institute_id}...")
-        matches = await vector_db_instance.search(
-            embedding=embedding,
-            institute_id=institute_id,
-            top_k=1,
-            threshold=0.70
-        )
+        # Search directly in Supabase for face embeddings
+        logger.info(f"🔎 Querying Supabase for institute {institute_id}...")
 
-        if not matches or len(matches) == 0:
-            logger.warning(f"❌ No matching student found for institute {institute_id}")
+        try:
+            from supabase import create_client, Client
+            supabase_url = os.getenv("SUPABASE_URL")
+            supabase_key = os.getenv("SUPABASE_KEY")
+            supabase: Client = create_client(supabase_url, supabase_key)
+
+            # Get all students with embeddings for this institute
+            response = supabase.table('students').select(
+                'id, sr_no, name, face_embedding'
+            ).eq('institute_id', institute_id).execute()
+
+            students = response.data if response.data else []
+            print(f"📊 Found {len(students)} students in institute {institute_id}")
+
+            if not students:
+                logger.warning(f"❌ No students found for institute {institute_id}")
+                return {
+                    "error": "No students registered for this institute",
+                    "status": "❌ No Students",
+                    "student_name": None,
+                    "sr_no": None,
+                    "similarity": 0.0,
+                    "record_type": None
+                }
+
+            # Find best match using cosine similarity
+            from sklearn.metrics.pairwise import cosine_similarity
+
+            best_match = None
+            best_similarity = 0.0
+            SIMILARITY_THRESHOLD = 0.70
+
+            for student in students:
+                embedding_data = student.get('face_embedding')
+                if not embedding_data:
+                    continue
+
+                # Parse embedding
+                if isinstance(embedding_data, str):
+                    stored_embedding = np.array(json.loads(embedding_data), dtype='float32')
+                else:
+                    stored_embedding = np.array(embedding_data, dtype='float32')
+
+                # Calculate cosine similarity
+                similarity_score = float(cosine_similarity(
+                    embedding.reshape(1, -1),
+                    stored_embedding.reshape(1, -1)
+                )[0][0])
+
+                print(f"   {student.get('name')} ({student.get('sr_no')}): {similarity_score:.4f}")
+
+                if similarity_score >= SIMILARITY_THRESHOLD and similarity_score > best_similarity:
+                    best_similarity = similarity_score
+                    best_match = student
+
+            if not best_match:
+                logger.warning(f"❌ No matching student found (threshold: {SIMILARITY_THRESHOLD})")
+                return {
+                    "error": "No matching student found",
+                    "status": "❌ No Match",
+                    "student_name": None,
+                    "sr_no": None,
+                    "similarity": 0.0,
+                    "record_type": None
+                }
+
+            # Got a match!
+            student_name = best_match.get('name', 'Unknown')
+            sr_no = best_match.get('sr_no', '')
+            student_id = best_match.get('id', '')
+            similarity = best_similarity
+
+        except Exception as e:
+            logger.error(f"❌ Error querying Supabase: {e}")
             return {
-                "error": "No matching student found",
-                "status": "❌ No Match",
+                "error": str(e),
+                "status": "❌ Error",
                 "student_name": None,
                 "sr_no": None,
                 "similarity": 0.0,
                 "record_type": None
             }
-
-        # Get top match
-        match = matches[0]
-        student_name = match.get('name', 'Unknown')
-        sr_no = match.get('roll_number', match.get('student_id', ''))
-        student_id = match.get('student_id', '')
-        similarity = match.get('similarity', 0.0)
 
         logger.info(f"✅ Match found: {student_name} (SR: {sr_no}, Similarity: {similarity:.2%})")
 
