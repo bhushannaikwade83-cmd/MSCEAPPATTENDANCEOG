@@ -316,6 +316,7 @@ class _LiveAntiSpoofCameraScreenState extends State<LiveAntiSpoofCameraScreen> {
           photoUrl = await AttendancePhotoService.uploadAttendancePhoto(
             photoFile: photoFile,
             srNo: srNo,
+            studentName: _matchedStudentName,
             instituteId: instituteId,
             recordType: recordType,
           );

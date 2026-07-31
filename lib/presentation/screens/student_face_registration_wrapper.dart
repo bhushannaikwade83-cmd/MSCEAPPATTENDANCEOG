@@ -251,12 +251,13 @@ class _StudentFaceRegistrationWrapperState
         print('  ✅ Left: ${(leftBytes.length / 1024).toStringAsFixed(1)}KB');
         print('  ✅ Right: ${(rightBytes.length / 1024).toStringAsFixed(1)}KB');
 
-        // Generate path: instituteId/studentName/photo-registration/
-        final photoPath = '${widget.instituteId}/${widget.studentName}/photo-registration';
+        // Generate path: DEC-2026/GCC/REGISTRATION/{institute_id}/{student_name}/
+        final timestamp = DateTime.now().toIso8601String().replaceAll(':', '-');
+        final photoPath = 'DEC-2026/GCC/REGISTRATION/${widget.instituteId}/${widget.studentName}';
 
         // Upload front photo (primary registration photo)
         facePhotoUrl = await B2BStorageService.uploadFile(
-          '$photoPath/front.jpg',
+          '$photoPath/front_${widget.srNo}_$timestamp.jpg',
           frontBytes,
           contentType: 'image/jpeg',
         );
@@ -264,7 +265,7 @@ class _StudentFaceRegistrationWrapperState
 
         // Upload left photo
         await B2BStorageService.uploadFile(
-          '$photoPath/left.jpg',
+          '$photoPath/left_${widget.srNo}_$timestamp.jpg',
           leftBytes,
           contentType: 'image/jpeg',
         );
@@ -272,7 +273,7 @@ class _StudentFaceRegistrationWrapperState
 
         // Upload right photo
         await B2BStorageService.uploadFile(
-          '$photoPath/right.jpg',
+          '$photoPath/right_${widget.srNo}_$timestamp.jpg',
           rightBytes,
           contentType: 'image/jpeg',
         );

@@ -1,18 +1,17 @@
 import 'dart:io';
 import 'dart:typed_data';
 import 'package:image/image.dart' as img;
-import 'package:path/path.dart' as path;
 import './b2b_storage_service.dart';
 
 class AttendancePhotoService {
-  // Backblaze B2 bucket (confirmed working)
-  static const String STORAGE_PATH = 'attendance-photos';
+  // Backblaze B2 bucket structure: DEC-2026/GCC/ATTENDANCE/{institute_id}/{student_name}/
   static const int MAX_SIZE_KB = 100;
 
   /// Compress and upload attendance photo to B2 (using working B2B service)
   static Future<String?> uploadAttendancePhoto({
     required File photoFile,
     required String srNo,
+    required String studentName,
     required String instituteId,
     required String recordType, // 'entry' or 'exit'
   }) async {
@@ -35,8 +34,9 @@ class AttendancePhotoService {
       }
 
       // 3. Upload to B2 using working B2BStorageService
-      final fileName = _generateFileName(srNo, instituteId, recordType);
-      final filePath = '$STORAGE_PATH/$instituteId/$srNo/$fileName';
+      // Path: DEC-2026/GCC/ATTENDANCE/{institute_id}/{student_name}/{entry/exit}_{sr_no}_{timestamp}.jpg
+      final fileName = _generateFileName(srNo, recordType);
+      final filePath = 'DEC-2026/GCC/ATTENDANCE/$instituteId/$studentName/$fileName';
 
       print('   📤 Uploading to B2: $filePath');
 
@@ -85,37 +85,20 @@ class AttendancePhotoService {
     }
   }
 
-  /// Generate standardized filename
-  static String _generateFileName(String srNo, String instituteId, String recordType) {
+  /// Generate standardized filename: {entry/exit}_{sr_no}_{timestamp}.jpg
+  static String _generateFileName(String srNo, String recordType) {
     final timestamp = DateTime.now().toIso8601String().replaceAll(':', '-');
     return '${recordType}_${srNo}_$timestamp.jpg';
   }
 
-  /// Get URL for a stored photo
-  static String getPhotoUrl(String srNo, String instituteId, String fileName) {
-    return '$STORAGE_PATH/$instituteId/$srNo/$fileName';
-  }
-
-  /// Delete old attendance photos (cleanup)
+  /// Delete old attendance photos (use B2BStorageService.deleteAttendancePhoto instead)
   static Future<void> deletePhotoIfExists({
-    required String photoUrl,
+    required String objectPath,
   }) async {
     try {
-      if (photoUrl.isEmpty) return;
-
-      // Extract file path from URL
-      final uri = Uri.parse(photoUrl);
-      final pathSegments = uri.pathSegments;
-
-      if (pathSegments.isEmpty) return;
-
-      // Get the file path (everything after domain)
-      final filePath = pathSegments.join('/');
-
-      final supabase = Supabase.instance.client;
-      await supabase.storage.from(STORAGE_BUCKET).remove([filePath]);
-
-      print('🗑️ Deleted old photo: $filePath');
+      if (objectPath.isEmpty) return;
+      await B2BStorageService.deleteAttendancePhoto(objectPath);
+      print('🗑️ Deleted old photo: $objectPath');
     } catch (e) {
       print('⚠️ Could not delete photo: $e');
     }
