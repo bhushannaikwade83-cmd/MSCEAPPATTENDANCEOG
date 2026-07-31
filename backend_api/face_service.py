@@ -204,7 +204,12 @@ class FaceRecognitionService:
                 raise ValueError(error_msg)
             
             logger.info(f"📦 Received image data: {len(image_data)} bytes")
-            
+
+            # 🔥 DEBUG: Image hash to verify different images
+            import hashlib
+            image_hash = hashlib.sha256(image_data).hexdigest()[:16]
+            print(f"📸 [IMAGE HASH] {image_hash} (size: {len(image_data)} bytes)")
+
             # 🔥 STEP 2: Decode image using OpenCV (CORRECT METHOD)
             # This is the correct way to decode base64 image bytes
             np_arr = np.frombuffer(image_data, np.uint8)
