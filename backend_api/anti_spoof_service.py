@@ -49,22 +49,38 @@ class AntiSpoofService:
                     'details': {'error': 'Failed to decode image'}
                 }
 
-            # Fast spoof detection using Laplacian variance (blur detection)
+            # Multi-check spoof detection
             gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
 
-            # Laplacian variance - measures edge sharpness
-            # Real faces have high variance, blurry photos have low variance
+            # 1. Laplacian variance (edge sharpness)
             laplacian_var = cv2.Laplacian(gray, cv2.CV_64F).var()
 
-            # Brightness check - too dark or too bright might indicate fake
+            # 2. Brightness check
             brightness = np.mean(gray)
 
-            # Threshold-based decision
-            # High Laplacian variance + normal brightness = REAL
-            is_real = bool((laplacian_var > 100) and (50 < brightness < 200))
+            # 3. Color saturation (photos have different saturation than skin)
+            hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
+            saturation = hsv[:, :, 1]
+            avg_saturation = np.mean(saturation)
 
-            # Confidence based on Laplacian variance
-            confidence = float(min(1.0, laplacian_var / 500.0))
+            # 4. Texture via edges (real faces have specific edge distribution)
+            edges = cv2.Canny(gray, 100, 200)
+            edge_ratio = np.sum(edges > 0) / (gray.shape[0] * gray.shape[1])
+
+            # Multi-factor decision - STRICT MODE
+            # Real faces must pass ALL checks
+            is_real = bool(
+                (laplacian_var > 200) and  # High sharpness (stricter than 100)
+                (50 < brightness < 200) and  # Normal lighting
+                (80 < avg_saturation < 150) and  # Normal skin saturation
+                (0.05 < edge_ratio < 0.20)  # Natural edge distribution
+            )
+
+            # Confidence = average of multiple factors (0-1)
+            laplacian_score = min(1.0, laplacian_var / 500.0)
+            saturation_score = 1.0 if (80 < avg_saturation < 150) else 0.0
+            edge_score = 1.0 if (0.05 < edge_ratio < 0.20) else 0.0
+            confidence = float((laplacian_score + saturation_score + edge_score) / 3.0)
 
             return {
                 'is_real': is_real,
@@ -74,6 +90,8 @@ class AntiSpoofService:
                 'details': {
                     'laplacian_variance': float(laplacian_var),
                     'brightness': float(brightness),
+                    'avg_saturation': float(avg_saturation),
+                    'edge_ratio': float(edge_ratio),
                 }
             }
 
