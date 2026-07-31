@@ -13,13 +13,13 @@ class AttendanceMarkingService {
     try {
       debugPrint('🔍 Matching face embedding against registered students...');
 
-      // Fetch all registered students for this institute
+      // Fetch all registered students for this institute (all 3 angles)
       final students = await appDb
           .from('students')
-          .select('id, sr_no, fname, lname, mname, institute_id, face_embedding_average')
+          .select('id, sr_no, fname, lname, mname, institute_id, face_embedding_front, face_embedding_left, face_embedding_right')
           .eq('institute_id', instituteId)
           .eq('face_registration_status', 'registered')
-          .not('face_embedding_average', 'is', null);
+          .or('face_embedding_front.not.is.null,face_embedding_left.not.is.null,face_embedding_right.not.is.null');
 
       if (students.isEmpty) {
         return {
@@ -28,26 +28,39 @@ class AttendanceMarkingService {
         };
       }
 
-      debugPrint('📊 Checking ${students.length} registered students...');
+      debugPrint('📊 Checking ${students.length} registered students (with 3-angle embeddings)...');
 
       double bestScore = 0;
       Map<String, dynamic>? bestMatch;
 
-      // Compare with each registered student
+      // Compare with each registered student (using MAX of 3 angles)
       for (final student in students) {
         try {
-          final storedEmbedding = student['face_embedding_average'] as String?;
-          if (storedEmbedding == null || storedEmbedding.isEmpty) continue;
+          final frontEmb = student['face_embedding_front'] as String?;
+          final leftEmb = student['face_embedding_left'] as String?;
+          final rightEmb = student['face_embedding_right'] as String?;
 
-          // Parse stored embedding
-          final storedList = List<double>.from(
-            jsonDecode(storedEmbedding).map((x) => (x as num).toDouble()),
-          );
+          // Parse embeddings
+          List<double>? frontList, leftList, rightList;
+          if (frontEmb != null && frontEmb.isNotEmpty) {
+            frontList = List<double>.from(jsonDecode(frontEmb).map((x) => (x as num).toDouble()));
+          }
+          if (leftEmb != null && leftEmb.isNotEmpty) {
+            leftList = List<double>.from(jsonDecode(leftEmb).map((x) => (x as num).toDouble()));
+          }
+          if (rightEmb != null && rightEmb.isNotEmpty) {
+            rightList = List<double>.from(jsonDecode(rightEmb).map((x) => (x as num).toDouble()));
+          }
 
-          // Calculate cosine similarity (0 to 1, higher = more similar)
-          final similarity = _cosineSimilarity(embedding, storedList);
+          // Calculate similarities with all 3 angles
+          double simFront = frontList != null ? _cosineSimilarity(embedding, frontList) : 0.0;
+          double simLeft = leftList != null ? _cosineSimilarity(embedding, leftList) : 0.0;
+          double simRight = rightList != null ? _cosineSimilarity(embedding, rightList) : 0.0;
 
-          debugPrint('  📌 ${student['sr_no']}: ${(similarity * 100).toStringAsFixed(1)}%');
+          // Use MAX of 3 angles (best match)
+          double similarity = [simFront, simLeft, simRight].reduce((a, b) => a > b ? a : b);
+
+          debugPrint('  📌 ${student['sr_no']}: MAX=${(similarity * 100).toStringAsFixed(1)}% (F:${(simFront * 100).toStringAsFixed(0)}% L:${(simLeft * 100).toStringAsFixed(0)}% R:${(simRight * 100).toStringAsFixed(0)}%)');
 
           // Keep track of best match
           if (similarity > bestScore) {

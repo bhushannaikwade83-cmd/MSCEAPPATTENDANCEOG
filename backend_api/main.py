@@ -1326,14 +1326,7 @@ async def register_multi_angle_face(
             embeddings_result[f"face_embedding_{angle}"] = embedding.tolist()
             logger.info(f"  ✅ Generated embedding for {angle} angle (512-dim)")
 
-        # Calculate average embedding
-        front = np.array(embeddings_result["face_embedding_front"])
-        left = np.array(embeddings_result["face_embedding_left"])
-        right = np.array(embeddings_result["face_embedding_right"])
-        average = (front + left + right) / 3.0
-        embeddings_result["face_embedding_average"] = average.tolist()
-
-        logger.info(f"✅ Multi-angle registration complete for {roll_number}")
+        logger.info(f"✅ Multi-angle registration complete for {roll_number} (3 angles: front, left, right)")
 
         return {
             "success": True,

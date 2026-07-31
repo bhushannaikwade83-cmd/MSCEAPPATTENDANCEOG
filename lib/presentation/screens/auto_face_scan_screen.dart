@@ -614,26 +614,47 @@ class _AutoFaceScanScreenState extends State<AutoFaceScanScreen>
         throw Exception('❌ Student ID not found');
       }
 
-      // Get embedding from student record
-      _addLog('🔍 Fetching student record...');
+      // Get embeddings from student record (all 3 angles)
+      _addLog('🔍 Fetching student record (3-angle embeddings)...');
       final studentRecord = await appDb
           .from('students')
-          .select('id, institute_id, sr_no, fname, lname, mname, face_embedding_average')
+          .select('id, institute_id, sr_no, fname, lname, mname, face_embedding_front, face_embedding_left, face_embedding_right')
           .eq('id', studentId)
           .single();
 
       _addLog('✅ Student record fetched');
 
-      final embeddingJson = studentRecord['face_embedding_average'] as String?;
-      if (embeddingJson == null || embeddingJson.isEmpty) {
-        throw Exception('❌ No face embedding found for student');
+      // Parse all 3 embeddings
+      final frontJson = studentRecord['face_embedding_front'] as String?;
+      final leftJson = studentRecord['face_embedding_left'] as String?;
+      final rightJson = studentRecord['face_embedding_right'] as String?;
+
+      if ((frontJson == null || frontJson.isEmpty) &&
+          (leftJson == null || leftJson.isEmpty) &&
+          (rightJson == null || rightJson.isEmpty)) {
+        throw Exception('❌ No face embeddings found for student');
       }
 
-      _addLog('🧮 Parsing 512-D embedding...');
-      final embedding = List<double>.from(
-        jsonDecode(embeddingJson).map((x) => (x as num).toDouble()),
-      );
-      _addLog('✅ Embedding ready (${embedding.length}D)');
+      _addLog('🧮 Parsing 512-D embeddings (3 angles)...');
+
+      // Parse embeddings, use first available
+      List<double> embedding;
+      if (frontJson != null && frontJson.isNotEmpty) {
+        embedding = List<double>.from(
+          jsonDecode(frontJson).map((x) => (x as num).toDouble()),
+        );
+        _addLog('✅ Using front embedding (${embedding.length}D)');
+      } else if (leftJson != null && leftJson.isNotEmpty) {
+        embedding = List<double>.from(
+          jsonDecode(leftJson).map((x) => (x as num).toDouble()),
+        );
+        _addLog('✅ Using left embedding (${embedding.length}D)');
+      } else {
+        embedding = List<double>.from(
+          jsonDecode(rightJson!).map((x) => (x as num).toDouble()),
+        );
+        _addLog('✅ Using right embedding (${embedding.length}D)');
+      }
 
       // Compress and upload photo to B2
       _addLog('📷 Compressing photo...');

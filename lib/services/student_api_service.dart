@@ -13,7 +13,7 @@ class StudentApiService {
     try {
       var query = _supabase
           .from('students')
-          .select('id,sr_no,fname,lname,mname,inst_id,form_serial_no,ph_name,subject,subjects,sub1,sub2,sub3,sub4,sub5,sub6,sub7,sub8,mother_nm,ctcd,identy_no,face_photo_url,face_embedding_front,face_embedding_left,face_embedding_right,face_embedding_average,face_quality_front,face_quality_left,face_quality_right,average_face_quality,face_registered_at,face_registration_status,is_face_real,created_at,updated_at')
+          .select('id,sr_no,fname,lname,mname,inst_id,form_serial_no,ph_name,subject,subjects,sub1,sub2,sub3,sub4,sub5,sub6,sub7,sub8,mother_nm,ctcd,identy_no,face_photo_url,face_embedding_front,face_embedding_left,face_embedding_right,face_registered_at,face_registration_status,is_face_real,created_at,updated_at')
           .order('sr_no');
 
       // Get data - handle search locally if needed
@@ -133,10 +133,6 @@ class StudentApiService {
         'face_embedding_front': jsonEncode(frontEmbedding),
         'face_embedding_left': jsonEncode(leftEmbedding),
         'face_embedding_right': jsonEncode(rightEmbedding),
-        'face_embedding_average': jsonEncode(avgEmbedding),
-        'face_quality_front': qualityFront,
-        'face_quality_left': qualityLeft,
-        'face_quality_right': qualityRight,
         'face_photo_url': facePhotoUrl,
         'face_registered_at': DateTime.now().toIso8601String(),
         'face_registration_status': 'registered',
@@ -171,7 +167,7 @@ class StudentApiService {
     try {
       final response = await _supabase
           .from('students')
-          .select('sr_no,fname,lname,face_embedding_front,face_embedding_left,face_embedding_right,face_embedding_average,is_face_real')
+          .select('sr_no,fname,lname,face_embedding_front,face_embedding_left,face_embedding_right,is_face_real')
           .eq('face_registration_status', 'registered')
           .eq('is_face_real', true)
           .order('sr_no');

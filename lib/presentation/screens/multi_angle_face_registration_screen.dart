@@ -407,11 +407,10 @@ Future<void> _initializeCamera() async {
         if (result['embeddings'] != null) {
           try {
             final embeddings = result['embeddings'] as Map<String, dynamic>;
-            print('📊 Embeddings received:');
+            print('📊 Embeddings received (3 angles, uses MAX similarity):');
             print('   Front: ${embeddings['face_embedding_front']?.length} dims');
             print('   Left: ${embeddings['face_embedding_left']?.length} dims');
             print('   Right: ${embeddings['face_embedding_right']?.length} dims');
-            print('   Average: ${embeddings['face_embedding_average']?.length} dims');
 
             // Extract embeddings as lists of doubles (new format from backend)
             final frontEmbedding = List<double>.from(

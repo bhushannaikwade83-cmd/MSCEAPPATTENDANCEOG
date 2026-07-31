@@ -75,7 +75,7 @@ class _StudentManagementScreenState extends State<StudentManagementScreen>
 
   /// Omit `face_embedding` / `photo_thumbnail` — they are large JSON and slow every list page.
   static const String _studentSelectCols =
-      'id,sr_no,fname,lname,mname,subject,subjects,sub1,sub2,sub3,sub4,sub5,sub6,sub7,sub8,form_serial_no,ph_name,mother_nm,ctcd,identy_no,face_photo_url,face_embedding_front,face_embedding_left,face_embedding_right,face_embedding_average,face_registered_at,face_registration_status,is_face_real,created_at,updated_at';
+      'id,sr_no,fname,lname,mname,subject,subjects,sub1,sub2,sub3,sub4,sub5,sub6,sub7,sub8,form_serial_no,ph_name,mother_nm,ctcd,identy_no,face_photo_url,face_embedding_front,face_embedding_left,face_embedding_right,face_registered_at,face_registration_status,is_face_real,created_at,updated_at';
 
   /// Today's entry/exit UI state keyed by [students.id] only (avoids roll/userId collisions).
   Map<String, Map<String, dynamic>> _todayPayloadByStudentId = {};
