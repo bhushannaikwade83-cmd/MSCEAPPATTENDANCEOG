@@ -14,8 +14,17 @@ import pickle
 import os
 import logging
 from typing import List, Dict, Optional
-import firebase_admin
-from firebase_admin import firestore, credentials
+
+# Firebase is optional - only if using Firestore
+try:
+    import firebase_admin
+    from firebase_admin import firestore, credentials
+    FIREBASE_AVAILABLE = True
+except ImportError:
+    FIREBASE_AVAILABLE = False
+    firebase_admin = None
+    firestore = None
+    credentials = None
 
 logger = logging.getLogger(__name__)
 
@@ -32,10 +41,10 @@ class VectorDatabase:
         self.firestore_db = None  # Firebase Firestore connection
         
     async def load_index(self):
-        """Load FAISS index from disk and initialize Firebase"""
+        """Load FAISS index from disk and initialize Firebase (optional)"""
         try:
-            # Initialize Firebase
-            if not firebase_admin._apps:
+            # Initialize Firebase (if available)
+            if FIREBASE_AVAILABLE and firebase_admin and not firebase_admin._apps:
                 cred_path = os.getenv('FIREBASE_CREDENTIALS_PATH')
                 if cred_path and os.path.exists(cred_path):
                     # Use service account file if provided (local development)
