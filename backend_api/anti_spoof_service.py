@@ -60,8 +60,10 @@ class AntiSpoofService:
             laplacian_var = cv2.Laplacian(gray, cv2.CV_64F).var()
 
             # Simple threshold
-            # Real if Laplacian > 80, Photo if < 80
-            is_real = bool(laplacian_var > 80)
+            # Real faces: 200-500+ (high detail)
+            # Photos: 80-150 (smooth/flat)
+            # Threshold: 150 separates them well
+            is_real = bool(laplacian_var > 150)
 
             # Confidence (0-1): how confident we are it's real
             # Higher Laplacian = more real
