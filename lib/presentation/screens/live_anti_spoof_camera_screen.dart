@@ -314,10 +314,9 @@ class _LiveAntiSpoofCameraScreenState extends State<LiveAntiSpoofCameraScreen>
         print('═════════════════════════════════════════════');
 
         setState(() {
-          _status = '❌ No match found\nExiting...';
+          _status = '❌ No match found\n${matchResult['error']}';
+          _canCapture = false;
         });
-        await Future.delayed(const Duration(seconds: 2));
-        if (mounted) Navigator.pop(context);
         return;
       }
 
@@ -340,15 +339,15 @@ class _LiveAntiSpoofCameraScreenState extends State<LiveAntiSpoofCameraScreen>
       print('═════════════════════════════════════════════');
       print('✅ ATTENDANCE MARKED');
       print('   Status: SUCCESS');
-      print('   Exiting in 3 seconds...');
       print('═════════════════════════════════════════════');
 
-      // Wait 3 seconds then return
-      await Future.delayed(const Duration(seconds: 3));
+      // Keep camera open, show result
+      // User can manually close or continue
+      setState(() {
+        _canCapture = false; // Disable further captures
+        // Status already shows matched student
+      });
 
-      if (mounted) {
-        Navigator.pop(context);
-      }
     } catch (e) {
       print('═════════════════════════════════════════════');
       print('❌ PROCESSING ERROR');
@@ -356,11 +355,9 @@ class _LiveAntiSpoofCameraScreenState extends State<LiveAntiSpoofCameraScreen>
       print('═════════════════════════════════════════════');
 
       setState(() {
-        _status = '❌ Error\n$e\nExiting...';
+        _status = '❌ Error: $e';
+        _canCapture = false;
       });
-
-      await Future.delayed(const Duration(seconds: 3));
-      if (mounted) Navigator.pop(context);
     }
   }
 
