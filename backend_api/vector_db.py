@@ -192,44 +192,56 @@ class VectorDatabase:
             List of matches with similarity scores
         """
         try:
+            print("=" * 80)
+            print(f"🔎 VECTOR SEARCH START")
+            print(f"   Institute ID: {institute_id}")
+            print(f"   Threshold: {threshold}")
+            print(f"   Top K: {top_k}")
+            print("=" * 80)
+
             # Reshape embedding to (1, 512)
             query = embedding.reshape(1, -1).astype('float32')
-            
+
             # Search in FAISS index
             # For 200k vectors, this takes ~10-50ms
             distances, indices = self.index.search(query, top_k * 10)  # Get more candidates
-            
+            print(f"📊 Found {len(indices[0])} candidates in FAISS index")
+
             matches = []
+            institute_candidates = 0
             for i, (distance, idx) in enumerate(zip(distances[0], indices[0])):
                 if idx == -1:  # Invalid index
                     continue
-                
+
                 # Get metadata
                 metadata = self.metadata.get(idx)
                 if not metadata:
                     continue
-                
+
                 # Filter by institute
                 if metadata['institute_id'] != institute_id:
                     continue
-                
+
+                institute_candidates += 1
+
                 # Convert L2 distance to cosine similarity
                 # FAISS IndexFlatL2 returns SQUARED L2 distance for normalized vectors
                 # For normalized vectors with squared L2: similarity = 1 - (squared_distance / 2)
                 # Try both formulas to handle edge cases
                 similarity_squared = 1.0 - (distance / 2.0)  # If distance is squared (FAISS default)
                 similarity_regular = 1.0 - ((distance ** 2) / 2.0)  # If distance is regular
-                
+
                 # Use the higher similarity (more lenient)
                 similarity = max(similarity_squared, similarity_regular)
-                
+
                 # Clamp to valid range [0, 1]
                 similarity = max(0.0, min(1.0, similarity))
-                
+
                 # Apply threshold
                 # Log similarity for debugging
-                logger.info(f"Match candidate: {metadata['roll_number']} - Similarity: {similarity:.4f}, Distance: {distance:.4f}, Threshold: {threshold}")
-                
+                status = "✅ MATCH" if similarity >= threshold else "❌ BELOW_THRESHOLD"
+                print(f"   {status} | {metadata['roll_number']} ({metadata['name']}) - Similarity: {similarity:.4f} (vs threshold: {threshold})")
+
                 if similarity >= threshold:
                     matches.append({
                         'student_id': metadata['student_id'],
@@ -238,15 +250,17 @@ class VectorDatabase:
                         'similarity': float(similarity),
                         'index': int(idx)
                     })
-                else:
-                    logger.debug(f"Match below threshold: {metadata['roll_number']} - Similarity: {similarity:.4f} < {threshold}")
-                
+
                 if len(matches) >= top_k:
                     break
-            
+
+            print(f"📋 Candidates from this institute: {institute_candidates}")
+            print(f"✅ Final matches (>= threshold): {len(matches)}")
+            print("=" * 80)
+
             # Sort by similarity (descending)
             matches.sort(key=lambda x: x['similarity'], reverse=True)
-            
+
             return matches
             
         except Exception as e:
