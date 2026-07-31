@@ -1759,10 +1759,23 @@ async def mark_attendance_auto(
 
             # ⚡ Batch calculate all similarities at once (fast!)
             embeddings_matrix = np.array(embeddings_matrix, dtype='float32')
+
+            # 🔍 Debug: Check embedding values
+            print(f"\n🔎 EMBEDDING DEBUG:")
+            print(f"   Query embedding shape: {embedding.shape}")
+            print(f"   Query embedding norm: {np.linalg.norm(embedding):.4f}")
+            print(f"   Query embedding sample: {embedding[:5]}")
+            print(f"   Matrix shape: {embeddings_matrix.shape}")
+            if len(embeddings_matrix) > 0:
+                print(f"   First student embedding norm: {np.linalg.norm(embeddings_matrix[0]):.4f}")
+                print(f"   First student sample: {embeddings_matrix[0][:5]}")
+
             similarities = cosine_similarity(
                 embedding.reshape(1, -1),
                 embeddings_matrix
             )[0]
+
+            print(f"   Similarity values: min={np.min(similarities):.4f}, max={np.max(similarities):.4f}, mean={np.mean(similarities):.4f}")
 
             # Find best match
             best_idx = np.argmax(similarities)
