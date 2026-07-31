@@ -221,7 +221,7 @@ class _StudentFaceRegistrationWrapperState
         throw Exception('No embeddings in response');
       }
 
-      // Extract embeddings from backend response
+      // Extract embeddings from backend response (3 angles only)
       final frontEmbedding = List<double>.from(
         (embeddings['face_embedding_front'] as List?)?.map((x) => (x as num).toDouble()) ?? [],
       );
@@ -231,14 +231,10 @@ class _StudentFaceRegistrationWrapperState
       final rightEmbedding = List<double>.from(
         (embeddings['face_embedding_right'] as List?)?.map((x) => (x as num).toDouble()) ?? [],
       );
-      final avgEmbedding = List<double>.from(
-        (embeddings['face_embedding_average'] as List?)?.map((x) => (x as num).toDouble()) ?? [],
-      );
 
       print('✅ Front: ${frontEmbedding.length}-D');
       print('✅ Left: ${leftEmbedding.length}-D');
       print('✅ Right: ${rightEmbedding.length}-D');
-      print('✅ Average: ${avgEmbedding.length}-D');
 
       // 📸 Upload photos to Backblaze B2 with compression
       print('📸 Compressing & uploading photos to Backblaze B2...');
@@ -294,19 +290,18 @@ class _StudentFaceRegistrationWrapperState
       }
 
       // 💾 Save 512-D embeddings + photo URL to database (ONLY IF ALL SUCCESSFUL)
-      print('💾 Saving 512-D ArcFace embeddings + photo URL to database...');
+      print('💾 Saving 512-D ArcFace embeddings (3 angles) + photo URL to database...');
       await appDb.from('students').update({
         'face_embedding_front': jsonEncode(frontEmbedding),
         'face_embedding_left': jsonEncode(leftEmbedding),
         'face_embedding_right': jsonEncode(rightEmbedding),
-        'face_embedding_average': jsonEncode(avgEmbedding),
         'face_photo_url': facePhotoUrl,
         'face_registration_status': 'registered',  // ✅ ONLY mark after ALL fields saved
         'is_face_real': true,
         'face_registered_at': DateTime.now().toIso8601String(),
       }).eq('sr_no', widget.srNo);
 
-      print('✅ 512-D ArcFace embeddings saved! (HIGH ACCURACY FOR ATTENDANCE)');
+      print('✅ 512-D ArcFace embeddings (3 angles) saved! Uses MAX similarity for attendance');
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
