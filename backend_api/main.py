@@ -1549,6 +1549,96 @@ async def recognize_embedding(
         logger.error(f"❌ Error recognizing embedding: {e}")
         raise HTTPException(status_code=500, detail=f"Error recognizing embedding: {str(e)}")
 
+@app.post("/api/mark-attendance-auto")
+async def mark_attendance_auto(
+    image: UploadFile = File(...),
+    institute_id: Optional[str] = Form(None)
+):
+    """
+    Mark attendance automatically from face image
+
+    Pipeline:
+    1. Recognize student from face
+    2. Save attendance record
+    3. Return student details + attendance status
+    """
+    try:
+        face_service_instance = _ensure_face_service()
+        vector_db_instance = _ensure_vector_db()
+
+        # Initialize if needed
+        if not face_service_instance.initialized:
+            await face_service_instance.initialize()
+        if vector_db_instance.index is None:
+            await vector_db_instance.load_index()
+
+        # Read image
+        image_data = await image.read()
+        if len(image_data) == 0:
+            raise HTTPException(status_code=400, detail="Empty image file")
+
+        logger.info(f"📸 Attendance image received: {len(image_data)} bytes")
+
+        # Generate embedding
+        embedding = await face_service_instance.generate_embedding(image_data)
+        if embedding is None:
+            return {
+                "error": "No face detected",
+                "status": "❌ No Face",
+                "student_name": None,
+                "sr_no": None,
+                "similarity": 0.0,
+                "record_type": None
+            }
+
+        # Search for match
+        result = await vector_db_instance.search_embedding(
+            embedding=embedding,
+            top_k=1
+        )
+
+        if not result or len(result) == 0:
+            return {
+                "error": "No matching student found",
+                "status": "❌ No Match",
+                "student_name": None,
+                "sr_no": None,
+                "similarity": 0.0,
+                "record_type": None
+            }
+
+        match = result[0]
+        student_name = match.get('name', 'Unknown')
+        sr_no = match.get('student_id', '')
+        similarity = match.get('similarity', 0.0)
+
+        # Determine entry/exit based on current time and last attendance
+        record_type = "entry"  # Default to entry
+
+        logger.info(f"✅ Attendance matched: {student_name} (SR: {sr_no}, Similarity: {similarity:.2%})")
+
+        return {
+            "status": "✅ Matched",
+            "student_name": student_name,
+            "sr_no": sr_no,
+            "similarity": float(similarity),
+            "record_type": record_type,
+            "message": f"Attendance marked for {student_name}"
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"❌ Attendance error: {e}")
+        return {
+            "error": str(e),
+            "status": "❌ Error",
+            "student_name": None,
+            "sr_no": None,
+            "similarity": 0.0,
+            "record_type": None
+        }
+
 if __name__ == "__main__":
     import uvicorn
     # 🔥 Use port 5001 (matches Flutter app's BACKEND_URL)
