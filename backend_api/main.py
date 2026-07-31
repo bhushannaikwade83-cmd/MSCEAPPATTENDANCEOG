@@ -477,8 +477,8 @@ async def check_spoof(
         if not anti_spoof_service_instance.initialized:
             raise HTTPException(status_code=503, detail="Anti-spoof model not initialized")
 
-        # Check for spoof
-        result = anti_spoof_service_instance.predict(file_bytes)
+        # Check for spoof using detect_spoof() method
+        result = anti_spoof_service_instance.detect_spoof(file_bytes)
 
         is_real = result.get("is_real", False)
         confidence = result.get("confidence", 0.0)
@@ -553,9 +553,9 @@ async def detect_face_spoof(
                 }
             )
 
-        # Check for spoof
+        # Check for spoof using detect_spoof() method
         print("🔍 Running spoof detection...")
-        result = anti_spoof_service_instance.predict(file_bytes)
+        result = anti_spoof_service_instance.detect_spoof(file_bytes)
         print(f"📊 Spoof result: {result}")
 
         is_real = result.get("is_real", False)
