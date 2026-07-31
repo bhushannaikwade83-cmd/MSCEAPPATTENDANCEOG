@@ -1866,12 +1866,16 @@ async def mark_attendance_auto(
             best_idx = np.argmax(max_similarities)
             best_similarity = float(max_similarities[best_idx])
 
-            # Debug: Show which angle gave the best match
-            best_from = 'front' if similarities_front[best_idx] == best_similarity else ('left' if similarities_left[best_idx] == best_similarity else 'right')
+            # Debug: Show which angle gave the best match (convert numpy scalars to float first!)
+            sim_front = float(similarities_front[best_idx])
+            sim_left = float(similarities_left[best_idx])
+            sim_right = float(similarities_right[best_idx])
+
+            best_from = 'front' if sim_front == best_similarity else ('left' if sim_left == best_similarity else 'right')
             print(f"\n✅ Best match from angle: {best_from}")
-            print(f"   Front: {similarities_front[best_idx]:.4f}")
-            print(f"   Left: {similarities_left[best_idx]:.4f}")
-            print(f"   Right: {similarities_right[best_idx]:.4f}")
+            print(f"   Front: {sim_front:.4f}")
+            print(f"   Left: {sim_left:.4f}")
+            print(f"   Right: {sim_right:.4f}")
             print(f"   MAX (used): {best_similarity:.4f}")
 
             best_match = valid_students[best_idx]
