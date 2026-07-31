@@ -81,9 +81,9 @@ class VectorDatabase:
             supabase: Client = create_client(supabase_url, supabase_key)
             print(f"✅ Connected to Supabase")
 
-            # Query students with face embeddings
+            # Query students with face embeddings (use fname, mname, lname - NOT 'name')
             response = supabase.table('students').select(
-                'id, sr_no, name, institute_id, face_embedding'
+                'id, sr_no, fname, mname, lname, institute_id, face_embedding_front, face_embedding_left, face_embedding_right'
             ).execute()
 
             students = response.data if response.data else []
@@ -95,8 +95,17 @@ class VectorDatabase:
 
             for idx, student in enumerate(students):
                 try:
-                    # Check if embedding exists
-                    embedding_data = student.get('face_embedding')
+                    # Get all 3 embeddings (use first available)
+                    embedding_data = None
+                    embedding_type = None
+
+                    for angle, col in [('front', 'face_embedding_front'), ('left', 'face_embedding_left'), ('right', 'face_embedding_right')]:
+                        data = student.get(col)
+                        if data:
+                            embedding_data = data
+                            embedding_type = angle
+                            break
+
                     if not embedding_data:
                         continue
 
@@ -108,7 +117,9 @@ class VectorDatabase:
 
                     # Verify dimension
                     if embedding.shape[0] != 512:
-                        print(f"⚠️ Skipping {student.get('name')}: wrong embedding dimension {embedding.shape[0]}")
+                        fname = student.get('fname', '')
+                        lname = student.get('lname', '')
+                        print(f"⚠️ Skipping {fname} {lname}: wrong embedding dimension {embedding.shape[0]}")
                         continue
 
                     # Add to FAISS
@@ -116,10 +127,15 @@ class VectorDatabase:
 
                     # Store metadata
                     inst_id = student.get('institute_id', 'UNKNOWN')
+                    fname = student.get('fname', '')
+                    mname = student.get('mname', '')
+                    lname = student.get('lname', '')
+                    full_name = f"{fname} {mname} {lname}".replace('  ', ' ').strip()
+
                     self.metadata[loaded_count] = {
                         'student_id': student.get('id'),
                         'roll_number': student.get('sr_no'),
-                        'name': student.get('name'),
+                        'name': full_name,
                         'institute_id': inst_id
                     }
 
@@ -131,7 +147,9 @@ class VectorDatabase:
                     loaded_count += 1
 
                 except Exception as e:
-                    logger.warning(f"⚠️ Failed to load embedding for {student.get('name')}: {e}")
+                    fname = student.get('fname', '')
+                    lname = student.get('lname', '')
+                    logger.warning(f"⚠️ Failed to load embedding for {fname} {lname}: {e}")
                     continue
 
             print(f"✅ Loaded {loaded_count} embeddings from Supabase")
