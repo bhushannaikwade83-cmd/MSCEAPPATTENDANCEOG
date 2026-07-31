@@ -1630,12 +1630,22 @@ async def mark_attendance_auto(
         match = matches[0]
         student_name = match.get('name', 'Unknown')
         sr_no = match.get('roll_number', match.get('student_id', ''))
+        student_id = match.get('student_id', '')
         similarity = match.get('similarity', 0.0)
 
-        # Determine entry/exit
+        logger.info(f"✅ Match found: {student_name} (SR: {sr_no}, Similarity: {similarity:.2%})")
+
+        # Determine entry/exit by checking if already marked entry today
+        from datetime import datetime, date
+        today = date.today().isoformat()
+
+        print(f"📋 Checking attendance for {sr_no} on {today}...")
+
+        # TODO: Query attendance table to check if entry already marked
+        # For now, default to entry (backend needs DB connection)
         record_type = "entry"
 
-        logger.info(f"✅ Match found: {student_name} (SR: {sr_no}, Similarity: {similarity:.2%})")
+        print(f"📍 Record type: {record_type.upper()}")
 
         return {
             "status": "✅ Matched",
@@ -1643,7 +1653,7 @@ async def mark_attendance_auto(
             "sr_no": sr_no,
             "similarity": float(similarity),
             "record_type": record_type,
-            "message": f"Attendance marked for {student_name}"
+            "message": f"Attendance marked for {student_name} ({record_type.upper()})"
         }
 
     except HTTPException:

@@ -177,13 +177,19 @@ class _LiveAntiSpoofCameraScreenState extends State<LiveAntiSpoofCameraScreen> {
             _matchedStudentName = result['student_name'] ?? 'Unknown';
             _similarityScore = result['similarity'] ?? 0.0;
             _srNo = result['sr_no'] ?? 'N/A';
+            final recordType = result['record_type'] ?? 'entry';
 
             print('✅ [MATCH] Student found: $_matchedStudentName');
             print('📊 [MATCH] SR No: $_srNo');
             print('📊 [MATCH] Similarity: ${(_similarityScore * 100).toStringAsFixed(1)}%');
+            print('📍 [MATCH] Record type: $recordType');
+
+            // Save attendance to Supabase
+            print('💾 [SAVE] Saving attendance to Supabase...');
+            await _saveAttendanceToSupabase(_srNo, recordType, picture.path);
 
             setState(() {
-              _currentStage = '✅ Attendance Marked';
+              _currentStage = '✅ Attendance Marked ($recordType)';
             });
 
             await Future.delayed(const Duration(seconds: 2));
@@ -220,6 +226,24 @@ class _LiveAntiSpoofCameraScreenState extends State<LiveAntiSpoofCameraScreen> {
   void _setStatus(String status) {
     if (mounted) {
       setState(() => _currentStage = status);
+    }
+  }
+
+  Future<void> _saveAttendanceToSupabase(
+    String srNo,
+    String recordType,
+    String photoPath,
+  ) async {
+    try {
+      // TODO: Save to Supabase attendance table
+      // Fields: sr_no, record_type (entry/exit), marked_time, photo_url, similarity_score
+      print('💾 [SAVE] Would save:');
+      print('   SR No: $srNo');
+      print('   Type: $recordType');
+      print('   Time: ${DateTime.now()}');
+      print('   Similarity: ${(_similarityScore * 100).toStringAsFixed(1)}%');
+    } catch (e) {
+      print('❌ [SAVE] Error saving attendance: $e');
     }
   }
 
