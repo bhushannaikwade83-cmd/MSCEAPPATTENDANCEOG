@@ -15,6 +15,7 @@ from pydantic import BaseModel, model_validator
 import base64
 import json
 import numpy as np
+import cv2
 from typing import Optional, List, Tuple
 import time
 import logging
