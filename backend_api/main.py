@@ -339,16 +339,29 @@ async def startup_event():
     logger.info("=" * 60)
     logger.info("🔥 PRE-WARMING ANTI-SPOOF MODEL (TFLite MiniFAS)...")
     logger.info("=" * 60)
+    print("=" * 60)
+    print("🔥 PRE-WARMING ANTI-SPOOF MODEL (TFLite MiniFAS)...")
+    print("=" * 60)
     try:
-        anti_spoof_service = _ensure_anti_spoof_service()
-        print("🔥 PRE-WARMING ANTI-SPOOF MODEL (TFLite MiniFAS)...")
+        anti_spoof_service_instance = _ensure_anti_spoof_service()
+        print("📦 Calling anti_spoof_service.initialize()...")
 
-        if anti_spoof_service.initialized:
+        # CRITICAL: Call initialize() to load the model!
+        if hasattr(anti_spoof_service_instance, 'initialize'):
+            try:
+                await anti_spoof_service_instance.initialize()
+                print("✅ Initialize method called successfully")
+            except Exception as init_err:
+                print(f"⚠️ Initialize failed (may be sync): {init_err}")
+
+        if anti_spoof_service_instance.initialized:
             logger.info("✅✅✅ ANTI-SPOOF MODEL READY! ✅✅✅")
             logger.info("   Model: TFLite MiniFAS (texture analysis)")
             logger.info("   Status: INITIALIZED")
             logger.info("   Ready for: /api/detect-face endpoint")
             print("✅✅✅ ANTI-SPOOF MODEL READY! ✅✅✅")
+            print("   Model: TFLite MiniFAS")
+            print("   Status: INITIALIZED")
         else:
             logger.warning("⏳ AntiSpoofService initializing in background...")
             logger.warning("   Please wait 30-60 seconds for full initialization")
