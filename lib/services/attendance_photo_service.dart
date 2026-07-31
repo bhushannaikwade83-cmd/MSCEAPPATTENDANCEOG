@@ -5,10 +5,10 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:path/path.dart' as path;
 
 class AttendancePhotoService {
-  static const String B2_BUCKET = 'attendance-photos';
+  // From .env: STORAGE_BUCKET_NAME=student-photos
+  static const String STORAGE_BUCKET = 'student-photos';
+  static const String STORAGE_PATH = 'attendance-photos';
   static const int MAX_SIZE_KB = 100;
-  static const String B2_URL_BASE =
-      'https://f004.backblazeb2.com/file/attendance-photos';
 
   /// Compress and upload attendance photo to B2
   static Future<String?> uploadAttendancePhoto({
@@ -35,14 +35,14 @@ class AttendancePhotoService {
         print('   Final size: ${(ultraCompressed.length / 1024).toStringAsFixed(1)} KB');
       }
 
-      // 3. Upload to Supabase storage (which uses B2 backend)
+      // 3. Upload to Supabase storage
       final fileName = _generateFileName(srNo, instituteId, recordType);
-      final filePath = 'attendance/$instituteId/$srNo/$fileName';
+      final filePath = '$STORAGE_PATH/$instituteId/$srNo/$fileName';
 
-      print('   📤 Uploading to B2: $filePath');
+      print('   📤 Uploading to bucket: $STORAGE_BUCKET, path: $filePath');
 
       final supabase = Supabase.instance.client;
-      await supabase.storage.from(B2_BUCKET).uploadBinary(
+      await supabase.storage.from(STORAGE_BUCKET).uploadBinary(
         filePath,
         compressedBytes,
         fileOptions: const FileOptions(
@@ -52,7 +52,7 @@ class AttendancePhotoService {
       );
 
       // 4. Generate public URL
-      final publicUrl = supabase.storage.from(B2_BUCKET).getPublicUrl(filePath);
+      final publicUrl = supabase.storage.from(STORAGE_BUCKET).getPublicUrl(filePath);
       print('   ✅ [PHOTO] Upload successful!');
       print('   📷 URL: $publicUrl');
 
@@ -100,7 +100,7 @@ class AttendancePhotoService {
 
   /// Get URL for a stored photo
   static String getPhotoUrl(String srNo, String instituteId, String fileName) {
-    return '$B2_URL_BASE/attendance/$instituteId/$srNo/$fileName';
+    return '$STORAGE_PATH/$instituteId/$srNo/$fileName';
   }
 
   /// Delete old attendance photos (cleanup)
@@ -114,13 +114,13 @@ class AttendancePhotoService {
       final uri = Uri.parse(photoUrl);
       final pathSegments = uri.pathSegments;
 
-      if (pathSegments.length < 3) return;
+      if (pathSegments.isEmpty) return;
 
-      // Remove first segment (bucket name is in domain)
-      final filePath = pathSegments.skip(1).join('/');
+      // Get the file path (everything after domain)
+      final filePath = pathSegments.join('/');
 
       final supabase = Supabase.instance.client;
-      await supabase.storage.from(B2_BUCKET).remove([filePath]);
+      await supabase.storage.from(STORAGE_BUCKET).remove([filePath]);
 
       print('🗑️ Deleted old photo: $filePath');
     } catch (e) {
