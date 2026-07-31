@@ -59,6 +59,12 @@ embedding_cache = {
 
 app = FastAPI(title="EduSetu Face Recognition API", version="1.0.0")
 
+# Serve dashboard at root
+@app.get("/", response_class=FileResponse)
+async def serve_dashboard():
+    """🎯 API Dashboard - Serve HTML"""
+    return "dashboard.html"
+
 # Mount dashboard
 app.mount("/dashboard", dashboard_app)
 
