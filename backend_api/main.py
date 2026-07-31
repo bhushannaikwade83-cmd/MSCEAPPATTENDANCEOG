@@ -336,15 +336,26 @@ async def startup_event():
         logger.warning("⚠️ Vector DB dependency unavailable at startup")
 
     # Pre-warm AntiSpoofService model (critical for mobile endpoint)
-    logger.info("🔥 Pre-warming AntiSpoofService model...")
+    logger.info("=" * 60)
+    logger.info("🔥 PRE-WARMING ANTI-SPOOF MODEL (TFLite MiniFAS)...")
+    logger.info("=" * 60)
     try:
         anti_spoof_service = _ensure_anti_spoof_service()
+        print("🔥 PRE-WARMING ANTI-SPOOF MODEL (TFLite MiniFAS)...")
+
         if anti_spoof_service.initialized:
-            logger.info("✅ AntiSpoofService model ready!")
+            logger.info("✅✅✅ ANTI-SPOOF MODEL READY! ✅✅✅")
+            logger.info("   Model: TFLite MiniFAS (texture analysis)")
+            logger.info("   Status: INITIALIZED")
+            logger.info("   Ready for: /api/detect-face endpoint")
+            print("✅✅✅ ANTI-SPOOF MODEL READY! ✅✅✅")
         else:
-            logger.warning("⏳ AntiSpoofService model loading in background...")
+            logger.warning("⏳ AntiSpoofService initializing in background...")
+            logger.warning("   Please wait 30-60 seconds for full initialization")
+            print("⏳ AntiSpoofService initializing... (may take 30-60 seconds)")
     except Exception as e:
         logger.warning(f"⚠️ AntiSpoofService pre-warm failed: {e}")
+        print(f"⚠️ AntiSpoofService pre-warm failed: {e}")
 
     logger.info("✅ API ready!")
 
@@ -511,9 +522,12 @@ async def detect_face_spoof(
         print(f"✅ AntiSpoofService loaded, initialized: {anti_spoof_service_instance.initialized}")
 
         if not anti_spoof_service_instance.initialized:
-            err = "Anti-spoof model loading - please retry in 10-30 seconds"
+            err = "⏳ TFLite Model Loading - Please retry in 10-30 seconds"
             print(f"⏳ {err}")
+            print(f"⏳ Model status: Initializing TFLite MiniFAS...")
             logger.warning(f"⏳ {err}")
+            logger.warning("   TFLite Model Download/Initialization In Progress")
+            logger.warning("   Client should retry automatically in 2-second intervals")
             # Return HTTP 503 (Service Unavailable) so client knows to retry
             return JSONResponse(
                 status_code=503,
@@ -521,7 +535,7 @@ async def detect_face_spoof(
                     "error": err,
                     "is_real": None,
                     "status": "model_loading",
-                    "message": "Model is initializing. Please retry your request in a few seconds.",
+                    "message": "TFLite model is initializing. Please retry in 10-30 seconds.",
                     "retry_after": 10
                 }
             )
@@ -538,6 +552,13 @@ async def detect_face_spoof(
 
         status_emoji = "✅" if is_real else "❌"
         print(f"{status_emoji} Result: is_real={is_real}, confidence={confidence:.2f}, time={elapsed:.2f}s")
+
+        # Success message
+        if is_real:
+            print("✅ LIVE FACE DETECTED - Attendance can be marked!")
+        else:
+            print("❌ SPOOF DETECTED - Fake photo/video/screen rejected")
+
         logger.info(f"{status_emoji} Mobile detect-face: is_real={is_real}, confidence={confidence:.2f}, time={elapsed:.2f}s")
 
         log_request("POST", "/api/detect-face", "success")
