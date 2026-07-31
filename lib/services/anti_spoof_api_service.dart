@@ -197,10 +197,16 @@ class AntiSpoofApiService {
   }
 
   /// Auto-attendance marking (HIGH ACCURACY)
-  /// Compares live face against all registered students
-  /// Returns: {status, student_id, similarity_score, attendance_marked}
-  static Future<Map<String, dynamic>> markAttendanceAuto(File imageFile) async {
+  /// Mark attendance automatically from face image
+  /// Returns: {student_name, sr_no, similarity, record_type, status}
+  static Future<Map<String, dynamic>> markAttendanceAuto(
+    File imageFile, {
+    String instituteId = "99099", // Default institute ID
+  }) async {
     try {
+      print('🌐 [SERVICE] Calling /api/mark-attendance-auto');
+      print('📊 [SERVICE] Institute ID: $instituteId');
+
       var request = http.MultipartRequest(
         'POST',
         Uri.parse('$API_URL/api/mark-attendance-auto'),
@@ -210,21 +216,38 @@ class AntiSpoofApiService {
         await http.MultipartFile.fromPath('image', imageFile.path),
       );
 
+      // Add institute_id as form field
+      request.fields['institute_id'] = instituteId;
+
+      print('🌐 [SERVICE] Sending request...');
       var response = await request.send().timeout(
         const Duration(seconds: 60),
         onTimeout: () => throw Exception('Attendance timeout'),
       );
 
+      print('✅ [SERVICE] Response status: ${response.statusCode}');
+
       if (response.statusCode != 200) {
-        throw Exception('Attendance failed: ${response.statusCode}');
+        var responseData = await response.stream.toBytes();
+        var responseText = utf8.decode(responseData);
+        print('❌ [SERVICE] Error response: $responseText');
+        throw Exception('Attendance failed: ${response.statusCode} - $responseText');
       }
 
       var responseData = await response.stream.toBytes();
       var result = json.decode(utf8.decode(responseData));
 
+      print('✅ [SERVICE] Response: $result');
       return result;
     } catch (e) {
-      return {"error": e.toString(), "status": "❌ Error", "attendance_marked": false};
+      print('❌ [SERVICE] Exception: $e');
+      return {
+        "error": e.toString(),
+        "status": "❌ Error",
+        "student_name": null,
+        "sr_no": null,
+        "similarity": 0.0
+      };
     }
   }
 

@@ -1552,36 +1552,49 @@ async def recognize_embedding(
 @app.post("/api/mark-attendance-auto")
 async def mark_attendance_auto(
     image: UploadFile = File(...),
-    institute_id: Optional[str] = Form(None)
+    institute_id: str = Form(...)
 ):
     """
     Mark attendance automatically from face image
 
     Pipeline:
-    1. Recognize student from face
-    2. Save attendance record
-    3. Return student details + attendance status
+    1. Recognize student from face using FAISS vector search
+    2. Return student details + match status
+
+    Args:
+        image: Face image file
+        institute_id: Institute ID for filtering results
+
+    Returns:
+        {student_name, sr_no, similarity, record_type, status}
     """
     try:
+        logger.info(f"🎯 Attendance request for institute: {institute_id}")
+
         face_service_instance = _ensure_face_service()
         vector_db_instance = _ensure_vector_db()
 
         # Initialize if needed
         if not face_service_instance.initialized:
+            logger.info("🔄 Initializing face service...")
             await face_service_instance.initialize()
         if vector_db_instance.index is None:
+            logger.info("🔄 Loading vector database...")
             await vector_db_instance.load_index()
 
         # Read image
         image_data = await image.read()
         if len(image_data) == 0:
+            logger.warning("❌ Empty image received")
             raise HTTPException(status_code=400, detail="Empty image file")
 
-        logger.info(f"📸 Attendance image received: {len(image_data)} bytes")
+        logger.info(f"📸 Image received: {len(image_data)} bytes")
 
         # Generate embedding
+        logger.info("🔍 Generating face embedding...")
         embedding = await face_service_instance.generate_embedding(image_data)
         if embedding is None:
+            logger.warning("❌ No face detected in image")
             return {
                 "error": "No face detected",
                 "status": "❌ No Face",
@@ -1591,13 +1604,19 @@ async def mark_attendance_auto(
                 "record_type": None
             }
 
-        # Search for match
-        result = await vector_db_instance.search_embedding(
+        logger.info(f"✅ Embedding generated: {embedding.shape}")
+
+        # Search for match in vector database
+        logger.info(f"🔎 Searching vector database for institute {institute_id}...")
+        matches = await vector_db_instance.search(
             embedding=embedding,
-            top_k=1
+            institute_id=institute_id,
+            top_k=1,
+            threshold=0.70
         )
 
-        if not result or len(result) == 0:
+        if not matches or len(matches) == 0:
+            logger.warning(f"❌ No matching student found for institute {institute_id}")
             return {
                 "error": "No matching student found",
                 "status": "❌ No Match",
@@ -1607,15 +1626,16 @@ async def mark_attendance_auto(
                 "record_type": None
             }
 
-        match = result[0]
+        # Get top match
+        match = matches[0]
         student_name = match.get('name', 'Unknown')
-        sr_no = match.get('student_id', '')
+        sr_no = match.get('roll_number', match.get('student_id', ''))
         similarity = match.get('similarity', 0.0)
 
-        # Determine entry/exit based on current time and last attendance
-        record_type = "entry"  # Default to entry
+        # Determine entry/exit
+        record_type = "entry"
 
-        logger.info(f"✅ Attendance matched: {student_name} (SR: {sr_no}, Similarity: {similarity:.2%})")
+        logger.info(f"✅ Match found: {student_name} (SR: {sr_no}, Similarity: {similarity:.2%})")
 
         return {
             "status": "✅ Matched",
@@ -1630,6 +1650,7 @@ async def mark_attendance_auto(
         raise
     except Exception as e:
         logger.error(f"❌ Attendance error: {e}")
+        logger.error(f"📍 Stack: {traceback.format_exc()}")
         return {
             "error": str(e),
             "status": "❌ Error",
