@@ -92,6 +92,18 @@ class _AutoFaceScanScreenState extends State<AutoFaceScanScreen>
   String? _markedRecordType; // 'entry' or 'exit'
   double? _markedSimilarityScore;
 
+  // Debug console logs
+  final List<String> _consoleLogs = [];
+  void _addLog(String message) {
+    debugPrint(message);
+    if (mounted) {
+      setState(() {
+        _consoleLogs.add('${DateTime.now().toIso8601String().split('T')[1].split('.')[0]} $message');
+        if (_consoleLogs.length > 20) _consoleLogs.removeAt(0);
+      });
+    }
+  }
+
   late PreCaptureLivenessTracker _livenessTracker;
 
   bool _padInFlight = false;
@@ -585,40 +597,53 @@ class _AutoFaceScanScreenState extends State<AutoFaceScanScreen>
     setState(() => _isMarkingAttendance = true);
 
     try {
+      _addLog('🔵 Starting attendance marking...');
+
       final student = result.student!;
       final studentId = student['id']?.toString();
       final srNo = student['sr_no']?.toString() ?? '';
       final studentName = student['name']?.toString() ?? student['student_name']?.toString() ?? '';
 
+      _addLog('👤 Student: ID=$studentId, Name=$studentName');
+
       if (studentId == null || studentId.isEmpty) {
-        throw Exception('Student ID not found');
+        throw Exception('❌ Student ID not found');
       }
 
       // Get embedding from student record
+      _addLog('🔍 Fetching student record...');
       final studentRecord = await appDb
           .from('students')
           .select('id, institute_id, sr_no, fname, lname, mname, face_embedding_average')
           .eq('id', studentId)
           .single();
 
+      _addLog('✅ Student record fetched');
+
       final embeddingJson = studentRecord['face_embedding_average'] as String?;
       if (embeddingJson == null || embeddingJson.isEmpty) {
-        throw Exception('No face embedding found for student');
+        throw Exception('❌ No face embedding found for student');
       }
 
+      _addLog('🧮 Parsing 512-D embedding...');
       final embedding = List<double>.from(
         jsonDecode(embeddingJson).map((x) => (x as num).toDouble()),
       );
+      _addLog('✅ Embedding ready (${embedding.length}D)');
 
       // Compress and upload photo to B2
+      _addLog('📷 Compressing photo...');
       final photoBytes = await PhotoCompressionService.compressPhoto(result.photoPath!);
+      _addLog('✅ Compressed: ${(photoBytes.length / 1024).toStringAsFixed(1)}KB');
+
+      _addLog('☁️ Uploading to B2...');
       final photoUrl = await B2BStorageService.uploadFile(
         '$_instituteId/$studentName/photo-attendance/${DateTime.now().toIso8601String()}.jpg',
         photoBytes,
         contentType: 'image/jpeg',
       );
 
-      debugPrint('📸 Photo uploaded: $photoUrl');
+      _addLog('✅ B2 uploaded: $photoUrl');
 
       // Get constructed student name
       final fname = studentRecord['fname'] ?? '';
@@ -672,7 +697,7 @@ class _AutoFaceScanScreenState extends State<AutoFaceScanScreen>
         }
       }
     } catch (e) {
-      debugPrint('❌ Attendance marking error: $e');
+      _addLog('❌ ERROR: ${e.toString().split('\n').first}');
       if (mounted) {
         setState(() {
           _attendanceStatus = '✗ Mark failed';
@@ -832,6 +857,62 @@ class _AutoFaceScanScreenState extends State<AutoFaceScanScreen>
               ),
             ),
           _buildInfoPanel(),
+          // Debug Console
+          Positioned(
+            bottom: 0,
+            left: 0,
+            right: 0,
+            child: Container(
+              maxHeight: 120,
+              color: Colors.black.withValues(alpha: 0.85),
+              border: Border(top: BorderSide(color: Colors.cyan, width: 2)),
+              child: Column(
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          '📟 Console',
+                          style: TextStyle(
+                            color: Colors.cyan,
+                            fontSize: 10,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        Text(
+                          '${_consoleLogs.length} logs',
+                          style: TextStyle(
+                            color: Colors.cyan.withValues(alpha: 0.6),
+                            fontSize: 9,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Divider(color: Colors.cyan.withValues(alpha: 0.3), height: 1),
+                  Expanded(
+                    child: SingleChildScrollView(
+                      reverse: true,
+                      child: Padding(
+                        padding: const EdgeInsets.all(8),
+                        child: Text(
+                          _consoleLogs.join('\n'),
+                          style: TextStyle(
+                            color: Colors.greenAccent,
+                            fontSize: 8,
+                            fontFamily: 'monospace',
+                            height: 1.2,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
         ],
       ),
     );
