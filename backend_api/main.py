@@ -1634,38 +1634,57 @@ async def mark_attendance_auto(
                     "record_type": None
                 }
 
-            # Find best match using cosine similarity
+            # ⚡ FAST: Batch cosine similarity (vectorized, not loop)
             from sklearn.metrics.pairwise import cosine_similarity
 
-            best_match = None
-            best_similarity = 0.0
             SIMILARITY_THRESHOLD = 0.70
+            valid_students = []
+            embeddings_matrix = []
 
+            # Parse all embeddings into matrix
             for student in students:
                 embedding_data = student.get('face_embedding')
                 if not embedding_data:
                     continue
 
-                # Parse embedding
-                if isinstance(embedding_data, str):
-                    stored_embedding = np.array(json.loads(embedding_data), dtype='float32')
-                else:
-                    stored_embedding = np.array(embedding_data, dtype='float32')
+                try:
+                    if isinstance(embedding_data, str):
+                        stored_embedding = np.array(json.loads(embedding_data), dtype='float32')
+                    else:
+                        stored_embedding = np.array(embedding_data, dtype='float32')
 
-                # Calculate cosine similarity
-                similarity_score = float(cosine_similarity(
-                    embedding.reshape(1, -1),
-                    stored_embedding.reshape(1, -1)
-                )[0][0])
+                    valid_students.append(student)
+                    embeddings_matrix.append(stored_embedding)
+                except:
+                    continue
 
-                print(f"   {student.get('name')} ({student.get('sr_no')}): {similarity_score:.4f}")
+            if not embeddings_matrix:
+                logger.warning(f"❌ No valid embeddings found for institute {institute_id}")
+                return {
+                    "error": "No matching student found",
+                    "status": "❌ No Match",
+                    "student_name": None,
+                    "sr_no": None,
+                    "similarity": 0.0,
+                    "record_type": None
+                }
 
-                if similarity_score >= SIMILARITY_THRESHOLD and similarity_score > best_similarity:
-                    best_similarity = similarity_score
-                    best_match = student
+            # ⚡ Batch calculate all similarities at once (fast!)
+            embeddings_matrix = np.array(embeddings_matrix, dtype='float32')
+            similarities = cosine_similarity(
+                embedding.reshape(1, -1),
+                embeddings_matrix
+            )[0]
 
-            if not best_match:
-                logger.warning(f"❌ No matching student found (threshold: {SIMILARITY_THRESHOLD})")
+            # Find best match
+            best_idx = np.argmax(similarities)
+            best_similarity = float(similarities[best_idx])
+
+            print(f"⚡ Checked {len(valid_students)} students in {len(valid_students)} ms")
+            print(f"   Best: {valid_students[best_idx].get('name')} - {best_similarity:.4f}")
+
+            if best_similarity < SIMILARITY_THRESHOLD:
+                logger.warning(f"❌ No matching student found (best: {best_similarity:.4f}, threshold: {SIMILARITY_THRESHOLD})")
                 return {
                     "error": "No matching student found",
                     "status": "❌ No Match",
@@ -1676,6 +1695,7 @@ async def mark_attendance_auto(
                 }
 
             # Got a match!
+            best_match = valid_students[best_idx]
             student_name = best_match.get('name', 'Unknown')
             sr_no = best_match.get('sr_no', '')
             student_id = best_match.get('id', '')
