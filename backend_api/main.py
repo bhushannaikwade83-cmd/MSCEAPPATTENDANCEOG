@@ -358,10 +358,17 @@ async def _get_embeddings_for_institute(institute_id: str):
         print(f"🔄 Loading embeddings for institute {institute_id}...")
 
         response = supabase.table('students').select(
-            'id, sr_no, fname, mname, lname, face_embedding_front, face_embedding_left, face_embedding_right'
+            'id, sr_no, fname, mname, lname, face_embedding_front, face_embedding_left, face_embedding_right, institute_id, face_registration_status'
         ).eq('institute_id', institute_id).eq('face_registration_status', 'registered').execute()
 
         students_data = response.data if response.data else []
+        print(f"📊 Query returned {len(students_data)} students")
+
+        if students_data:
+            print(f"   First student: {students_data[0].get('sr_no')} | {students_data[0].get('fname')} {students_data[0].get('lname')}")
+            print(f"   Institute ID: {students_data[0].get('institute_id')}")
+            print(f"   Status: {students_data[0].get('face_registration_status')}")
+
         students = []
 
         for student in students_data:
@@ -391,13 +398,22 @@ async def _get_embeddings_for_institute(institute_id: str):
 
             # Only add if at least ONE embedding exists
             if not any(embeddings.values()):
+                sr = student.get('sr_no', 'UNKNOWN')
+                fname = student.get('fname', '')
+                lname = student.get('lname', '')
+                print(f"⚠️ Skipping {sr} {fname} {lname}: No valid embeddings")
                 continue
 
+            sr_no = student.get('sr_no')
+            fname = student.get('fname', '')
+            lname = student.get('lname', '')
+            print(f"✅ Added {sr_no} {fname} {lname} with embeddings: front={embeddings['front'] is not None}, left={embeddings['left'] is not None}, right={embeddings['right'] is not None}")
+
             students.append({
-                'sr_no': student.get('sr_no'),
-                'fname': student.get('fname', ''),
+                'sr_no': sr_no,
+                'fname': fname,
                 'mname': student.get('mname', ''),
-                'lname': student.get('lname', ''),
+                'lname': lname,
                 'id': student.get('id'),
                 'embeddings': embeddings,  # Store all 3
             })
