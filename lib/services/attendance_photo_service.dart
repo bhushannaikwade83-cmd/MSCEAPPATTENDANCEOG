@@ -5,8 +5,8 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:path/path.dart' as path;
 
 class AttendancePhotoService {
-  // From B2B config: STORAGE_BUCKET_NAME=attendance-students-photos
-  static const String STORAGE_BUCKET = 'attendance-students-photos';
+  // Direct Backblaze B2 bucket (already working in B2)
+  static const String STORAGE_BUCKET = 'attendance-photos';
   static const String STORAGE_PATH = 'attendance-photos';
   static const int MAX_SIZE_KB = 100;
 
