@@ -396,8 +396,9 @@ async def _get_embeddings_for_institute(institute_id: str):
                 except Exception:
                     embeddings[angle] = None
 
-            # Only add if at least ONE embedding exists
-            if not any(embeddings.values()):
+            # Only add if at least ONE embedding exists (check for None, not bool)
+            has_embedding = any(v is not None for v in embeddings.values())
+            if not has_embedding:
                 sr = student.get('sr_no', 'UNKNOWN')
                 fname = student.get('fname', '')
                 lname = student.get('lname', '')
