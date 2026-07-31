@@ -170,80 +170,54 @@ class _LiveAntiSpoofCameraScreenState extends State<LiveAntiSpoofCameraScreen>
 
           if (!mounted) return;
 
-        if (result.containsKey('error')) {
-          print('❌ [API ERROR] ${result['error']}');
-          setState(() {
-            _status = 'API Error: ${result['error']}';
-            _canCapture = false;
-          });
-        } else {
-          final isRealFromBackend = result['is_real'] as bool? ?? false;
-          final confidence = (result['confidence'] as num?)?.toDouble() ?? 0.0;
+          if (result.containsKey('error')) {
+            print('❌ [API ERROR] ${result['error']}');
+            setState(() {
+              _status = 'API Error: ${result['error']}';
+              _canCapture = false;
+            });
+          } else {
+            final isRealFromBackend = result['is_real'] as bool? ?? false;
+            final confidence = (result['confidence'] as num?)?.toDouble() ?? 0.0;
+            final spoofPercent = confidence * 100;
 
-          // Collect frame scores for 3 seconds
-          _frameCollectionStartTime ??= DateTime.now();
-          _frameScores.add(isRealFromBackend ? 0.0 : 1.0); // 0 = real, 1 = spoof for averaging
-
-          final elapsed = DateTime.now().difference(_frameCollectionStartTime!);
-          final isCollectionComplete = elapsed.inSeconds >= 3;
-
-          if (isCollectionComplete && _frameScores.isNotEmpty) {
-            // Calculate average spoof score over 3 seconds (0 = all real, 1 = all spoof)
-            final avgSpoofScore = _frameScores.reduce((a, b) => a + b) / _frameScores.length;
-            final avgSpoofPercent = avgSpoofScore * 100;
-
-            // Use backend is_real flag: if majority of frames are real, accept as real
-            final isReal = avgSpoofScore < 0.5; // Less than 50% spoof votes = REAL
+            // REAL-TIME DECISION (no averaging)
+            final isReal = isRealFromBackend;
 
             if (isReal) {
               print('═════════════════════════════════════════════');
-              print('✅ LIVE FACE DETECTED (3-second average)');
-              print('   Frames analyzed: ${_frameScores.length}');
-              print('   Real votes: ${_frameScores.where((s) => s == 0.0).length}');
-              print('   Avg Spoof Score: ${avgSpoofPercent.toStringAsFixed(1)}%');
+              print('✅ LIVE FACE DETECTED');
+              print('   Spoof Score: ${spoofPercent.toStringAsFixed(1)}%');
               print('   Status: Face Verified ✓');
               print('🔍 NOW WAITING FOR BLINK FOR LIVENESS...');
               print('═════════════════════════════════════════════');
 
               setState(() {
                 _isRealFace = true;
-                _confidence = 1.0 - avgSpoofScore;
-                _score = 1.0 - avgSpoofScore;
+                _confidence = confidence;
+                _score = confidence;
                 _status = 'Waiting for blink... 0/1';
                 _realCount++;
-                _canCapture = false; // Don't capture until blink detected
+                _canCapture = false;
                 _blinkDetectionStartTime = DateTime.now();
               });
             } else {
               print('═════════════════════════════════════════════');
-              print('❌ SPOOF DETECTED (3-second average)');
-              print('   Frames analyzed: ${_frameScores.length}');
-              print('   Spoof votes: ${_frameScores.where((s) => s == 1.0).length}');
-              print('   Avg Spoof Score: ${avgSpoofPercent.toStringAsFixed(1)}%');
+              print('❌ SPOOF DETECTED');
+              print('   Spoof Score: ${spoofPercent.toStringAsFixed(1)}%');
               print('   Status: Fake photo/video/screen detected');
               print('═════════════════════════════════════════════');
 
               setState(() {
                 _isRealFace = false;
-                _confidence = avgSpoofScore; // Spoof confidence
-                _score = avgSpoofScore;
-                _status = 'Spoof Detected';
+                _confidence = confidence;
+                _score = confidence;
+                _status = 'Spoof Detected - ${spoofPercent.toStringAsFixed(1)}%';
                 _spoofCount++;
                 _canCapture = false;
               });
             }
-
-            // Reset for next collection
-            _frameScores.clear();
-            _frameCollectionStartTime = null;
-          } else if (_frameScores.length == 1) {
-            // Show collecting status on first frame
-            final voteType = isRealFromBackend ? '✅ Real' : '❌ Spoof';
-            setState(() {
-              _status = 'Collecting frames... ${elapsed.inSeconds}s ($voteType)';
-            });
           }
-        }
         }
       }
 
