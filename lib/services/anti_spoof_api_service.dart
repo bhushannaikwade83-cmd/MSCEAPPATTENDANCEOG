@@ -5,7 +5,7 @@ import 'dart:convert';
 class AntiSpoofApiService {
   // Get backend URL from .env (uses same IP as rest of app)
   static String get API_URL {
-    return "http://192.0.0.2:5001"; // 🔥 SYNC with main .env
+    return "https://msceappattendanceog-production.up.railway.app"; // 🔥 Railway Deployment
   }
 
   /// Pre-warm backend (just check health, models load on first registration)

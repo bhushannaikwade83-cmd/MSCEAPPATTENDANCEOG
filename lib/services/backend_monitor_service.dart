@@ -3,7 +3,7 @@ import 'dart:async';
 
 /// Monitors backend connection status and logs to console
 class BackendMonitorService {
-  static const String _backendUrl = 'http://192.0.0.2:5001';
+  static const String _backendUrl = 'https://msceappattendanceog-production.up.railway.app';
   static Timer? _monitorTimer;
   static bool _isConnected = false;
 
