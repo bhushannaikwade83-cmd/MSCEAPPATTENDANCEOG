@@ -1645,6 +1645,7 @@ async def mark_attendance_auto(
             for student in students:
                 embedding_data = student.get('face_embedding_average')  # Use average embedding
                 if not embedding_data:
+                    print(f"⚠️ Student {student.get('fname')} {student.get('lname')}: No embedding data")
                     continue
 
                 try:
@@ -1653,9 +1654,15 @@ async def mark_attendance_auto(
                     else:
                         stored_embedding = np.array(embedding_data, dtype='float32')
 
+                    if stored_embedding.shape[0] != 512:
+                        print(f"⚠️ Student {student.get('fname')} {student.get('lname')}: Wrong dimension {stored_embedding.shape[0]}")
+                        continue
+
                     valid_students.append(student)
                     embeddings_matrix.append(stored_embedding)
-                except:
+                    print(f"✅ Loaded embedding for {student.get('fname')} {student.get('lname')}")
+                except Exception as e:
+                    print(f"❌ Error parsing embedding for {student.get('fname')} {student.get('lname')}: {e}")
                     continue
 
             if not embeddings_matrix:
