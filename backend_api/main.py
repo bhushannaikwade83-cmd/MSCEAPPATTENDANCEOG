@@ -1617,8 +1617,8 @@ async def mark_attendance_auto(
 
             # Get all students with embeddings for this institute
             response = supabase.table('students').select(
-                'id, sr_no, name, face_embedding'
-            ).eq('institute_id', institute_id).execute()
+                'id, sr_no, fname, lname, face_embedding_average'
+            ).eq('inst_id', institute_id).execute()
 
             students = response.data if response.data else []
             print(f"📊 Found {len(students)} students in institute {institute_id}")
@@ -1643,7 +1643,7 @@ async def mark_attendance_auto(
 
             # Parse all embeddings into matrix
             for student in students:
-                embedding_data = student.get('face_embedding')
+                embedding_data = student.get('face_embedding_average')  # Use average embedding
                 if not embedding_data:
                     continue
 
@@ -1680,8 +1680,13 @@ async def mark_attendance_auto(
             best_idx = np.argmax(similarities)
             best_similarity = float(similarities[best_idx])
 
-            print(f"⚡ Checked {len(valid_students)} students in {len(valid_students)} ms")
-            print(f"   Best: {valid_students[best_idx].get('name')} - {best_similarity:.4f}")
+            best_match = valid_students[best_idx]
+            fname = best_match.get('fname', '')
+            lname = best_match.get('lname', '')
+            student_name = f"{fname} {lname}".strip()
+
+            print(f"⚡ Checked {len(valid_students)} students")
+            print(f"   Best: {student_name} - {best_similarity:.4f}")
 
             if best_similarity < SIMILARITY_THRESHOLD:
                 logger.warning(f"❌ No matching student found (best: {best_similarity:.4f}, threshold: {SIMILARITY_THRESHOLD})")
@@ -1695,8 +1700,6 @@ async def mark_attendance_auto(
                 }
 
             # Got a match!
-            best_match = valid_students[best_idx]
-            student_name = best_match.get('name', 'Unknown')
             sr_no = best_match.get('sr_no', '')
             student_id = best_match.get('id', '')
             similarity = best_similarity
