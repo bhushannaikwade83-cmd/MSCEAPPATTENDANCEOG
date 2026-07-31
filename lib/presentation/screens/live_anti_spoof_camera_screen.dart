@@ -53,9 +53,12 @@ class _LiveAntiSpoofCameraScreenState extends State<LiveAntiSpoofCameraScreen> {
 
   Future<void> _initializeCamera() async {
     try {
+      print('📷 [INIT] Initializing camera...');
       _cameras = await availableCameras();
+      print('✅ [INIT] Available cameras: ${_cameras.length}');
       if (_cameras.isEmpty) {
         _setStatus('❌ No cameras found');
+        print('❌ [INIT] No cameras available!');
         return;
       }
 
@@ -63,37 +66,48 @@ class _LiveAntiSpoofCameraScreenState extends State<LiveAntiSpoofCameraScreen> {
         (camera) => camera.lensDirection == CameraLensDirection.front,
         orElse: () => _cameras[0],
       );
+      print('✅ [INIT] Using camera: ${frontCamera.name}');
 
       _cameraController = CameraController(
         frontCamera,
         ResolutionPreset.high,
       );
 
+      print('📷 [INIT] Initializing CameraController...');
       await _cameraController.initialize();
+      print('✅ [INIT] CameraController initialized');
 
+      print('🔍 [INIT] Initializing FaceDetector...');
       _faceDetector = FaceDetector(
         options: FaceDetectorOptions(
           enableLandmarks: false,
           enableClassification: false,
         ),
       );
+      print('✅ [INIT] FaceDetector initialized');
 
       setState(() {
         _cameraInitialized = true;
       });
 
       _setStatus('🎥 Ready - Press CAPTURE');
+      print('✅ [INIT] Screen ready for attendance marking');
     } catch (e) {
+      print('❌ [INIT] Initialization error: $e');
       _setStatus('❌ Error: $e');
     }
   }
 
   void _startCapture() async {
+    print('📸 [CAPTURE] Button clicked!');
+
     setState(() {
       _isCapturing = true;
       _captureCountdown = 2;
       _currentStage = 'Capturing in 2...';
     });
+
+    print('📸 [CAPTURE] Starting 2-second countdown...');
 
     for (int i = 2; i > 0; i--) {
       await Future.delayed(const Duration(seconds: 1));
@@ -102,9 +116,11 @@ class _LiveAntiSpoofCameraScreenState extends State<LiveAntiSpoofCameraScreen> {
           _captureCountdown = i - 1;
           _currentStage = i > 1 ? 'Capturing in $i...' : 'Capturing...';
         });
+        print('📸 [CAPTURE] Countdown: ${i-1}s');
       }
     }
 
+    print('📸 [CAPTURE] Countdown complete, calling _performCapture()');
     if (mounted) {
       await _performCapture();
     }
@@ -112,36 +128,47 @@ class _LiveAntiSpoofCameraScreenState extends State<LiveAntiSpoofCameraScreen> {
 
   Future<void> _performCapture() async {
     try {
+      print('📸 [CAPTURE] Taking picture...');
       // Single frame capture (like registration)
       final picture = await _cameraController.takePicture();
       final imageFile = File(picture.path);
+      print('✅ [CAPTURE] Picture taken: ${picture.path}');
+      print('📊 [CAPTURE] File size: ${await imageFile.length()} bytes');
 
       setState(() {
         _currentStage = 'Matching Face...';
       });
 
+      print('🔍 [DETECT] Starting face detection...');
       // Detect face in captured image
       final inputImage = InputImage.fromFilePath(imageFile.path);
       final faces = await _faceDetector.processImage(inputImage);
+      print('✅ [DETECT] Face detection complete. Faces found: ${faces.length}');
 
       if (!mounted) return;
 
       if (faces.isEmpty) {
+        print('❌ [DETECT] No face detected in image');
         setState(() {
           _currentStage = '❌ No Face Detected';
         });
         await Future.delayed(const Duration(seconds: 2));
       } else if (faces.length > 1) {
+        print('❌ [DETECT] Multiple faces detected: ${faces.length}');
         setState(() {
           _currentStage = '❌ Multiple Faces - Show Only 1';
         });
         await Future.delayed(const Duration(seconds: 2));
       } else {
+        print('✅ [DETECT] Single face detected, proceeding to backend...');
         // Face detected - send to API
+        print('🌐 [API] Calling /api/mark-attendance-auto...');
         final result = await AntiSpoofApiService.markAttendanceAuto(imageFile);
+        print('✅ [API] Response received: $result');
 
         if (mounted) {
           if (result.containsKey('error')) {
+            print('❌ [API] Error in response: ${result['error']}');
             setState(() {
               _currentStage = '❌ No Match Found';
             });
@@ -150,6 +177,10 @@ class _LiveAntiSpoofCameraScreenState extends State<LiveAntiSpoofCameraScreen> {
             _matchedStudentName = result['student_name'] ?? 'Unknown';
             _similarityScore = result['similarity'] ?? 0.0;
             _srNo = result['sr_no'] ?? 'N/A';
+
+            print('✅ [MATCH] Student found: $_matchedStudentName');
+            print('📊 [MATCH] SR No: $_srNo');
+            print('📊 [MATCH] Similarity: ${(_similarityScore * 100).toStringAsFixed(1)}%');
 
             setState(() {
               _currentStage = '✅ Attendance Marked';
@@ -161,11 +192,13 @@ class _LiveAntiSpoofCameraScreenState extends State<LiveAntiSpoofCameraScreen> {
       }
 
       await imageFile.delete();
+      print('🔄 [CAPTURE] Resetting for next student...');
       _resetUI();
     } catch (e) {
-      debugPrint('Capture error: $e');
+      print('❌ [CAPTURE] Exception occurred: $e');
+      print('📍 Stack trace: ${StackTrace.current}');
       setState(() {
-        _currentStage = '❌ Capture Error';
+        _currentStage = '❌ Capture Error: $e';
       });
       await Future.delayed(const Duration(seconds: 2));
       _resetUI();
