@@ -57,6 +57,18 @@ class _LiveAntiSpoofCameraScreenState extends State<LiveAntiSpoofCameraScreen>
   bool _blinkDetected = false;
   DateTime? _blinkDetectionStartTime;
 
+  // Debug overlay log
+  List<String> _debugLog = [];
+  void _addLog(String message) {
+    setState(() {
+      _debugLog.add(message);
+      if (_debugLog.length > 10) {
+        _debugLog.removeAt(0); // Keep only last 10 messages
+      }
+    });
+    print(message);
+  }
+
   @override
   void initState() {
     super.initState();
@@ -132,7 +144,7 @@ class _LiveAntiSpoofCameraScreenState extends State<LiveAntiSpoofCameraScreen>
           });
         }
       } else {
-        print('🔵 [FACE DETECTED] Found ${faces.length} face(s)');
+        _addLog('🔵 FACE DETECTED - Starting spoof check');
         setState(() => _faceDetected = true);
 
         // Check for blink if waiting for liveness confirmation
@@ -150,13 +162,11 @@ class _LiveAntiSpoofCameraScreenState extends State<LiveAntiSpoofCameraScreen>
 
             if (_blinkCount >= 1) {
               _blinkDetected = true;
-              print('═════════════════════════════════════════════');
-              print('✅ BLINK DETECTED - LIVENESS CONFIRMED');
-              print('═════════════════════════════════════════════');
+              _addLog('✅ BLINK DETECTED - LIVENESS CONFIRMED');
               setState(() => _status = '✓ Blink confirmed - Processing...');
               await Future.delayed(const Duration(milliseconds: 800));
               if (!widget.isRegistration && mounted) {
-                print('🚀 STARTING FACE MATCHING & ATTENDANCE');
+                _addLog('🚀 STARTING FACE MATCHING & ATTENDANCE');
                 await _autoMarkAttendance();
               }
             }
@@ -187,6 +197,7 @@ class _LiveAntiSpoofCameraScreenState extends State<LiveAntiSpoofCameraScreen>
             final isReal = isRealFromBackend;
 
             if (isReal) {
+              _addLog('✅ REAL FACE - Score: ${spoofPercent.toStringAsFixed(1)}%');
               print('═════════════════════════════════════════════');
               print('✅ LIVE FACE DETECTED');
               print('   Spoof Score: ${spoofPercent.toStringAsFixed(1)}%');
@@ -621,6 +632,39 @@ class _LiveAntiSpoofCameraScreenState extends State<LiveAntiSpoofCameraScreen>
                       ),
                     ),
                 ],
+              ),
+            ),
+          ),
+
+          // Debug Overlay - Show processing logs
+          Positioned(
+            bottom: 280,
+            left: 20,
+            right: 20,
+            child: Container(
+              height: 120,
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.black.withOpacity(0.7),
+                border: Border.all(color: Colors.cyan, width: 1.5),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: SingleChildScrollView(
+                reverse: true,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: _debugLog.map((log) {
+                    return Text(
+                      log,
+                      style: const TextStyle(
+                        color: Colors.greenAccent,
+                        fontSize: 11,
+                        fontFamily: 'monospace',
+                        height: 1.3,
+                      ),
+                    );
+                  }).toList(),
+                ),
               ),
             ),
           ),
