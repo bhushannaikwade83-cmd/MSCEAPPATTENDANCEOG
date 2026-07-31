@@ -240,21 +240,30 @@ class _LiveAntiSpoofCameraScreenState extends State<LiveAntiSpoofCameraScreen> {
 
       final supabase = Supabase.instance.client;
       final now = DateTime.now();
+      final instituteId = "99099"; // From your app
 
-      final response = await supabase.from('attendance_records').insert({
+      // Insert into attendance table
+      await supabase.from('attendance').insert({
         'sr_no': srNo,
+        'student_name': _matchedStudentName,
+        'institute_id': instituteId,
+        'attendance_date': now.toString().split(' ')[0], // YYYY-MM-DD format
         'record_type': recordType, // 'entry' or 'exit'
         'marked_time': now.toIso8601String(),
         'similarity_score': _similarityScore,
-        'matched_student_name': _matchedStudentName,
+        'photo_url': photoPath, // Store local path or B2 URL
+        'embedding': '[]', // Optional: store ArcFace embedding
+        'status': 'present',
+        'is_verified': _similarityScore > 0.75,
       });
 
       print('✅ [SAVE] Attendance saved successfully:');
       print('   SR No: $srNo');
+      print('   Student: $_matchedStudentName');
       print('   Type: $recordType');
+      print('   Date: ${now.toString().split(' ')[0]}');
       print('   Time: $now');
       print('   Similarity: ${(_similarityScore * 100).toStringAsFixed(1)}%');
-      print('   Student: $_matchedStudentName');
     } catch (e) {
       print('❌ [SAVE] Error saving attendance: $e');
       print('📍 [SAVE] Stack: ${StackTrace.current}');
