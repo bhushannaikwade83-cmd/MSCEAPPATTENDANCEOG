@@ -406,12 +406,65 @@ async def api_info():
         "architecture": "RetinaFace + ArcFace + FAISS",
         "endpoints": {
             "health": "GET /api/v1/health",
+            "check-spoof": "POST /api/v1/check-spoof",
             "register": "POST /api/v1/register",
             "recognize": "POST /api/v1/recognize",
             "verify": "POST /api/v1/verify"
         },
         "note": "All endpoints require POST method except /health and /"
     }
+
+@app.post("/api/v1/check-spoof")
+async def check_spoof(
+    file: UploadFile = File(...),
+):
+    """Check if face is real (live) or spoof (fake photo/video)
+
+    Returns:
+    - is_real: True if face is LIVE, False if SPOOF
+    - confidence: Confidence score (0-1)
+    - message: Status message
+    """
+    try:
+        start_time = time.time()
+
+        # Read uploaded file
+        file_bytes = await file.read()
+        if not file_bytes:
+            raise HTTPException(status_code=400, detail="Empty file")
+
+        logger.info(f"🔍 Checking spoof for photo ({len(file_bytes)} bytes)...")
+
+        # Load anti-spoof service
+        anti_spoof_service_instance = _ensure_anti_spoof_service()
+
+        if not anti_spoof_service_instance.initialized:
+            raise HTTPException(status_code=503, detail="Anti-spoof model not initialized")
+
+        # Check for spoof
+        result = anti_spoof_service_instance.predict(file_bytes)
+
+        is_real = result.get("is_real", False)
+        confidence = result.get("confidence", 0.0)
+
+        elapsed = time.time() - start_time
+
+        status_emoji = "✅" if is_real else "❌"
+        logger.info(f"{status_emoji} Spoof check: is_real={is_real}, confidence={confidence:.2f}, time={elapsed:.2f}s")
+
+        log_request("POST", "/api/v1/check-spoof", "success")
+
+        return {
+            "is_real": is_real,
+            "confidence": confidence,
+            "message": "Face is LIVE" if is_real else "Face is SPOOF (fake photo/video)",
+            "processing_time_ms": int(elapsed * 1000)
+        }
+
+    except Exception as e:
+        logger.error(f"❌ Spoof check error: {str(e)}")
+        log_request("POST", "/api/v1/check-spoof", "error", str(e))
+        raise HTTPException(status_code=500, detail=f"Spoof check failed: {str(e)}")
 
 @app.post("/api/v1/recognize", response_model=RecognizeResponse)
 async def recognize_face(
