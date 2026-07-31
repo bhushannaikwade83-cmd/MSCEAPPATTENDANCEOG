@@ -466,6 +466,59 @@ async def check_spoof(
         log_request("POST", "/api/v1/check-spoof", "error", str(e))
         raise HTTPException(status_code=500, detail=f"Spoof check failed: {str(e)}")
 
+@app.post("/api/detect-face")
+async def detect_face_spoof(
+    image: UploadFile = File(...),
+):
+    """Mobile app endpoint: Detect face and check if real or spoof
+
+    Used by: LiveAntiSpoofCameraScreen in student management
+    Returns: {is_real, confidence, score, label}
+    """
+    try:
+        start_time = time.time()
+
+        # Read uploaded file
+        file_bytes = await image.read()
+        if not file_bytes:
+            return {"error": "Empty file", "is_real": None}
+
+        logger.info(f"🔍 Mobile detect-face: checking photo ({len(file_bytes)} bytes)...")
+
+        # Load anti-spoof service
+        anti_spoof_service_instance = _ensure_anti_spoof_service()
+
+        if not anti_spoof_service_instance.initialized:
+            logger.error("❌ Anti-spoof model not initialized")
+            return {"error": "Model not ready", "is_real": None}
+
+        # Check for spoof
+        result = anti_spoof_service_instance.predict(file_bytes)
+
+        is_real = result.get("is_real", False)
+        confidence = result.get("confidence", 0.0)
+
+        elapsed = time.time() - start_time
+
+        status_emoji = "✅" if is_real else "❌"
+        logger.info(f"{status_emoji} Mobile detect-face: is_real={is_real}, confidence={confidence:.2f}, time={elapsed:.2f}s")
+
+        log_request("POST", "/api/detect-face", "success")
+
+        return {
+            "is_real": is_real,
+            "confidence": confidence,
+            "score": confidence,
+            "label": "LIVE" if is_real else "SPOOF",
+            "processing_time_ms": int(elapsed * 1000)
+        }
+
+    except Exception as e:
+        logger.error(f"❌ Mobile detect-face error: {str(e)}")
+        log_request("POST", "/api/detect-face", "error", str(e))
+        return {"error": str(e), "is_real": None}
+
+
 @app.post("/api/v1/recognize", response_model=RecognizeResponse)
 async def recognize_face(
     file: UploadFile = File(...),
