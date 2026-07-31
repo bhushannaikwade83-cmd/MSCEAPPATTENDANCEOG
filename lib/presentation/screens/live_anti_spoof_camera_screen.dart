@@ -132,38 +132,44 @@ class _LiveAntiSpoofCameraScreenState extends State<LiveAntiSpoofCameraScreen>
             _status = 'API Error';
             _canCapture = false;
           });
-        } else if (result['is_real'] == true) {
-          final confidence = (result['confidence'] as num?)?.toDouble() ?? 0.95;
-          print('═════════════════════════════════════════════');
-          print('✅ LIVE FACE DETECTED');
-          print('   Confidence Score: ${(confidence * 100).toStringAsFixed(1)}%');
-          print('   Status: Face Verified ✓');
-          print('═════════════════════════════════════════════');
-
-          setState(() {
-            _isRealFace = true;
-            _confidence = confidence;
-            _score = (result['score'] as num?)?.toDouble() ?? 0.0;
-            _status = 'Face Verified ✓';
-            _realCount++;
-            _canCapture = true;
-          });
         } else {
-          final confidence = (result['confidence'] as num?)?.toDouble() ?? 0.5;
-          print('═════════════════════════════════════════════');
-          print('❌ SPOOF DETECTED');
-          print('   Confidence Score: ${(confidence * 100).toStringAsFixed(1)}%');
-          print('   Status: Fake photo/video/screen detected');
-          print('═════════════════════════════════════════════');
+          final confidence = (result['confidence'] as num?)?.toDouble() ?? 0.0;
+          final confidencePercent = confidence * 100;
 
-          setState(() {
-            _isRealFace = false;
-            _confidence = confidence;
-            _score = (result['score'] as num?)?.toDouble() ?? 0.0;
-            _status = 'Spoof Detected';
-            _spoofCount++;
-            _canCapture = false;
-          });
+          // Threshold: 0-15% = REAL, 15%+ = SPOOF
+          final isReal = confidencePercent <= 15.0;
+
+          if (isReal) {
+            print('═════════════════════════════════════════════');
+            print('✅ LIVE FACE DETECTED');
+            print('   Spoof Score: ${confidencePercent.toStringAsFixed(1)}%');
+            print('   Status: Face Verified ✓');
+            print('═════════════════════════════════════════════');
+
+            setState(() {
+              _isRealFace = true;
+              _confidence = confidence;
+              _score = confidence;
+              _status = 'Face Verified ✓';
+              _realCount++;
+              _canCapture = true;
+            });
+          } else {
+            print('═════════════════════════════════════════════');
+            print('❌ SPOOF DETECTED');
+            print('   Spoof Score: ${confidencePercent.toStringAsFixed(1)}%');
+            print('   Status: Fake photo/video/screen detected');
+            print('═════════════════════════════════════════════');
+
+            setState(() {
+              _isRealFace = false;
+              _confidence = confidence;
+              _score = confidence;
+              _status = 'Spoof Detected';
+              _spoofCount++;
+              _canCapture = false;
+            });
+          }
         }
       }
 
@@ -402,7 +408,7 @@ class _LiveAntiSpoofCameraScreenState extends State<LiveAntiSpoofCameraScreen>
                           ),
                           const SizedBox(width: 8),
                           Text(
-                            '${(_confidence * 100).toStringAsFixed(0)}%',
+                            '${(_confidence * 100).toStringAsFixed(1)}%',
                             style: TextStyle(
                               color: _isRealFace
                                   ? Colors.greenAccent
