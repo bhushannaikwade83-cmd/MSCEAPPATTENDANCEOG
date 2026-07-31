@@ -13,7 +13,9 @@ import numpy as np
 import pickle
 import os
 import logging
+import json
 from typing import List, Dict, Optional
+from supabase import create_client, Client
 
 # Firebase is optional - only if using Firestore
 try:
@@ -41,52 +43,103 @@ class VectorDatabase:
         self.firestore_db = None  # Firebase Firestore connection
         
     async def load_index(self):
-        """Load FAISS index from disk and initialize Firebase (optional)"""
+        """Load FAISS index from Supabase students table"""
         try:
-            # Initialize Firebase (if available)
-            if FIREBASE_AVAILABLE and firebase_admin and not firebase_admin._apps:
-                cred_path = os.getenv('FIREBASE_CREDENTIALS_PATH')
-                if cred_path and os.path.exists(cred_path):
-                    # Use service account file if provided (local development)
-                    cred = credentials.Certificate(cred_path)
-                    firebase_admin.initialize_app(cred)
-                    logger.info("✅ Firebase initialized with service account file")
-                else:
-                    # Use Application Default Credentials (Cloud Run)
-                    try:
-                        firebase_admin.initialize_app()
-                        logger.info("✅ Firebase initialized with Application Default Credentials")
-                    except Exception as e:
-                        logger.warning(f"⚠️ Could not initialize Firebase: {e}")
-                        logger.info("💡 Continuing without Firebase (FAISS will work standalone)")
-            
-            try:
-                self.firestore_db = firestore.client()
-                logger.info("✅ Connected to Firebase Firestore")
-            except Exception as e:
-                logger.warning(f"⚠️ Could not connect to Firestore: {e}")
-                logger.info("💡 Continuing without Firestore (FAISS will work standalone)")
-                self.firestore_db = None
-            
-            # Load FAISS index
-            if os.path.exists(self.index_path):
-                self.index = faiss.read_index(self.index_path)
-                with open(self.metadata_path, 'rb') as f:
-                    self.metadata = pickle.load(f)
-                logger.info(f"✅ Loaded FAISS index with {self.index.ntotal} vectors")
-            else:
-                # Create new index with CORRECT dimension (512 for ArcFace)
-                self.index = faiss.IndexFlatL2(self.dimension)  # L2 distance, 512-dim
-                logger.info(f"✅ Created new FAISS index (dimension: {self.dimension})")
-                
-                # Verify dimension is correct
-                if self.dimension != 512:
-                    error_msg = f"CRITICAL: FAISS dimension mismatch! Expected 512, got {self.dimension}"
-                    logger.error(f"❌ {error_msg}")
-                    raise ValueError(error_msg)
+            print("=" * 80)
+            print("🔄 INITIALIZING FAISS FROM SUPABASE")
+            print("=" * 80)
+
+            # Create new FAISS index
+            self.index = faiss.IndexFlatL2(self.dimension)
+            self.metadata = {}
+            print(f"✅ Created FAISS index (dimension: {self.dimension})")
+
+            # Connect to Supabase and load embeddings
+            await self._load_embeddings_from_supabase()
+
+            print("=" * 80)
+            print(f"✅ FAISS initialization complete!")
+            print(f"   Total embeddings: {self.index.ntotal}")
+            print("=" * 80)
+
         except Exception as e:
             logger.error(f"Error loading FAISS index: {e}")
+            print(f"❌ Error: {e}")
             raise
+
+    async def _load_embeddings_from_supabase(self):
+        """Load all student embeddings from Supabase"""
+        try:
+            # Initialize Supabase client
+            supabase_url = os.getenv("SUPABASE_URL")
+            supabase_key = os.getenv("SUPABASE_KEY")
+
+            if not supabase_url or not supabase_key:
+                logger.warning("⚠️ Supabase credentials not found")
+                return
+
+            supabase: Client = create_client(supabase_url, supabase_key)
+            print(f"✅ Connected to Supabase")
+
+            # Query students with face embeddings
+            response = supabase.table('students').select(
+                'id, sr_no, name, institute_id, face_embedding'
+            ).execute()
+
+            students = response.data if response.data else []
+            print(f"📊 Found {len(students)} students in Supabase")
+
+            # Load embeddings into FAISS
+            loaded_count = 0
+            institute_counts = {}
+
+            for idx, student in enumerate(students):
+                try:
+                    # Check if embedding exists
+                    embedding_data = student.get('face_embedding')
+                    if not embedding_data:
+                        continue
+
+                    # Parse embedding (could be JSON string or list)
+                    if isinstance(embedding_data, str):
+                        embedding = np.array(json.loads(embedding_data), dtype='float32')
+                    else:
+                        embedding = np.array(embedding_data, dtype='float32')
+
+                    # Verify dimension
+                    if embedding.shape[0] != 512:
+                        print(f"⚠️ Skipping {student.get('name')}: wrong embedding dimension {embedding.shape[0]}")
+                        continue
+
+                    # Add to FAISS
+                    self.index.add(embedding.reshape(1, -1))
+
+                    # Store metadata
+                    inst_id = student.get('institute_id', 'UNKNOWN')
+                    self.metadata[loaded_count] = {
+                        'student_id': student.get('id'),
+                        'roll_number': student.get('sr_no'),
+                        'name': student.get('name'),
+                        'institute_id': inst_id
+                    }
+
+                    # Track institute counts
+                    if inst_id not in institute_counts:
+                        institute_counts[inst_id] = 0
+                    institute_counts[inst_id] += 1
+
+                    loaded_count += 1
+
+                except Exception as e:
+                    logger.warning(f"⚠️ Failed to load embedding for {student.get('name')}: {e}")
+                    continue
+
+            print(f"✅ Loaded {loaded_count} embeddings from Supabase")
+            print(f"📊 By institute: {institute_counts}")
+
+        except Exception as e:
+            logger.error(f"Error loading from Supabase: {e}")
+            print(f"❌ Supabase error: {e}")
     
     async def add_embedding(
         self,

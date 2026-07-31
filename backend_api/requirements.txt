@@ -20,6 +20,9 @@ faiss-cpu>=1.7.4,<1.14  # Use faiss-gpu if you have GPU
 firebase-admin>=6.2.0,<8
 google-auth>=2.0.0,<3  # Required by firebase-admin
 
+# Supabase (for loading student embeddings)
+supabase>=2.4.0,<3
+
 # Utilities
 python-dotenv>=1.0.0,<2
 pydantic>=2.5.0,<3
