@@ -27,9 +27,9 @@ class AntiSpoofApiService {
     }
   }
 
-  /// Detect face from image file
+  /// Detect face from image file with auto-retry for model loading
   /// Returns: {is_real, confidence, score, bbox, label}
-  static Future<Map<String, dynamic>> detectFace(File imageFile) async {
+  static Future<Map<String, dynamic>> detectFace(File imageFile, {int retryCount = 0}) async {
     try {
       var request = http.MultipartRequest(
         'POST',
@@ -47,8 +47,21 @@ class AntiSpoofApiService {
         },
       );
 
+      // Handle 503 Service Unavailable (model loading) with automatic retry
+      if (response.statusCode == 503) {
+        if (retryCount < 5) {
+          print('⏳ Model loading (503), retrying in 2 seconds... (attempt ${retryCount + 1}/5)');
+          await Future.delayed(const Duration(seconds: 2));
+          return detectFace(imageFile, retryCount: retryCount + 1);
+        } else {
+          throw Exception('API still loading after 5 retries - please wait');
+        }
+      }
+
       if (response.statusCode != 200) {
-        throw Exception('API error: ${response.statusCode}');
+        var responseData = await response.stream.toBytes();
+        var responseText = utf8.decode(responseData);
+        throw Exception('API error: ${response.statusCode} - $responseText');
       }
 
       var responseData = await response.stream.toBytes();
