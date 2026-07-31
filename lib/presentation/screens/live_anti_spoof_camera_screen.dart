@@ -55,9 +55,9 @@ class _LiveAntiSpoofCameraScreenState extends State<LiveAntiSpoofCameraScreen>
   int _frameSkipCounter = 0;
   int _consecutiveFaceFrames = 0; // Track stable face detection
   int _framesSinceLastDetection = 0; // Reset if no detection for X frames
-  static const int FRAME_SKIP = 4; // Process every 5th frame (much faster)
-  static const int FACE_STABILITY_FRAMES = 2; // Need 2 consecutive detections
-  static const int FACE_TIMEOUT_FRAMES = 20; // Disable if no detection for 20 frames
+  static const int FRAME_SKIP = 2; // Process every 3rd frame (balance speed & stability)
+  static const int FACE_STABILITY_FRAMES = 1; // Need 1 detection (since we process often)
+  static const int FACE_TIMEOUT_FRAMES = 10; // Disable if no detection for 10 frames
 
   @override
   void initState() {
@@ -118,10 +118,24 @@ class _LiveAntiSpoofCameraScreenState extends State<LiveAntiSpoofCameraScreen>
   Future<void> _processImageStream(CameraImage cameraImage) async {
     if (_isProcessingFrame || _isCapturing) return;
 
+    _updateFPS();
+
+    // Always increment timeout counter, even during skipped frames
+    _framesSinceLastDetection++;
+
     // Skip frames for faster detection
     _frameSkipCounter++;
     if (_frameSkipCounter % FRAME_SKIP != 0) {
-      _updateFPS();
+      // Check face timeout even on skipped frames
+      if (_framesSinceLastDetection > FACE_TIMEOUT_FRAMES && _faceDetected) {
+        if (mounted) {
+          setState(() {
+            _faceDetected = false;
+            _faceBoundingBox = null;
+            _currentStage = 'Face Lost - Show Again';
+          });
+        }
+      }
       return;
     }
 
@@ -152,15 +166,8 @@ class _LiveAntiSpoofCameraScreenState extends State<LiveAntiSpoofCameraScreen>
           _framesSinceLastDetection++;
 
           if (faces.isEmpty) {
-            _consecutiveFaceFrames = 0;
             _currentStage = 'No Face Detected';
-            // Disable button only after X frames of no detection
-            if (_framesSinceLastDetection > FACE_TIMEOUT_FRAMES) {
-              _faceDetected = false;
-              _faceBoundingBox = null;
-            }
           } else if (faces.length > 1) {
-            _consecutiveFaceFrames = 0;
             _faceDetected = false;
             _faceBoundingBox = null;
             _currentStage = 'Multiple Faces - Show Only 1';
@@ -168,15 +175,8 @@ class _LiveAntiSpoofCameraScreenState extends State<LiveAntiSpoofCameraScreen>
             final face = faces.first;
             _faceBoundingBox = face.boundingBox;
             _framesSinceLastDetection = 0; // Reset timeout
-            _consecutiveFaceFrames++;
-
-            // Enable button only after consistent detection
-            if (_consecutiveFaceFrames >= FACE_STABILITY_FRAMES) {
-              _faceDetected = true;
-              _currentStage = 'Face Detected ✓ - Press CAPTURE';
-            } else {
-              _currentStage = 'Stabilizing... ${_consecutiveFaceFrames}/$FACE_STABILITY_FRAMES';
-            }
+            _faceDetected = true;
+            _currentStage = 'Face Detected ✓ - Press CAPTURE';
           }
         });
       }
