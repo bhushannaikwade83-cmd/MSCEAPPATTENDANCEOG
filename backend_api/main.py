@@ -21,6 +21,7 @@ import logging
 import os
 import tempfile
 import traceback
+from datetime import datetime
 
 _face_service_import_error: Optional[Exception] = None
 _vector_db_import_error: Optional[Exception] = None
@@ -47,6 +48,13 @@ except Exception as exc:
 # Setup logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+# ⚡ EMBEDDING CACHE: Lazy-load per institute (not all 200K at once!)
+# Each institute's embeddings cached until timeout (300s = 5min)
+embedding_cache = {
+    'by_institute': {},  # { 'institute_id': {'students': [...], 'loaded_at': datetime} }
+    'cache_timeout_seconds': 300,
+}
 
 app = FastAPI(title="EduSetu Face Recognition API", version="1.0.0")
 
@@ -321,10 +329,91 @@ class VerifyResponse(BaseModel):
     top_match_roll: Optional[str] = None
     processing_time_ms: float
 
+async def _get_embeddings_for_institute(institute_id: str):
+    """⚡ Lazy-load embeddings for ONE institute (on-demand, memory efficient)"""
+    global embedding_cache
+
+    # Check if cached and still valid
+    if institute_id in embedding_cache['by_institute']:
+        cache_entry = embedding_cache['by_institute'][institute_id]
+        age = (datetime.now() - cache_entry['loaded_at']).total_seconds()
+
+        if age < embedding_cache['cache_timeout_seconds']:
+            print(f"💾 Using cached embeddings for {institute_id} (age: {age:.0f}s)")
+            return cache_entry['students']
+        else:
+            print(f"⏰ Cache expired for {institute_id}, reloading...")
+            del embedding_cache['by_institute'][institute_id]
+
+    # Load from Supabase (ONLY this institute)
+    try:
+        from supabase import create_client, Client
+
+        supabase_url = os.getenv("SUPABASE_URL")
+        supabase_key = os.getenv("SUPABASE_KEY")
+
+        supabase: Client = create_client(supabase_url, supabase_key)
+
+        print(f"🔄 Loading embeddings for institute {institute_id}...")
+
+        response = supabase.table('students').select(
+            'id, sr_no, fname, mname, lname, face_embedding_average'
+        ).eq('institute_id', institute_id).eq('face_registration_status', 'registered').execute()
+
+        students_data = response.data if response.data else []
+        students = []
+
+        for student in students_data:
+            embedding_data = student.get('face_embedding_average')
+            if not embedding_data:
+                continue
+
+            try:
+                if isinstance(embedding_data, str):
+                    embedding = np.array(json.loads(embedding_data), dtype='float32')
+                else:
+                    embedding = np.array(embedding_data, dtype='float32')
+
+                if embedding.shape[0] != 512:
+                    continue
+
+                students.append({
+                    'sr_no': student.get('sr_no'),
+                    'fname': student.get('fname', ''),
+                    'mname': student.get('mname', ''),
+                    'lname': student.get('lname', ''),
+                    'id': student.get('id'),
+                    'embedding': embedding,
+                })
+            except Exception as e:
+                continue
+
+        # Cache it
+        embedding_cache['by_institute'][institute_id] = {
+            'students': students,
+            'loaded_at': datetime.now(),
+        }
+
+        print(f"✅ Loaded {len(students)} students for institute {institute_id}")
+        return students
+
+    except Exception as e:
+        logger.error(f"❌ Failed to load institute {institute_id}: {e}")
+        return []
+
+async def _load_embeddings_cache():
+    """(Optional) Pre-load top 10 institutes at startup for warmup"""
+    print("\n" + "="*80)
+    print("⚡ EMBEDDING CACHE: Lazy-loading enabled (per-institute on-demand)")
+    print("="*80 + "\n")
+
 @app.on_event("startup")
 async def startup_event():
     """Initialize services on startup"""
     logger.info("🚀 Starting Face Recognition API...")
+
+    # ⚡ Load embedding cache (FAST matching, no DB queries)
+    await _load_embeddings_cache()
 
     # Initialize vector_db (lightweight)
     if vector_db is not None:
@@ -1611,18 +1700,9 @@ async def mark_attendance_auto(
         logger.info(f"🔎 Querying Supabase for institute {institute_id}...")
 
         try:
-            from supabase import create_client, Client
-            supabase_url = os.getenv("SUPABASE_URL")
-            supabase_key = os.getenv("SUPABASE_KEY")
-            supabase: Client = create_client(supabase_url, supabase_key)
-
-            # ⚡ OPTIMIZED: Only fetch registered students for this institute
-            response = supabase.table('students').select(
-                'id, sr_no, fname, mname, lname, face_embedding_average'
-            ).eq('institute_id', institute_id).eq('face_registration_status', 'registered').execute()
-
-            students = response.data if response.data else []
-            print(f"📊 Found {len(students)} students in institute {institute_id}")
+            # ⚡ LAZY CACHE: Load embeddings from cache (not DB!)
+            print(f"🔄 Fetching cached embeddings for institute {institute_id}...")
+            students = await _get_embeddings_for_institute(institute_id)
 
             if not students:
                 logger.warning(f"❌ No students found for institute {institute_id}")
@@ -1642,34 +1722,28 @@ async def mark_attendance_auto(
             valid_students = []
             embeddings_matrix = []
 
-            # Parse all embeddings into matrix
+            # Embeddings already parsed in cache, just collect them
             for student in students:
-                embedding_data = student.get('face_embedding_average')  # Use average embedding
                 fname = student.get('fname', '')
                 mname = student.get('mname', '')
                 lname = student.get('lname', '')
                 name_parts = [p for p in [fname, mname, lname] if p]
                 full_name = ' '.join(name_parts)
 
-                if not embedding_data:
-                    print(f"⚠️ Student {full_name}: No embedding data")
+                embedding = student.get('embedding')
+                if embedding is None:
+                    print(f"⚠️ Student {full_name}: No embedding in cache")
                     continue
 
                 try:
-                    if isinstance(embedding_data, str):
-                        stored_embedding = np.array(json.loads(embedding_data), dtype='float32')
-                    else:
-                        stored_embedding = np.array(embedding_data, dtype='float32')
-
-                    if stored_embedding.shape[0] != 512:
-                        print(f"⚠️ Student {full_name}: Wrong dimension {stored_embedding.shape[0]}")
+                    if embedding.shape[0] != 512:
+                        print(f"⚠️ Student {full_name}: Wrong dimension {embedding.shape[0]}")
                         continue
 
                     valid_students.append(student)
-                    embeddings_matrix.append(stored_embedding)
-                    print(f"✅ Loaded embedding for {full_name}")
+                    embeddings_matrix.append(embedding)
                 except Exception as e:
-                    print(f"❌ Error parsing embedding for {full_name}: {e}")
+                    print(f"❌ Error with embedding for {full_name}: {e}")
                     continue
 
             if not embeddings_matrix:
