@@ -1760,22 +1760,36 @@ async def mark_attendance_auto(
             # ⚡ Batch calculate all similarities at once (fast!)
             embeddings_matrix = np.array(embeddings_matrix, dtype='float32')
 
-            # 🔍 Debug: Check embedding values
+            # 🔍 Debug: Check embedding values in detail
             print(f"\n🔎 EMBEDDING DEBUG:")
             print(f"   Query embedding shape: {embedding.shape}")
-            print(f"   Query embedding norm: {np.linalg.norm(embedding):.4f}")
-            print(f"   Query embedding sample: {embedding[:5]}")
-            print(f"   Matrix shape: {embeddings_matrix.shape}")
+            print(f"   Query embedding norm: {np.linalg.norm(embedding):.6f}")
+            print(f"   Query embedding min/max: {np.min(embedding):.6f} / {np.max(embedding):.6f}")
+            print(f"   Query embedding sum: {np.sum(embedding):.6f}")
+            print(f"   Query embedding first 10: {embedding[:10]}")
+            print(f"   Query embedding FULL: {embedding}")
+
+            print(f"\n   Matrix shape: {embeddings_matrix.shape}")
             if len(embeddings_matrix) > 0:
-                print(f"   First student embedding norm: {np.linalg.norm(embeddings_matrix[0]):.4f}")
-                print(f"   First student sample: {embeddings_matrix[0][:5]}")
+                print(f"   First student embedding norm: {np.linalg.norm(embeddings_matrix[0]):.6f}")
+                print(f"   First student min/max: {np.min(embeddings_matrix[0]):.6f} / {np.max(embeddings_matrix[0]):.6f}")
+                print(f"   First student sum: {np.sum(embeddings_matrix[0]):.6f}")
+                print(f"   First student first 10: {embeddings_matrix[0][:10]}")
+                print(f"   First student FULL: {embeddings_matrix[0]}")
+
+                # Check if query == first student
+                if np.allclose(embedding, embeddings_matrix[0]):
+                    print(f"   ⚠️ QUERY IS IDENTICAL TO FIRST STUDENT!")
+                else:
+                    print(f"   ✅ Query is different from first student")
 
             similarities = cosine_similarity(
                 embedding.reshape(1, -1),
                 embeddings_matrix
             )[0]
 
-            print(f"   Similarity values: min={np.min(similarities):.4f}, max={np.max(similarities):.4f}, mean={np.mean(similarities):.4f}")
+            print(f"\n   Similarity values: min={np.min(similarities):.6f}, max={np.max(similarities):.6f}, mean={np.mean(similarities):.6f}")
+            print(f"   All similarities: {similarities}")
 
             # Find best match
             best_idx = np.argmax(similarities)
