@@ -150,20 +150,29 @@ class ProductionFacePipelineService {
     required DateTime started,
     bool fastAttendancePath = false,
   }) async {
+    debugPrint('🔵 PIPELINE: Starting on-device face processing...');
+
     // Capture-time PAD: final hard gate against photo/screen spoofs.
-    // Use backend-aware spoof confidence here instead of a raw !isReal check.
-    // That keeps uncertain capture-time outputs from rejecting real students
-    // after the preview stream already confirmed distance + blink + live frames.
+    debugPrint('🛡️ PIPELINE: Checking liveness/spoof...');
     if (AntiSpoofService.isModelLoaded) {
       final pad = await AntiSpoofService.checkSpoofForAutoScan(photoPath);
+      final liveScore = pad.confidence * 100;
+      final spoofScore = AntiSpoofService.spoofConfidence(pad) * 100;
+
       if (kDebugMode) {
-        debugPrint(
-          '🛡️ Capture PAD: isReal=${pad.isReal} '
-          'live=${(pad.confidence * 100).toStringAsFixed(0)}% '
-          'spoof=${(AntiSpoofService.spoofConfidence(pad) * 100).toStringAsFixed(0)}% '
-          '— ${pad.reason}',
-        );
+        debugPrint('');
+        debugPrint('═══════════════════════════════════════════════');
+        debugPrint('🛡️  ANTI-SPOOF DETECTION SCORE');
+        debugPrint('═══════════════════════════════════════════════');
+        debugPrint('   isReal: ${pad.isReal}');
+        debugPrint('   LIVE Score: ${liveScore.toStringAsFixed(1)}%');
+        debugPrint('   SPOOF Score: ${spoofScore.toStringAsFixed(1)}%');
+        debugPrint('   Reason: ${pad.reason}');
+        debugPrint('   Threshold: LIVE > 50% = ACCEPT');
+        debugPrint('═══════════════════════════════════════════════');
+        debugPrint('');
       }
+
       if (AntiSpoofService.shouldRejectAutoScanCapture(pad)) {
         return ProductionFacePipelineResult.fail(
           'Liveness check failed — use a live face, not a photo or screen',
