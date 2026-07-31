@@ -201,11 +201,11 @@ class AntiSpoofApiService {
   /// Returns: {student_name, sr_no, similarity, record_type, status}
   static Future<Map<String, dynamic>> markAttendanceAuto(
     File imageFile, {
-    String instituteId = "99099", // Default institute ID
+    String instId = "99099", // Default institute ID
   }) async {
     try {
       print('🌐 [SERVICE] Calling /api/mark-attendance-auto');
-      print('📊 [SERVICE] Institute ID: $instituteId');
+      print('📊 [SERVICE] Institute ID: $instId');
 
       var request = http.MultipartRequest(
         'POST',
@@ -216,8 +216,8 @@ class AntiSpoofApiService {
         await http.MultipartFile.fromPath('image', imageFile.path),
       );
 
-      // Add institute_id as form field
-      request.fields['institute_id'] = instituteId;
+      // Add institute_id as form field (backend expects this name)
+      request.fields['institute_id'] = instId;
 
       print('🌐 [SERVICE] Sending request...');
       var response = await request.send().timeout(
