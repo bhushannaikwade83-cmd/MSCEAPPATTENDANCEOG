@@ -5,8 +5,8 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:path/path.dart' as path;
 
 class AttendancePhotoService {
-  // From .env: STORAGE_BUCKET_NAME=student-photos
-  static const String STORAGE_BUCKET = 'student-photos';
+  // From B2B config: STORAGE_BUCKET_NAME=attendance-students-photos
+  static const String STORAGE_BUCKET = 'attendance-students-photos';
   static const String STORAGE_PATH = 'attendance-photos';
   static const int MAX_SIZE_KB = 100;
 
