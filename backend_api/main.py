@@ -1618,7 +1618,7 @@ async def mark_attendance_auto(
 
             # ⚡ OPTIMIZED: Only fetch registered students for this institute
             response = supabase.table('students').select(
-                'id, sr_no, fname, lname, face_embedding_average'
+                'id, sr_no, fname, mname, lname, face_embedding_average'
             ).eq('institute_id', institute_id).eq('face_registration_status', 'registered').execute()
 
             students = response.data if response.data else []
@@ -1645,8 +1645,14 @@ async def mark_attendance_auto(
             # Parse all embeddings into matrix
             for student in students:
                 embedding_data = student.get('face_embedding_average')  # Use average embedding
+                fname = student.get('fname', '')
+                mname = student.get('mname', '')
+                lname = student.get('lname', '')
+                name_parts = [p for p in [fname, mname, lname] if p]
+                full_name = ' '.join(name_parts)
+
                 if not embedding_data:
-                    print(f"⚠️ Student {student.get('fname')} {student.get('lname')}: No embedding data")
+                    print(f"⚠️ Student {full_name}: No embedding data")
                     continue
 
                 try:
@@ -1656,14 +1662,14 @@ async def mark_attendance_auto(
                         stored_embedding = np.array(embedding_data, dtype='float32')
 
                     if stored_embedding.shape[0] != 512:
-                        print(f"⚠️ Student {student.get('fname')} {student.get('lname')}: Wrong dimension {stored_embedding.shape[0]}")
+                        print(f"⚠️ Student {full_name}: Wrong dimension {stored_embedding.shape[0]}")
                         continue
 
                     valid_students.append(student)
                     embeddings_matrix.append(stored_embedding)
-                    print(f"✅ Loaded embedding for {student.get('fname')} {student.get('lname')}")
+                    print(f"✅ Loaded embedding for {full_name}")
                 except Exception as e:
-                    print(f"❌ Error parsing embedding for {student.get('fname')} {student.get('lname')}: {e}")
+                    print(f"❌ Error parsing embedding for {full_name}: {e}")
                     continue
 
             if not embeddings_matrix:
@@ -1690,8 +1696,11 @@ async def mark_attendance_auto(
 
             best_match = valid_students[best_idx]
             fname = best_match.get('fname', '')
+            mname = best_match.get('mname', '')
             lname = best_match.get('lname', '')
-            student_name = f"{fname} {lname}".strip()
+            # Construct full name: fname mname lname
+            name_parts = [p for p in [fname, mname, lname] if p]
+            student_name = ' '.join(name_parts)
 
             # 📊 Debug: Show top 5 scores
             print(f"\n🔎 SIMILARITY SCORES (Threshold: {SIMILARITY_THRESHOLD})")
@@ -1699,7 +1708,12 @@ async def mark_attendance_auto(
             top_indices = np.argsort(-similarities)[:5]
             for i, idx in enumerate(top_indices, 1):
                 s = float(similarities[idx])
-                s_name = f"{valid_students[idx].get('fname', '')} {valid_students[idx].get('lname', '')}".strip()
+                stu = valid_students[idx]
+                fname = stu.get('fname', '')
+                mname = stu.get('mname', '')
+                lname = stu.get('lname', '')
+                name_parts = [p for p in [fname, mname, lname] if p]
+                s_name = ' '.join(name_parts)
                 status = "✅ MATCH" if s >= SIMILARITY_THRESHOLD else "❌ Below"
                 print(f"   {i}. {s_name}: {s:.4f} {status}")
             print()
