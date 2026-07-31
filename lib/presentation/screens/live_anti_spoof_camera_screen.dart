@@ -2,6 +2,7 @@ import 'dart:io';
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 import 'package:google_mlkit_face_detection/google_mlkit_face_detection.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../services/anti_spoof_api_service.dart';
 
 class LiveAntiSpoofCameraScreen extends StatefulWidget {
@@ -235,15 +236,28 @@ class _LiveAntiSpoofCameraScreenState extends State<LiveAntiSpoofCameraScreen> {
     String photoPath,
   ) async {
     try {
-      // TODO: Save to Supabase attendance table
-      // Fields: sr_no, record_type (entry/exit), marked_time, photo_url, similarity_score
-      print('💾 [SAVE] Would save:');
+      print('💾 [SAVE] Saving attendance to Supabase...');
+
+      final supabase = Supabase.instance.client;
+      final now = DateTime.now();
+
+      final response = await supabase.from('attendance_records').insert({
+        'sr_no': srNo,
+        'record_type': recordType, // 'entry' or 'exit'
+        'marked_time': now.toIso8601String(),
+        'similarity_score': _similarityScore,
+        'matched_student_name': _matchedStudentName,
+      });
+
+      print('✅ [SAVE] Attendance saved successfully:');
       print('   SR No: $srNo');
       print('   Type: $recordType');
-      print('   Time: ${DateTime.now()}');
+      print('   Time: $now');
       print('   Similarity: ${(_similarityScore * 100).toStringAsFixed(1)}%');
+      print('   Student: $_matchedStudentName');
     } catch (e) {
       print('❌ [SAVE] Error saving attendance: $e');
+      print('📍 [SAVE] Stack: ${StackTrace.current}');
     }
   }
 
