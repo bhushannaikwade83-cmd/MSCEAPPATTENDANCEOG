@@ -92,6 +92,10 @@ class _AutoFaceScanScreenState extends State<AutoFaceScanScreen>
   String? _markedRecordType; // 'entry' or 'exit'
   double? _markedSimilarityScore;
 
+  // Spoof detection status
+  String? _spoofStatus; // 'real', 'spoof', or null
+  double? _spoofConfidence;
+
   // Debug console logs
   final List<String> _consoleLogs = [];
   void _addLog(String message) {
@@ -851,6 +855,66 @@ class _AutoFaceScanScreenState extends State<AutoFaceScanScreen>
                           ),
                         ),
                       ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          // 🔴 Spoof Status Indicator (Red/Green box - live detection status)
+          if (_liveBoxState == LiveFaceBoxState.live || _liveBoxState == LiveFaceBoxState.spoof)
+            Positioned(
+              bottom: 360,
+              left: 20,
+              right: 20,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                decoration: BoxDecoration(
+                  color: _liveBoxState == LiveFaceBoxState.live
+                      ? Colors.green.withOpacity(0.15)
+                      : Colors.red.withOpacity(0.15),
+                  border: Border.all(
+                    color: _liveBoxState == LiveFaceBoxState.live
+                        ? Colors.green
+                        : Colors.red,
+                    width: 2,
+                  ),
+                  borderRadius: BorderRadius.circular(10),
+                  boxShadow: [
+                    BoxShadow(
+                      color: (_liveBoxState == LiveFaceBoxState.live
+                              ? Colors.green
+                              : Colors.red)
+                          .withOpacity(0.3),
+                      blurRadius: 8,
+                      spreadRadius: 1,
+                    ),
+                  ],
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      width: 10,
+                      height: 10,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: _liveBoxState == LiveFaceBoxState.live
+                            ? Colors.green
+                            : Colors.red,
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Text(
+                      _liveBoxState == LiveFaceBoxState.live
+                          ? '✓ Real Face (Live - ${(_padConfidence * 100).toStringAsFixed(0)}%)'
+                          : '✗ Spoof Detected (Fake - ${(_padConfidence * 100).toStringAsFixed(0)}%)',
+                      style: TextStyle(
+                        color: _liveBoxState == LiveFaceBoxState.live
+                            ? Colors.greenAccent
+                            : Colors.redAccent,
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
                   ],
                 ),
