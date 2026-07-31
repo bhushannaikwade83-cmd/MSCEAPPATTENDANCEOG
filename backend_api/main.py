@@ -1552,7 +1552,7 @@ async def recognize_embedding(
 @app.post("/api/mark-attendance-auto")
 async def mark_attendance_auto(
     image: UploadFile = File(...),
-    inst_id: str = Form(...)
+    institute_id: str = Form(...)
 ):
     """
     Mark attendance automatically from face image
@@ -1569,7 +1569,7 @@ async def mark_attendance_auto(
         {student_name, sr_no, similarity, record_type, status}
     """
     try:
-        logger.info(f"🎯 Attendance request for institute: {inst_id}")
+        logger.info(f"🎯 Attendance request for institute: {institute_id}")
 
         face_service_instance = _ensure_face_service()
         vector_db_instance = _ensure_vector_db()
@@ -1607,10 +1607,10 @@ async def mark_attendance_auto(
         logger.info(f"✅ Embedding generated: {embedding.shape}")
 
         # Search for match in vector database
-        logger.info(f"🔎 Searching vector database for institute {inst_id}...")
+        logger.info(f"🔎 Searching vector database for institute {institute_id}...")
         matches = await vector_db_instance.search(
             embedding=embedding,
-            institute_id=inst_id,
+            institute_id=institute_id,
             top_k=1,
             threshold=0.70
         )
