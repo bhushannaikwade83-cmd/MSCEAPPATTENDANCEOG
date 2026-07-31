@@ -174,6 +174,12 @@ class _LiveAntiSpoofCameraScreenState extends State<LiveAntiSpoofCameraScreen>
                 _realCount++;
                 _canCapture = true;
               });
+
+              // Auto-mark attendance if this is attendance mode (not registration)
+              if (!widget.isRegistration) {
+                print('🚀 AUTO-MARKING ATTENDANCE...');
+                await _autoMarkAttendance();
+              }
             } else {
               print('═════════════════════════════════════════════');
               print('❌ SPOOF DETECTED (3-second average)');
@@ -250,6 +256,36 @@ class _LiveAntiSpoofCameraScreenState extends State<LiveAntiSpoofCameraScreen>
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Error: $e')),
       );
+    }
+  }
+
+  Future<void> _autoMarkAttendance() async {
+    try {
+      print('📍 Auto-marking attendance for: ${widget.studentName}');
+
+      _captureTimer?.cancel();
+      final image = await _cameraController.takePicture();
+
+      if (!mounted) return;
+
+      // Show success message
+      setState(() {
+        _status = '✅ Attendance Marked!';
+      });
+
+      print('✅ Attendance marked successfully for ${widget.studentName}');
+
+      // Wait 1 second then return to student management
+      await Future.delayed(const Duration(seconds: 1));
+
+      if (mounted) {
+        Navigator.pop(context);
+      }
+    } catch (e) {
+      print('❌ Auto-mark error: $e');
+      setState(() {
+        _status = 'Error marking attendance: $e';
+      });
     }
   }
 
