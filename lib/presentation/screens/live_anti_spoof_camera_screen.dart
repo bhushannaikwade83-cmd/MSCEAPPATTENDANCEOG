@@ -282,22 +282,53 @@ class _LiveAntiSpoofCameraScreenState extends State<LiveAntiSpoofCameraScreen>
 
   Future<void> _autoMarkAttendance() async {
     try {
-      print('📍 Auto-marking attendance for: ${widget.studentName}');
+      print('📍 Starting face matching and attendance...');
 
       _captureTimer?.cancel();
       final image = await _cameraController.takePicture();
+      final imageFile = File(image.path);
 
       if (!mounted) return;
 
-      // Show success message
+      // Step 1: Match face against database
       setState(() {
-        _status = '✅ Attendance Marked!';
+        _status = '🔍 Matching face...';
       });
 
-      print('✅ Attendance marked successfully for ${widget.studentName}');
+      print('🔍 Calling backend to match face');
+      final matchResult = await AntiSpoofApiService.markAttendanceAuto(imageFile);
+      print('🔍 Match result: $matchResult');
 
-      // Wait 1 second then return to student management
-      await Future.delayed(const Duration(seconds: 1));
+      if (!mounted) return;
+
+      if (matchResult.containsKey('error')) {
+        print('❌ Match error: ${matchResult['error']}');
+        setState(() {
+          _status = 'Match failed: ${matchResult['error']}';
+        });
+        await Future.delayed(const Duration(seconds: 2));
+        if (mounted) Navigator.pop(context);
+        return;
+      }
+
+      // Step 2: Show matched student
+      final matchedName = matchResult['student_name'] ?? 'Unknown';
+      final similarity = matchResult['similarity'] ?? 0.0;
+      print('✅ MATCHED: $matchedName (${(similarity * 100).toStringAsFixed(1)}%)');
+
+      setState(() {
+        _status = '✅ Matched: $matchedName';
+      });
+
+      print('═════════════════════════════════════════════');
+      print('✅ ATTENDANCE MARKED');
+      print('   Student: $matchedName');
+      print('   Similarity: ${(similarity * 100).toStringAsFixed(1)}%');
+      print('   Status: Success');
+      print('═════════════════════════════════════════════');
+
+      // Wait 2 seconds then return
+      await Future.delayed(const Duration(seconds: 2));
 
       if (mounted) {
         Navigator.pop(context);
@@ -305,8 +336,10 @@ class _LiveAntiSpoofCameraScreenState extends State<LiveAntiSpoofCameraScreen>
     } catch (e) {
       print('❌ Auto-mark error: $e');
       setState(() {
-        _status = 'Error marking attendance: $e';
+        _status = 'Error: $e';
       });
+      await Future.delayed(const Duration(seconds: 2));
+      if (mounted) Navigator.pop(context);
     }
   }
 
