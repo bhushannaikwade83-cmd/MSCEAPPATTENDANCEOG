@@ -1788,12 +1788,12 @@ async def mark_attendance_auto(
                     print(f"⚠️ Student {full_name}: No embeddings in cache")
                     continue
 
-                # Check if at least one embedding exists
+                # Check if at least one embedding exists (use None check, not bool)
                 emb_front = embeddings.get('front')
                 emb_left = embeddings.get('left')
                 emb_right = embeddings.get('right')
 
-                if not any([emb_front, emb_left, emb_right]):
+                if not any(v is not None for v in [emb_front, emb_left, emb_right]):
                     print(f"⚠️ Student {full_name}: No valid embeddings")
                     continue
 
