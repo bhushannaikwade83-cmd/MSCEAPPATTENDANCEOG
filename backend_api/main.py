@@ -13,6 +13,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.requests import Request as StarletteRequest
 from pydantic import BaseModel, model_validator
 import base64
+import json
 import numpy as np
 from typing import Optional, List, Tuple
 import time
