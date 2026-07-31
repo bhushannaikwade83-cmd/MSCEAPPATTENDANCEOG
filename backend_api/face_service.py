@@ -113,17 +113,26 @@ class FaceRecognitionService:
             # RetinaFace detection + ArcFace embedding in one call
             # InsightFace's get() method uses RetinaFace for detection
             faces = self.app.get(image_rgb)
-            
+
+            print(f"🔍 [DETECTION DEBUG] Faces found: {len(faces)}")
+
             if len(faces) == 0:
+                print("❌ No faces detected!")
                 return None
-            
+
             # Return the largest face (by bounding box area)
             if len(faces) > 1:
                 logger.warning(f"⚠️ Multiple faces detected ({len(faces)}), using largest face")
                 # Sort by bounding box area (largest first)
                 faces = sorted(faces, key=lambda f: (f.bbox[2] - f.bbox[0]) * (f.bbox[3] - f.bbox[1]), reverse=True)
-            
-            return faces[0]
+
+            selected_face = faces[0]
+            print(f"🔍 [DETECTION DEBUG] Selected face:")
+            print(f"   BBox: {selected_face.bbox}")
+            print(f"   Embedding shape: {selected_face.embedding.shape}")
+            print(f"   Embedding norm (raw): {np.linalg.norm(selected_face.embedding):.6f}")
+
+            return selected_face
         except Exception as e:
             logger.error(f"❌ RetinaFace detection error: {e}")
             return None
@@ -131,10 +140,10 @@ class FaceRecognitionService:
     def _extract_embedding_arcface(self, face: object) -> Optional[np.ndarray]:
         """
         Step 2: Extract 512-dimensional embedding using ArcFace
-        
+
         Args:
             face: Face object from RetinaFace detection (contains pre-computed ArcFace embedding)
-            
+
         Returns:
             512-dimensional numpy array (L2-normalized embedding) or None
         """
@@ -142,10 +151,22 @@ class FaceRecognitionService:
             # ArcFace embedding is already computed during RetinaFace detection
             # InsightFace computes both detection and embedding together for efficiency
             embedding = face.embedding  # Already 512-dim from ArcFace R100
-            
+
+            # Debug: Show raw embedding before normalization
+            print(f"🔍 [ARCFACE DEBUG] Raw embedding before normalization:")
+            print(f"   Shape: {embedding.shape}")
+            print(f"   Norm: {np.linalg.norm(embedding):.6f}")
+            print(f"   Min/Max: {np.min(embedding):.6f} / {np.max(embedding):.6f}")
+            print(f"   First 10: {embedding[:10]}")
+            print(f"   FULL: {embedding}")
+
             # L2 normalize embedding (required for cosine similarity in FAISS)
             embedding = embedding / np.linalg.norm(embedding)
-            
+
+            print(f"🔍 [ARCFACE DEBUG] After L2 normalization:")
+            print(f"   Norm: {np.linalg.norm(embedding):.6f}")
+            print(f"   First 10: {embedding[:10]}")
+
             logger.info(f"✅ ArcFace embedding extracted: shape={embedding.shape}, norm={np.linalg.norm(embedding):.4f}")
             return embedding
         except Exception as e:
