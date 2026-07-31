@@ -1552,7 +1552,7 @@ async def recognize_embedding(
 @app.post("/api/mark-attendance-auto")
 async def mark_attendance_auto(
     image: UploadFile = File(...),
-    institute_id: str = Form(...)
+    inst_id: str = Form(...)
 ):
     """
     Mark attendance automatically from face image
@@ -1563,13 +1563,13 @@ async def mark_attendance_auto(
 
     Args:
         image: Face image file
-        institute_id: Institute ID for filtering results
+        inst_id: Institute ID for filtering results
 
     Returns:
         {student_name, sr_no, similarity, record_type, status}
     """
     try:
-        logger.info(f"🎯 Attendance request for institute: {institute_id}")
+        logger.info(f"🎯 Attendance request for institute: {inst_id}")
 
         face_service_instance = _ensure_face_service()
         vector_db_instance = _ensure_vector_db()
@@ -1607,10 +1607,10 @@ async def mark_attendance_auto(
         logger.info(f"✅ Embedding generated: {embedding.shape}")
 
         # Search for match in vector database
-        logger.info(f"🔎 Searching vector database for institute {institute_id}...")
+        logger.info(f"🔎 Searching vector database for institute {inst_id}...")
         matches = await vector_db_instance.search(
             embedding=embedding,
-            institute_id=institute_id,
+            institute_id=inst_id,
             top_k=1,
             threshold=0.70
         )
@@ -1658,6 +1658,53 @@ async def mark_attendance_auto(
             "sr_no": None,
             "similarity": 0.0,
             "record_type": None
+        }
+
+@app.get("/api/debug/faiss-status")
+async def debug_faiss_status():
+    """
+    Debug endpoint: Show what's in FAISS database
+    Returns: list of all registered students + their institutes
+    """
+    try:
+        vector_db_instance = _ensure_vector_db()
+
+        if vector_db_instance.index is None:
+            await vector_db_instance.load_index()
+
+        # Count total embeddings
+        total_embeddings = vector_db_instance.index.ntotal
+
+        # Group by institute
+        institute_counts = {}
+        students_list = []
+
+        for idx, metadata in vector_db_instance.metadata.items():
+            inst_id = metadata.get('institute_id', 'UNKNOWN')
+
+            if inst_id not in institute_counts:
+                institute_counts[inst_id] = 0
+            institute_counts[inst_id] += 1
+
+            students_list.append({
+                'index': idx,
+                'institute_id': inst_id,
+                'student_id': metadata.get('student_id'),
+                'roll_number': metadata.get('roll_number'),
+                'name': metadata.get('name')
+            })
+
+        return {
+            "total_embeddings": total_embeddings,
+            "institutes_breakdown": institute_counts,
+            "students": students_list
+        }
+    except Exception as e:
+        return {
+            "error": str(e),
+            "total_embeddings": 0,
+            "institutes_breakdown": {},
+            "students": []
         }
 
 if __name__ == "__main__":
