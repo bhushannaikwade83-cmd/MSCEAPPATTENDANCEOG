@@ -376,9 +376,9 @@ async def _get_embeddings_for_institute(institute_id: str):
         print(f"🔄 Loading embeddings for institute {institute_id}...")
 
         # ⚡ OPTIMIZATION 1: Only load NEEDED columns (not all!)
-        # Original: 10 columns, Optimized: 5 columns = 2x faster network
+        # Original: 10 columns, Optimized: 6 columns = 2x faster network
         response = supabase.table('students').select(
-            'id, sr_no, fname, lname, face_embedding_front, face_embedding_left, face_embedding_right'
+            'id, sr_no, fname, lname, institute_id, face_embedding_front, face_embedding_left, face_embedding_right'
         ).eq('institute_id', institute_id).eq('face_registration_status', 'registered').execute()
 
         query_time = time.time() - query_start
@@ -427,6 +427,7 @@ async def _get_embeddings_for_institute(institute_id: str):
                     'fname': fname,
                     'lname': lname,
                     'id': student.get('id'),
+                    'institute_id': student.get('institute_id'),  # Keep for verification
                     'embeddings': embeddings,
                 })
 
