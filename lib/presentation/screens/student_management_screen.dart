@@ -124,11 +124,10 @@ class _StudentManagementScreenState extends State<StudentManagementScreen>
     _scrollController.addListener(_onScroll);
     _searchController.addListener(_onSearchChanged);
 
-    // ⏸️ DISABLED: Periodic minute rebuild was causing scroll lag
-    // Users can pull-to-refresh if they need latest times
-    // _timerUpdateTimer = Timer.periodic(const Duration(minutes: 1), (_) {
-    //   if (mounted) setState(() {});  // Rebuild to recalculate remaining time
-    // });
+    // ⏱️ Live countdown for entry->exit allotted-hours timer on student cards
+    _timerUpdateTimer = Timer.periodic(const Duration(seconds: 30), (_) {
+      if (mounted) setState(() {});  // Rebuild to recalculate remaining time
+    });
   }
 
   @override
@@ -513,6 +512,9 @@ class _StudentManagementScreenState extends State<StudentManagementScreen>
         final type = (row['record_type']?.toString() ?? '').toLowerCase();
         final photoUrl = (row['photo_url'] ?? '').toString().trim();
         final markedTime = row['marked_time'];
+        final allottedTargetHr = row['allotted_target_hr'];
+        final creditedHr = row['attendance_alloted_hr'];
+        final remark = row['remark'];
 
         if (type == 'exit') {
           if (payload['exitPhoto'] == null && photoUrl.isNotEmpty) {
@@ -521,6 +523,10 @@ class _StudentManagementScreenState extends State<StudentManagementScreen>
           if (payload['exitTime'] == null) {
             payload['exitTime'] = markedTime;
           }
+          // Exit row carries the final credited duration + remark (set by DB trigger).
+          if (creditedHr != null) payload['creditedHr'] = creditedHr;
+          if (remark != null) payload['remark'] = remark;
+          if (allottedTargetHr != null) payload['allottedTargetHr'] = allottedTargetHr;
           payload['status'] = row['status'];
         } else {
           if (payload['entryPhoto'] == null && photoUrl.isNotEmpty) {
@@ -532,6 +538,11 @@ class _StudentManagementScreenState extends State<StudentManagementScreen>
           if (payload['entryTime'] == null) {
             payload['entryTime'] = markedTime;
           }
+          // Entry row carries the frozen target hours (drives the countdown).
+          if (allottedTargetHr != null) payload['allottedTargetHr'] = allottedTargetHr;
+          // Entry may also have late/no-exit remark set by the nightly job.
+          if (creditedHr != null) payload['creditedHr'] ??= creditedHr;
+          if (remark != null) payload['remark'] ??= remark;
           payload['status'] = row['status'];
         }
       }
@@ -553,7 +564,7 @@ class _StudentManagementScreenState extends State<StudentManagementScreen>
 
         final rows = await appDb
             .from('attendance')
-            .select('sr_no,record_type,photo_url,marked_time,status')
+            .select('sr_no,record_type,photo_url,marked_time,status,allotted_target_hr,attendance_alloted_hr,remark')
             .eq('institute_id', instituteKey)
             .eq('attendance_date', today)
             .inFilter('sr_no', slice)
@@ -1548,6 +1559,38 @@ class _StudentManagementScreenState extends State<StudentManagementScreen>
     );
   }
 
+  /// Live countdown from entry using the frozen `allottedTargetHr` (attendance table policy).
+  /// Returns null once exit is marked (creditedHr present) or if there's no entry yet.
+  ({String label, bool overdue})? _newAttendanceCountdown(Map<String, dynamic>? slice) {
+    if (slice == null) return null;
+    if (slice['creditedHr'] != null) return null; // exit already credited
+    final entryTime = parseAnyTimestamp(slice['entryTime']);
+    if (entryTime == null) return null;
+
+    final allotted = (slice['allottedTargetHr'] as num?)?.toDouble() ?? 1.0;
+    final deadline = entryTime.toUtc().add(Duration(seconds: (allotted * 3600).round()));
+    final now = DateTime.now().toUtc();
+
+    if (now.isAfter(deadline)) return (label: '⏰ Time up', overdue: true);
+
+    final remaining = deadline.difference(now);
+    final h = remaining.inHours;
+    final m = remaining.inMinutes % 60;
+    return (label: '${h}h ${m}m left', overdue: false);
+  }
+
+  /// Final credited duration text once exit is marked (or nightly no-exit close ran).
+  String? _creditedHrLabel(Map<String, dynamic>? slice) {
+    if (slice == null) return null;
+    final raw = slice['creditedHr']?.toString().trim();
+    if (raw == null || raw.isEmpty) return null;
+    final parts = raw.split(':');
+    if (parts.length < 2) return raw;
+    final h = int.tryParse(parts[0]) ?? 0;
+    final m = int.tryParse(parts[1]) ?? 0;
+    return '${h}h ${m}m';
+  }
+
   Widget _buildAttendanceThumb({
     required String label,
     required Color borderColor,
@@ -1558,13 +1601,14 @@ class _StudentManagementScreenState extends State<StudentManagementScreen>
     VoidCallback? onTap,
     bool dimmed = false,
   }) {
+    const thumbHeight = 110.0;
     final hasImage = (imageUrl != null && imageUrl.isNotEmpty) ||
         (storagePath != null && storagePath.isNotEmpty);
     final box = Container(
-      height: 48,
+      height: thumbHeight,
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: borderColor, width: 2),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: borderColor, width: 2.5),
       ),
       clipBehavior: Clip.antiAlias,
       child: hasImage
@@ -1572,17 +1616,17 @@ class _StudentManagementScreenState extends State<StudentManagementScreen>
               imageUrl: (imageUrl != null && imageUrl.isNotEmpty) ? imageUrl : null,
               storagePath: (storagePath != null && storagePath.isNotEmpty) ? storagePath : null,
               width: double.infinity,
-              height: 48,
+              height: thumbHeight,
               fit: BoxFit.cover,
               placeholder: ColoredBox(color: borderColor.withValues(alpha: 0.08)),
               errorWidget: ColoredBox(
                 color: borderColor.withValues(alpha: 0.08),
-                child: Icon(Icons.broken_image_outlined, color: borderColor, size: 22),
+                child: Icon(Icons.broken_image_outlined, color: borderColor, size: 36),
               ),
             )
           : ColoredBox(
               color: isDark ? Colors.white.withValues(alpha: 0.06) : AppTheme.backgroundGrey,
-              child: Icon(Icons.photo_camera_outlined, color: borderColor.withValues(alpha: 0.65), size: 22),
+              child: Icon(Icons.photo_camera_outlined, color: borderColor.withValues(alpha: 0.65), size: 36),
             ),
     );
 
@@ -1610,20 +1654,20 @@ class _StudentManagementScreenState extends State<StudentManagementScreen>
             label,
             textAlign: TextAlign.center,
             style: TextStyle(
-              fontSize: 10,
+              fontSize: 13,
               fontWeight: FontWeight.w800,
               color: borderColor,
             ),
           ),
-          const SizedBox(height: 4),
+          const SizedBox(height: 6),
           thumb,
-          const SizedBox(height: 2),
+          const SizedBox(height: 4),
           Text(
             time,
             textAlign: TextAlign.center,
             style: TextStyle(
-              fontSize: 9,
-              fontWeight: FontWeight.w600,
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
               color: isDark ? Colors.white70 : AppTheme.textGray,
             ),
             maxLines: 1,
@@ -1951,9 +1995,10 @@ class _StudentManagementScreenState extends State<StudentManagementScreen>
     //   _fetchCurrentStudentSubjectsFromDb(rollKey).catchError((e) {...});
     // }
     final slice = payload;
-    final displaySlice = teacherPayloadActiveSessionSlice(slice) ?? slice;
-    final exitRemainingLabel = _getExitTimeRemaining(displaySlice, rollKey, subjectsList);
-    final isExitExpired = _isExitWindowExpired(displaySlice, rollKey, subjectsList);
+    final newAttendanceCountdown = _newAttendanceCountdown(slice);
+    final creditedHrLabel = _creditedHrLabel(slice);
+    final attendanceRemarkRaw = slice?['remark']?.toString().trim();
+    final attendanceRemark = (attendanceRemarkRaw != null && attendanceRemarkRaw.isNotEmpty) ? attendanceRemarkRaw : null;
     final entryPhotoUrl = slice != null ? _entryPhotoUrl(slice) : null;
     final exitPhotoUrl = slice != null ? _exitPhotoUrl(slice) : null;
     final hasEntryPhoto = entryPhotoUrl != null && entryPhotoUrl.isNotEmpty;
@@ -2026,30 +2071,58 @@ class _StudentManagementScreenState extends State<StudentManagementScreen>
                               ),
                       ),
                     ),
-                    // Timer below photo: show only while exit is pending.
-                    if (slice != null &&
-                        _sliceHasEntry(slice) &&
-                        !_sliceComplete(slice))
+                    // Allotted-hours clock: countdown after entry, credited duration after exit.
+                    if (newAttendanceCountdown != null)
                       Padding(
                         padding: const EdgeInsets.only(top: 6),
                         child: Column(
                           children: [
-                            Text(
-                              '⏱️',
-                              style: const TextStyle(fontSize: 18),
-                            ),
+                            const Text('⏱️', style: TextStyle(fontSize: 18)),
                             const SizedBox(height: 2),
                             Text(
-                              exitRemainingLabel ?? '—',
+                              newAttendanceCountdown.label,
                               style: TextStyle(
                                 fontSize: 9,
                                 fontWeight: FontWeight.bold,
-                                color: isExitExpired
+                                color: newAttendanceCountdown.overdue
                                     ? Colors.red
                                     : AppTheme.primaryBlue,
                               ),
                               textAlign: TextAlign.center,
                             ),
+                          ],
+                        ),
+                      )
+                    else if (creditedHrLabel != null)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 6),
+                        child: Column(
+                          children: [
+                            const Text('✅', style: TextStyle(fontSize: 18)),
+                            const SizedBox(height: 2),
+                            Text(
+                              creditedHrLabel,
+                              style: TextStyle(
+                                fontSize: 9,
+                                fontWeight: FontWeight.bold,
+                                color: attendanceRemark != null
+                                    ? Colors.orange.shade700
+                                    : AppTheme.primaryGreen,
+                              ),
+                              textAlign: TextAlign.center,
+                            ),
+                            if (attendanceRemark != null)
+                              Text(
+                                attendanceRemark,
+                                style: TextStyle(
+                                  fontSize: 7,
+                                  fontWeight: FontWeight.w600,
+                                  color: Colors.orange.shade700,
+                                ),
+                                textAlign: TextAlign.center,
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                              ),
                           ],
                         ),
                       ),
