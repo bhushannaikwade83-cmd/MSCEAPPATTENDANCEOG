@@ -39,6 +39,7 @@ class PreCaptureLivenessTracker {
     this.minHeadYawRangeDegrees = 2.5,
     this.minHeadPitchRangeDegrees = 2.0,
     this.randomHeadTurnChallenge,
+    this.directedTurnLabelOverride,
     this.directedTurnYawDegrees = 18.0,
     this.enableDepthReplayGuard = false,
     this.blockVideoReplay = false,
@@ -65,6 +66,11 @@ class PreCaptureLivenessTracker {
   final double minHeadYawRangeDegrees;
   final double minHeadPitchRangeDegrees;
   final ScanHeadTurnChallenge? randomHeadTurnChallenge;
+  /// Overrides the LEFT/RIGHT word shown in [_directedTurnMessage] without
+  /// touching [randomHeadTurnChallenge] (which may be intentionally swapped
+  /// for camera-mirroring yaw detection). Pass the direction the user should
+  /// actually see, e.g. 'LEFT' or 'RIGHT'.
+  final String? directedTurnLabelOverride;
   final double directedTurnYawDegrees;
   /// Extra 2D/screen proxy while scanning (ML Kit pose + tracking).
   final bool enableDepthReplayGuard;
@@ -1036,15 +1042,16 @@ class PreCaptureLivenessTracker {
   }
 
   String _directedTurnMessage() {
-    return switch (randomHeadTurnChallenge) {
-      ScanHeadTurnChallenge.turnLeft => requireBlink
-          ? 'Blink OK — now turn head LEFT'
-          : 'Turn your head slightly LEFT',
-      ScanHeadTurnChallenge.turnRight => requireBlink
-          ? 'Blink OK — now turn head RIGHT'
-          : 'Turn your head slightly RIGHT',
-      null => '',
-    };
+    final label = directedTurnLabelOverride ??
+        switch (randomHeadTurnChallenge) {
+          ScanHeadTurnChallenge.turnLeft => 'LEFT',
+          ScanHeadTurnChallenge.turnRight => 'RIGHT',
+          null => null,
+        };
+    if (label == null) return '';
+    return requireBlink
+        ? 'Blink OK — now turn head $label'
+        : 'Turn your head slightly $label';
   }
 
   String _livenessMessage({

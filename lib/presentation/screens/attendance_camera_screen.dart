@@ -160,6 +160,13 @@ class _AttendanceCameraScreenState extends State<AttendanceCameraScreen>
       strictAutoScanPad: true,
       inlinePadOnly: true,
       randomHeadTurnChallenge: headTurn,
+      // Detection uses the mirrored challenge above, but the on-screen text
+      // must match the actual pose the user is capturing (left/right).
+      directedTurnLabelOverride: pose == 'left'
+          ? 'LEFT'
+          : pose == 'right'
+              ? 'RIGHT'
+              : null,
       directedTurnYawDegrees: _isRegistration ? 12.0 : 15.0,
       distanceProfile: _distanceProfile,
     );
