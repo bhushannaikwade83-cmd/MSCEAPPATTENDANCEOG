@@ -207,7 +207,10 @@ class _LiveAntiSpoofCameraScreenState extends State<LiveAntiSpoofCameraScreen> {
         print('✅ [DETECT] Single face detected, proceeding to backend...');
         // Face detected - send to API
         print('🌐 [API] Calling /api/mark-attendance-auto...');
-        final result = await AntiSpoofApiService.markAttendanceAuto(imageFile);
+        final result = await AntiSpoofApiService.markAttendanceAuto(
+          imageFile,
+          instId: widget.instituteId,
+        );
         print('✅ [API] Response received: $result');
 
         if (mounted) {

@@ -201,7 +201,7 @@ class AntiSpoofApiService {
   /// Returns: {student_name, sr_no, similarity, record_type, status}
   static Future<Map<String, dynamic>> markAttendanceAuto(
     File imageFile, {
-    String instId = "99099", // Default institute ID
+    required String instId, // Institute ID — must be the caller's actual institute
   }) async {
     try {
       print('🌐 [SERVICE] Calling /api/mark-attendance-auto');
