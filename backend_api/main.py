@@ -1724,8 +1724,11 @@ async def mark_attendance_auto(
         {student_name, sr_no, similarity, record_type, status}
     """
     try:
+        total_start = time.time()
         logger.info(f"🎯 Attendance request for institute: {institute_id}")
 
+        # ⏱️ STEP 1: Initialize services
+        step1_start = time.time()
         face_service_instance = _ensure_face_service()
         vector_db_instance = _ensure_vector_db()
 
@@ -1736,16 +1739,20 @@ async def mark_attendance_auto(
         if vector_db_instance.index is None:
             logger.info("🔄 Loading vector database...")
             await vector_db_instance.load_index()
+        step1_time = time.time() - step1_start
+        print(f"⏱️  STEP 1 (Init): {step1_time:.3f}s")
 
-        # Read image
+        # ⏱️ STEP 2: Read image
+        step2_start = time.time()
         image_data = await image.read()
         if len(image_data) == 0:
             logger.warning("❌ Empty image received")
             raise HTTPException(status_code=400, detail="Empty image file")
+        step2_time = time.time() - step2_start
+        print(f"⏱️  STEP 2 (Read Image): {step2_time:.3f}s ({len(image_data)} bytes)")
 
-        logger.info(f"📸 Image received: {len(image_data)} bytes")
-
-        # Generate embedding
+        # ⏱️ STEP 3: Generate embedding
+        step3_start = time.time()
         logger.info("🔍 Generating face embedding...")
         embedding = await face_service_instance.generate_embedding(image_data)
         if embedding is None:
@@ -1758,16 +1765,15 @@ async def mark_attendance_auto(
                 "similarity": 0.0,
                 "record_type": None
             }
+        step3_time = time.time() - step3_start
+        print(f"⏱️  STEP 3 (Generate Embedding): {step3_time:.3f}s")
 
-        logger.info(f"✅ Embedding generated: {embedding.shape}")
-
-        # Search directly in Supabase for face embeddings
-        logger.info(f"🔎 Querying Supabase for institute {institute_id}...")
-
-        try:
-            # ⚡ LAZY CACHE: Load embeddings from cache (not DB!)
-            print(f"🔄 Fetching cached embeddings for institute {institute_id}...")
-            students = await _get_embeddings_for_institute(institute_id)
+        # ⏱️ STEP 4: Load embeddings from cache
+        logger.info(f"🔎 Loading embeddings for institute {institute_id}...")
+        step4_start = time.time()
+        students = await _get_embeddings_for_institute(institute_id)
+        step4_time = time.time() - step4_start
+        print(f"⏱️  STEP 4 (Load Embeddings): {step4_time:.3f}s")
 
             if not students:
                 logger.warning(f"❌ No students found for institute {institute_id}")
@@ -1780,7 +1786,8 @@ async def mark_attendance_auto(
                     "record_type": None
                 }
 
-            # ⚡ FAST: Batch cosine similarity (vectorized, not loop)
+            # ⏱️ STEP 5: Prepare embeddings matrix for similarity search
+            step5_start = time.time()
             from sklearn.metrics.pairwise import cosine_similarity
 
             SIMILARITY_THRESHOLD = 0.70
@@ -1833,6 +1840,11 @@ async def mark_attendance_auto(
                     "record_type": None
                 }
 
+            step5_time = time.time() - step5_start
+            print(f"⏱️  STEP 5 (Prepare Matrix): {step5_time:.3f}s ({len(valid_students)} students)")
+
+            # ⏱️ STEP 6: Calculate similarities
+            step6_start = time.time()
             # ⚡ Batch calculate similarities for all 3 angles
             embeddings_matrix_front = np.array(embeddings_matrix_front, dtype='float32')
             embeddings_matrix_left = np.array(embeddings_matrix_left, dtype='float32')
@@ -1918,7 +1930,9 @@ async def mark_attendance_auto(
                 s_right = similarities_right[idx]
                 print(f"   {i}. {s_name}: {s:.4f} {status}")
                 print(f"      (F:{s_front:.4f} L:{s_left:.4f} R:{s_right:.4f})")
-            print()
+
+            step6_time = time.time() - step6_start
+            print(f"⏱️  STEP 6 (Calculate Similarities): {step6_time:.3f}s\n")
 
             if best_similarity < SIMILARITY_THRESHOLD:
                 logger.warning(f"❌ No matching student found (best: {best_similarity:.4f}, threshold: {SIMILARITY_THRESHOLD})")
@@ -1949,11 +1963,11 @@ async def mark_attendance_auto(
 
         logger.info(f"✅ Match found: {student_name} (SR: {sr_no}, Similarity: {similarity:.2%})")
 
-        # ⚡ Determine entry/exit by checking if already marked entry today
+        # ⏱️ STEP 7: Check entry/exit
+        step7_start = time.time()
         from datetime import date
         today = date.today().isoformat()
 
-        entry_check_start = time.time()
         print(f"📋 Checking attendance for {sr_no} on {today}...")
 
         try:
@@ -1964,19 +1978,33 @@ async def mark_attendance_auto(
             ).eq('sr_no', sr_no).eq('attendance_date', today).eq('record_type', 'entry').execute()
 
             entry_count = entry_response.count if entry_response.count is not None else 0
-            entry_check_time = time.time() - entry_check_start
+            step7_time = time.time() - step7_start
 
             if entry_count > 0:
                 record_type = "exit"  # Already marked entry, now mark exit
-                print(f"✅ Entry found ({entry_check_time:.3f}s) → Record type: EXIT")
+                print(f"✅ Entry found ({step7_time:.3f}s) → Record type: EXIT")
             else:
                 record_type = "entry"  # First attendance of the day
-                print(f"✅ No entry found ({entry_check_time:.3f}s) → Record type: ENTRY")
+                print(f"✅ No entry found ({step7_time:.3f}s) → Record type: ENTRY")
         except Exception as e:
             logger.warning(f"⚠️ Could not check attendance: {e}, defaulting to ENTRY")
             record_type = "entry"
+            step7_time = time.time() - step7_start
 
-        print(f"📍 Final record type: {record_type.upper()}")
+        # ⏱️ TIMING SUMMARY
+        total_time = time.time() - total_start
+        print(f"\n{'='*60}")
+        print(f"📊 TIMING BREAKDOWN:")
+        print(f"   STEP 1 (Init): {step1_time:.3f}s")
+        print(f"   STEP 2 (Read Image): {step2_time:.3f}s")
+        print(f"   STEP 3 (Embedding): {step3_time:.3f}s ⚠️ SLOW HERE?")
+        print(f"   STEP 4 (Load Embeddings): {step4_time:.3f}s")
+        print(f"   STEP 5 (Prepare Matrix): {step5_time:.3f}s")
+        print(f"   STEP 6 (Similarities): {step6_time:.3f}s")
+        print(f"   STEP 7 (Entry/Exit): {step7_time:.3f}s")
+        print(f"   {'─'*60}")
+        print(f"   TOTAL: {total_time:.3f}s")
+        print(f"{'='*60}\n")
 
         return {
             "status": "✅ Matched",
@@ -1984,7 +2012,17 @@ async def mark_attendance_auto(
             "sr_no": sr_no,
             "similarity": float(similarity),
             "record_type": record_type,
-            "message": f"Attendance marked for {student_name} ({record_type.upper()})"
+            "message": f"Attendance marked for {student_name} ({record_type.upper()})",
+            "timing": {
+                "init": step1_time,
+                "read_image": step2_time,
+                "embedding": step3_time,
+                "load_embeddings": step4_time,
+                "prepare_matrix": step5_time,
+                "similarities": step6_time,
+                "entry_exit": step7_time,
+                "total": total_time
+            }
         }
 
     except HTTPException:
