@@ -324,7 +324,7 @@ class _LiveAntiSpoofCameraScreenState extends State<LiveAntiSpoofCameraScreen> {
         'institute_id': widget.instituteId,
         'attendance_date': today,
         'record_type': recordType, // 'entry' or 'exit'
-        'marked_time': now.toIso8601String(),
+        'marked_time': now.toUtc().toIso8601String(), // store UTC (with 'Z') so display .toLocal() is correct
         'similarity_score': _similarityScore,
         'photo_url': photoUrl, // B2 public URL (compressed, <100KB)
         'embedding': '[]',

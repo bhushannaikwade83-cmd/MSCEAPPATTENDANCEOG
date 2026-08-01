@@ -155,7 +155,7 @@ class AttendanceMarkingService {
         'student_name': studentName,
         'attendance_date': attendanceDate,
         'record_type': recordType,  // 'entry' or 'exit'
-        'marked_time': timestamp.toIso8601String(),
+        'marked_time': timestamp.toUtc().toIso8601String(), // store UTC so display .toLocal() is correct
         'photo_url': photoUrl,
         'embedding': jsonEncode(embedding),
         'similarity_score': similarityScore,
