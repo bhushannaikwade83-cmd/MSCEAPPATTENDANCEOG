@@ -93,7 +93,7 @@ class _InstituteReportScreenState extends State<InstituteReportScreen> {
     // 1. Fetch all students
     final allStudents = await appDb
         .from('students')
-        .select('id, user_id, sr_no, name, subjects')
+        .select('id, user_id, sr_no, fname, mname, lname, sub1, sub2, sub3, sub4, sub5, sub6, sub7, sub8')
         .eq('institute_id', _instituteId!);
 
     final studentIds = allStudents.map((s) => s['id'] as String).toList();
@@ -110,10 +110,17 @@ class _InstituteReportScreenState extends State<InstituteReportScreen> {
 
       if (roll.isNotEmpty) {
         rollByStudentId[sid] = roll;
-        nameByRoll[roll] = s['name'] as String? ?? 'Unknown';
+        final fname = (s['fname'] as String?)?.trim() ?? '';
+        final mname = (s['mname'] as String?)?.trim() ?? '';
+        final lname = (s['lname'] as String?)?.trim() ?? '';
+        final name = [fname, mname, lname].where((e) => e.isNotEmpty).join(' ').trim();
+        nameByRoll[roll] = name.isNotEmpty ? name : 'Unknown';
         srNoByRoll[roll] = s['sr_no'] as String? ?? roll;
-        final subjects = s['subjects'] as List?;
-        subjectCountByRoll[roll] = (subjects?.length ?? 1).clamp(1, 4);
+        final subjectCount = [
+          s['sub1'], s['sub2'], s['sub3'], s['sub4'],
+          s['sub5'], s['sub6'], s['sub7'], s['sub8'],
+        ].where((v) => (v as String?)?.trim().isNotEmpty == true).length;
+        subjectCountByRoll[roll] = (subjectCount == 0 ? 1 : subjectCount).clamp(1, 4);
       }
     }
 

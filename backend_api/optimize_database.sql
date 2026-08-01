@@ -14,6 +14,11 @@ ON students(sr_no);
 CREATE INDEX IF NOT EXISTS idx_attendance_sr_no_date
 ON attendance(sr_no, attendance_date);
 
+-- 3b. CRITICAL: Covers the exact entry-check query (sr_no + date + record_type)
+-- Without this, step 7 (entry/exit check) falls back to a slower index scan + filter
+CREATE INDEX IF NOT EXISTS idx_attendance_sr_no_date_type
+ON attendance(sr_no, attendance_date, record_type);
+
 -- 4. Index for daily attendance reports
 CREATE INDEX IF NOT EXISTS idx_attendance_institute_date
 ON attendance(institute_id, attendance_date);

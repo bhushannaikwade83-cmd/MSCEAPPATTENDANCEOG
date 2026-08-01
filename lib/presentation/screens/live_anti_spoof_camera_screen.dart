@@ -5,19 +5,20 @@ import 'package:google_mlkit_face_detection/google_mlkit_face_detection.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../services/anti_spoof_api_service.dart';
 import '../../services/attendance_photo_service.dart';
-import '../../services/attendance_service.dart';
 
 class LiveAntiSpoofCameraScreen extends StatefulWidget {
   static const routeName = '/live-anti-spoof-camera';
   final String? studentName;
   final String? studentId;
   final bool isRegistration;
+  final String instituteId;
 
   const LiveAntiSpoofCameraScreen({
     super.key,
     this.studentName,
     this.studentId,
     this.isRegistration = false,
+    required this.instituteId,
   });
 
   @override
@@ -41,6 +42,7 @@ class _LiveAntiSpoofCameraScreenState extends State<LiveAntiSpoofCameraScreen> {
   String _matchedStudentName = '';
   double _similarityScore = 0.0;
   String _srNo = '';
+  String _matchedStudentId = '';
 
   @override
   void initState() {
@@ -219,46 +221,34 @@ class _LiveAntiSpoofCameraScreenState extends State<LiveAntiSpoofCameraScreen> {
             _matchedStudentName = result['student_name'] ?? 'Unknown';
             _similarityScore = result['similarity'] ?? 0.0;
             _srNo = result['sr_no'] ?? 'N/A';
+            _matchedStudentId = result['student_id']?.toString() ?? '';
 
-            // 🔍 CHECK: Auto-detect entry vs exit based on today's attendance
-            print('🔍 [ATTENDANCE] Checking if entry or exit...');
-            String recordType = 'entry'; // Default
-            try {
-              final nextType = await AttendanceService.getNextRecordType(
-                _srNo,
-                '99099',
-              );
+            // ⚠️ Both ENTRY and EXIT already marked today — skip save, no B2 upload
+            if (result['already_marked'] == true) {
+              print('⚠️ [MATCH] $_matchedStudentName already has ENTRY+EXIT today — skipping save');
+              setState(() {
+                _currentStage = '⚠️ Already Marked Today ($_matchedStudentName)';
+              });
+              await Future.delayed(const Duration(seconds: 2));
+            } else {
+              // ⚡ Backend already determined entry/exit (STEP 7) — no extra round trip
+              final recordType = result['record_type'] ?? 'entry';
 
-              if (nextType == 'already_exit') {
-                print('⚠️ [ATTENDANCE] Already marked exit today!');
-                setState(() {
-                  _currentStage = '⚠️ Already marked EXIT today';
-                });
-                await Future.delayed(const Duration(seconds: 2));
-                _resetUI();
-                return;
-              }
+              print('✅ [MATCH] Student found: $_matchedStudentName');
+              print('📊 [MATCH] SR No: $_srNo');
+              print('📊 [MATCH] Similarity: ${(_similarityScore * 100).toStringAsFixed(1)}%');
+              print('📍 [MATCH] Record type: $recordType');
 
-              recordType = nextType; // 'entry' or 'exit'
-            } catch (e) {
-              print('⚠️ [ATTENDANCE] Check failed, defaulting to entry: $e');
-              recordType = 'entry';
+              // Save attendance to Supabase
+              print('💾 [SAVE] Saving attendance to Supabase...');
+              await _saveAttendanceToSupabase(_srNo, recordType, picture.path);
+
+              setState(() {
+                _currentStage = '✅ Attendance Marked ($recordType)';
+              });
+
+              await Future.delayed(const Duration(seconds: 2));
             }
-
-            print('✅ [MATCH] Student found: $_matchedStudentName');
-            print('📊 [MATCH] SR No: $_srNo');
-            print('📊 [MATCH] Similarity: ${(_similarityScore * 100).toStringAsFixed(1)}%');
-            print('📍 [MATCH] Record type: $recordType');
-
-            // Save attendance to Supabase
-            print('💾 [SAVE] Saving attendance to Supabase...');
-            await _saveAttendanceToSupabase(_srNo, recordType, picture.path);
-
-            setState(() {
-              _currentStage = '✅ Attendance Marked ($recordType)';
-            });
-
-            await Future.delayed(const Duration(seconds: 2));
           }
         }
       }
@@ -284,6 +274,7 @@ class _LiveAntiSpoofCameraScreenState extends State<LiveAntiSpoofCameraScreen> {
         _matchedStudentName = '';
         _similarityScore = 0.0;
         _srNo = '';
+        _matchedStudentId = '';
         _currentStage = 'Ready for Next Student';
       });
     }
@@ -301,11 +292,11 @@ class _LiveAntiSpoofCameraScreenState extends State<LiveAntiSpoofCameraScreen> {
     String photoPath,
   ) async {
     try {
-      print('💾 [SAVE] Saving attendance to Supabase...');
+      print('💾 [SAVE] Saving attendance to attendance table...');
 
       final supabase = Supabase.instance.client;
       final now = DateTime.now();
-      final instituteId = "99099"; // From your app
+      final today = now.toIso8601String().split('T')[0]; // YYYY-MM-DD
 
       // 📸 STEP 1: Compress and upload photo to B2
       String? photoUrl;
@@ -317,7 +308,7 @@ class _LiveAntiSpoofCameraScreenState extends State<LiveAntiSpoofCameraScreen> {
             photoFile: photoFile,
             srNo: srNo,
             studentName: _matchedStudentName,
-            instituteId: instituteId,
+            instituteId: widget.instituteId,
             recordType: recordType,
           );
         }
@@ -330,13 +321,13 @@ class _LiveAntiSpoofCameraScreenState extends State<LiveAntiSpoofCameraScreen> {
       await supabase.from('attendance').insert({
         'sr_no': srNo,
         'student_name': _matchedStudentName,
-        'institute_id': instituteId,
-        'attendance_date': now.toString().split(' ')[0], // YYYY-MM-DD format
+        'institute_id': widget.instituteId,
+        'attendance_date': today,
         'record_type': recordType, // 'entry' or 'exit'
         'marked_time': now.toIso8601String(),
         'similarity_score': _similarityScore,
         'photo_url': photoUrl, // B2 public URL (compressed, <100KB)
-        'embedding': '[]', // Optional: store ArcFace embedding
+        'embedding': '[]',
         'status': 'present',
         'is_verified': _similarityScore > 0.75,
       });
@@ -345,7 +336,7 @@ class _LiveAntiSpoofCameraScreenState extends State<LiveAntiSpoofCameraScreen> {
       print('   SR No: $srNo');
       print('   Student: $_matchedStudentName');
       print('   Type: $recordType');
-      print('   Date: ${now.toString().split(' ')[0]}');
+      print('   Date: $today');
       print('   Time: $now');
       print('   Similarity: ${(_similarityScore * 100).toStringAsFixed(1)}%');
       print('   Photo URL: $photoUrl');

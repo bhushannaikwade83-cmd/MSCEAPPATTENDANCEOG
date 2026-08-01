@@ -75,7 +75,7 @@ class _StudentManagementScreenState extends State<StudentManagementScreen>
 
   /// Omit `face_embedding` / `photo_thumbnail` — they are large JSON and slow every list page.
   static const String _studentSelectCols =
-      'id,sr_no,fname,lname,mname,subject,subjects,sub1,sub2,sub3,sub4,sub5,sub6,sub7,sub8,form_serial_no,ph_name,mother_nm,ctcd,identy_no,face_photo_url,face_embedding_front,face_embedding_left,face_embedding_right,face_registered_at,face_registration_status,is_face_real,created_at,updated_at';
+      'id,sr_no,fname,lname,mname,sub1,sub2,sub3,sub4,sub5,sub6,sub7,sub8,form_serial_no,ph_name,mother_nm,ctcd,identy_no,face_photo_url,face_embedding_front,face_embedding_left,face_embedding_right,face_registered_at,face_registration_status,is_face_real,created_at,updated_at';
 
   /// Today's entry/exit UI state keyed by [students.id] only (avoids roll/userId collisions).
   Map<String, Map<String, dynamic>> _todayPayloadByStudentId = {};
@@ -193,7 +193,6 @@ class _StudentManagementScreenState extends State<StudentManagementScreen>
       'user_id',
       'sr_no',
       'year',
-      'subject',
     ];
     return cols.map((c) => '$c.ilike.%$q%').join(',');
   }
@@ -461,8 +460,6 @@ class _StudentManagementScreenState extends State<StudentManagementScreen>
       return;
     }
     try {
-      final code = await instituteCodeForId(_instituteId!);
-
       final ids = <String>[];
       final idToStudent = <String, Map<String, dynamic>>{};
       final idToLookupKeys = <String, List<String>>{};
@@ -486,7 +483,7 @@ class _StudentManagementScreenState extends State<StudentManagementScreen>
 
       if (kDebugMode) {
         debugPrint(
-          '🔍 Today thumbnails: ${_students.length} listed, ${ids.length} with id+roll — institute_code=$code',
+          '🔍 Today thumbnails: ${_students.length} listed, ${ids.length} with id+roll — institute_id=$_instituteId',
         );
       }
 
@@ -513,159 +510,76 @@ class _StudentManagementScreenState extends State<StudentManagementScreen>
       // }
 
       void mergeAttendanceRow(Map<String, dynamic> payload, Map<String, dynamic> row) {
-        final type = (row['type']?.toString() ?? '').toLowerCase();
+        final type = (row['record_type']?.toString() ?? '').toLowerCase();
         final photoUrl = (row['photo_url'] ?? '').toString().trim();
-        final photoPath = (row['photo_path'] ?? '').toString().trim();
-        final createdAt = row['created_at'];
-        final add = row['additional'] is Map
-            ? Map<String, dynamic>.from((row['additional'] as Map).cast<String, dynamic>())
-            : <String, dynamic>{};
+        final markedTime = row['marked_time'];
 
         if (type == 'exit') {
           if (payload['exitPhoto'] == null && photoUrl.isNotEmpty) {
             payload['exitPhoto'] = photoUrl;
           }
-          if (payload['exitPhotoPath'] == null && photoPath.isNotEmpty) {
-            payload['exitPhotoPath'] = photoPath;
-          }
           if (payload['exitTime'] == null) {
-            payload['exitTime'] = add['exitTime'] ?? createdAt;
+            payload['exitTime'] = markedTime;
           }
-          payload['status'] = add['status'];
+          payload['status'] = row['status'];
         } else {
           if (payload['entryPhoto'] == null && photoUrl.isNotEmpty) {
             payload['entryPhoto'] = photoUrl;
-          }
-          if (payload['entryPhotoPath'] == null && photoPath.isNotEmpty) {
-            payload['entryPhotoPath'] = photoPath;
           }
           if (payload['photoUrl'] == null && photoUrl.isNotEmpty) {
             payload['photoUrl'] = photoUrl;
           }
           if (payload['entryTime'] == null) {
-            payload['entryTime'] = add['entryTime'] ?? createdAt;
+            payload['entryTime'] = markedTime;
           }
-          payload['status'] = add['status'];
+          payload['status'] = row['status'];
         }
       }
 
+      // `attendance` table keys by sr_no (no student_id column) — build sr_no lookup.
+      final srNoToStudentId = <String, String>{};
+      for (final sid in ids) {
+        for (final key in idToLookupKeys[sid] ?? const <String>[]) {
+          if (key.isNotEmpty) srNoToStudentId[key] = sid;
+        }
+      }
+      final srNos = srNoToStudentId.keys.toList();
+
       final map = <String, Map<String, dynamic>>{};
       const chunk = 100;
-      for (var offset = 0; offset < ids.length; offset += chunk) {
-        final end = (offset + chunk) > ids.length ? ids.length : offset + chunk;
-        final slice = ids.sublist(offset, end);
-
-        final instituteCodes = <String>{
-          code,
-          (_instituteId ?? '').trim(),
-        }..removeWhere((s) => s.isEmpty);
+      for (var offset = 0; offset < srNos.length; offset += chunk) {
+        final end = (offset + chunk) > srNos.length ? srNos.length : offset + chunk;
+        final slice = srNos.sublist(offset, end);
 
         final rows = await appDb
-            .from('attendance_in_out')
-            .select('id,student_id,sr_no,type,photo_url,photo_path,created_at,additional')
-            .inFilter('institute_code', instituteCodes.toList())
+            .from('attendance')
+            .select('sr_no,record_type,photo_url,marked_time,status')
+            .eq('institute_id', instituteKey)
             .eq('attendance_date', today)
-            .inFilter('student_id', slice)
-            .order('created_at', ascending: false);
+            .inFilter('sr_no', slice)
+            .order('marked_time', ascending: false);
 
         if (kDebugMode) {
-          debugPrint('📋 Attendance query: institute_codes=$instituteCodes, date=$today, student_ids=${slice.length}');
+          debugPrint('📋 Attendance query (attendance table): institute_id=$instituteKey, date=$today, sr_no count=${slice.length}');
           debugPrint('   Found ${rows.length} attendance records from database');
-          if (rows.isEmpty && slice.isNotEmpty) {
-            debugPrint('   ⚠️ NO RECORDS FOUND - checking data mismatch...');
-            debugPrint('   Looking for: institutes=$instituteCodes, date=$today');
+          for (final raw in rows) {
+            debugPrint('   row: sr_no=${raw['sr_no']} type=${raw['record_type']} marked_time=${raw['marked_time']} (${raw['marked_time']?.runtimeType})');
           }
         }
 
-        final seenRowIds = <String>{};
         final byStudent = <String, List<Map<String, dynamic>>>{};
-        void absorbRow(Map<String, dynamic> row, String attributedStudentId) {
-          final rid = row['id']?.toString().trim() ?? '';
-          if (rid.isNotEmpty && seenRowIds.contains(rid)) return;
-          if (rid.isNotEmpty) seenRowIds.add(rid);
-          if (attributedStudentId.isEmpty) return;
-          byStudent.putIfAbsent(attributedStudentId, () => []).add(row);
-        }
-
         for (final raw in rows) {
           final row = Map<String, dynamic>.from(raw as Map);
-          final sid = row['student_id']?.toString().trim() ?? '';
-          if (sid.isEmpty) continue;
-          final attributed = idToStudent.containsKey(sid)
-              ? sid
-              : _resolveStudentIdForLegacyKey(sid, idToStudent);
-          if (attributed == null) continue;
-          absorbRow(row, attributed);
+          final sr = row['sr_no']?.toString().trim() ?? '';
+          if (sr.isEmpty) continue;
+          final sid = srNoToStudentId[sr];
+          if (sid == null) continue;
+          byStudent.putIfAbsent(sid, () => []).add(row);
         }
 
-        final fallbackRolls = <String>{};
-        for (final sid in slice) {
-          final keys = idToLookupKeys[sid] ?? const <String>[];
-          if (keys.isEmpty) continue;
-          final have = byStudent[sid];
-          if (have == null || have.isEmpty) fallbackRolls.addAll(keys);
-        }
-        if (fallbackRolls.isNotEmpty) {
-          final rowsBySr = await appDb
-              .from('attendance_in_out')
-              .select('id,student_id,sr_no,type,photo_url,photo_path,created_at,additional')
-              .inFilter('institute_code', instituteCodes.toList())
-              .eq('attendance_date', today)
-              .inFilter('sr_no', fallbackRolls.toList())
-              .order('created_at', ascending: false);
-          for (final raw in rowsBySr) {
-            final row = Map<String, dynamic>.from(raw as Map);
-            final sr = row['sr_no']?.toString().trim() ?? '';
-            final sid = _resolveStudentIdForLegacyKey(sr, idToStudent);
-            if (sid == null) continue;
-            absorbRow(row, sid);
-          }
-        }
-
-        // Legacy: some rows store roll/user_id in student_id (not students.id) and omit sr_no.
-        final stillMissingRolls = <String>{};
-        for (final sid in slice) {
-          final keys = idToLookupKeys[sid] ?? const <String>[];
-          if (keys.isEmpty) continue;
-          final have = byStudent[sid];
-          if (have == null || have.isEmpty) stillMissingRolls.addAll(keys);
-        }
-        var rollAsStudentIdRowCount = 0;
-        if (stillMissingRolls.isNotEmpty) {
-          final rowsByRollInStudentId = await appDb
-              .from('attendance_in_out')
-              .select('id,student_id,sr_no,type,photo_url,photo_path,created_at,additional')
-              .inFilter('institute_code', instituteCodes.toList())
-              .eq('attendance_date', today)
-              .inFilter('student_id', stillMissingRolls.toList())
-              .order('created_at', ascending: false);
-          rollAsStudentIdRowCount = rowsByRollInStudentId.length;
-          for (final raw in rowsByRollInStudentId) {
-            final row = Map<String, dynamic>.from(raw as Map);
-            final key = row['student_id']?.toString().trim() ?? '';
-            final sid = _resolveStudentIdForLegacyKey(key, idToStudent);
-            if (sid == null) continue;
-            absorbRow(row, sid);
-          }
-        }
-
-        if (kDebugMode) {
-          var n = 0;
-          for (final sid in slice) {
-            final list = byStudent[sid];
-            if (list != null) n += list.length;
-          }
-          debugPrint(
-            '📸 Bulk attendance thumbnails chunk: ${slice.length} student(s), ${rows.length} by students.id'
-            '${fallbackRolls.isEmpty ? '' : ', sr_no fallback for ${fallbackRolls.length} key(s)'}'
-            '${stillMissingRolls.isEmpty ? '' : ', student_id=roll fetched $rollAsStudentIdRowCount row(s)'}, merged $n for slice',
-          );
-        }
-
-        for (final sid in slice) {
-          final student = idToStudent[sid];
+        for (final sid in slice.map((sr) => srNoToStudentId[sr]).whereType<String>()) {
           final list = byStudent[sid];
-          if (student == null || list == null || list.isEmpty) continue;
+          if (list == null || list.isEmpty) continue;
 
           final payload = <String, dynamic>{};
           for (final row in list) {
@@ -1043,17 +957,12 @@ class _StudentManagementScreenState extends State<StudentManagementScreen>
     final mname = row['mname']?.toString().trim() ?? '';
     final name = [fname, mname, lname].where((e) => e.isNotEmpty).join(' ').trim();
 
-    String subject = row['subject']?.toString().trim() ?? '';
-    final subs = row['subjects'];
-    if (subject.isEmpty && subs is List && subs.isNotEmpty) {
-      subject = subs.map((e) => e.toString()).join(', ');
-    }
-
     final srRaw = row['sr_no']?.toString().trim() ?? '';
     final regUrl = (row['face_photo_url'] as String?)?.trim();
     final url = regUrl ?? '';
 
     final parsedSubs = _parseSubjectsList(row);
+    final subject = parsedSubs.join(', ');
     // Full embedding is loaded in a separate small id-only query after the page fetch.
     final hasFaceEmb = false;
 
@@ -1390,63 +1299,12 @@ class _StudentManagementScreenState extends State<StudentManagementScreen>
       }
     }
 
-    // Also check 'subjects' column (JSON array format)
-    final subs = row['subjects'];
-    if (kDebugMode) {
-      debugPrint('🔍 Raw subjects for ${row['name']}: $subs (type: ${subs.runtimeType})');
-    }
-
-    if (subs is List) {
-      // Handle native List format
-      for (final e in subs) {
-        final s = e.toString().trim();
-        if (s.isNotEmpty && !out.contains(s)) {
-          out.add(s);
-          if (kDebugMode) debugPrint('  ✓ Added from List: "$s"');
-        }
-      }
-    } else if (subs is String && subs.isNotEmpty) {
-      // Handle JSON string format: '["GCC TBC ENG 40","GCC TBC ENG 30"]'
-      String cleaned = subs.trim();
-
-      // Remove outer brackets and quotes
-      if (cleaned.startsWith('[') && cleaned.endsWith(']')) {
-        cleaned = cleaned.substring(1, cleaned.length - 1);
-      } else if (cleaned.startsWith('{') && cleaned.endsWith('}')) {
-        cleaned = cleaned.substring(1, cleaned.length - 1);
-      }
-
-      // Split by comma and clean each item
-      if (cleaned.isNotEmpty) {
-        final parts = cleaned.split(',');
-        for (final p in parts) {
-          var trimmed = p.trim();
-          // Remove quotes from JSON strings
-          if (trimmed.startsWith('"') && trimmed.endsWith('"')) {
-            trimmed = trimmed.substring(1, trimmed.length - 1);
-          }
-          if (trimmed.isNotEmpty && !out.contains(trimmed)) {
-            out.add(trimmed);
-            if (kDebugMode) debugPrint('  ✓ Added from String: "$trimmed"');
-          }
-        }
-      }
-    }
 
     // Remove duplicates (case-insensitive comparison)
     final deduplicated = <String>[];
     for (final s in out) {
       if (!deduplicated.any((existing) => existing.toLowerCase() == s.toLowerCase())) {
         deduplicated.add(s);
-      }
-    }
-
-    // Fallback to subject column if no subjects found
-    if (deduplicated.isEmpty) {
-      final single = row['subject']?.toString().trim() ?? '';
-      if (single.isNotEmpty) {
-        deduplicated.add(single);
-        if (kDebugMode) debugPrint('  ⚠️  Fallback to subject column: "$single"');
       }
     }
 
@@ -1467,7 +1325,7 @@ class _StudentManagementScreenState extends State<StudentManagementScreen>
       // Query current student data
       var student = await appDb
           .from('students')
-          .select('subjects, subject')
+          .select('sub1,sub2,sub3,sub4,sub5,sub6,sub7,sub8')
           .eq('institute_id', _instituteId!)
           .eq('sr_no', srNo.trim())
           .maybeSingle();
@@ -1475,7 +1333,7 @@ class _StudentManagementScreenState extends State<StudentManagementScreen>
       // Fallback: try by user_id
       student ??= await appDb
           .from('students')
-          .select('subjects, subject')
+          .select('sub1,sub2,sub3,sub4,sub5,sub6,sub7,sub8')
           .eq('institute_id', _instituteId!)
           .eq('user_id', srNo.trim())
           .maybeSingle();
@@ -1485,30 +1343,17 @@ class _StudentManagementScreenState extends State<StudentManagementScreen>
         return [];
       }
 
-      // Try subjects array first (newer format with multiple subjects)
-      final subjects = student['subjects'];
-      if (subjects is List && subjects.isNotEmpty) {
-        final freshSubjects = subjects
-            .map((s) => s.toString().trim())
-            .where((s) => s.isNotEmpty)
-            .toList();
+      final freshSubjects = [
+        student['sub1'], student['sub2'], student['sub3'], student['sub4'],
+        student['sub5'], student['sub6'], student['sub7'], student['sub8'],
+      ].map((s) => s?.toString().trim() ?? '').where((s) => s.isNotEmpty).toList();
+
+      if (freshSubjects.isNotEmpty) {
         if (kDebugMode) {
           debugPrint('✅ Fresh subjects fetched: $freshSubjects (count=${freshSubjects.length})');
         }
-        // Cache for future use
         _freshSubjectsCache[srNo] = freshSubjects;
         return freshSubjects;
-      }
-
-      // Fallback to single subject column
-      final singleSubject = student['subject']?.toString().trim();
-      if (singleSubject != null && singleSubject.isNotEmpty) {
-        if (kDebugMode) {
-          debugPrint('✅ Fresh subject fetched from column: $singleSubject (count=1)');
-        }
-        final fresh = [singleSubject];
-        _freshSubjectsCache[srNo] = fresh;
-        return fresh;
       }
 
       if (kDebugMode) debugPrint('⚠️ No subjects found for $srNo');
@@ -1637,6 +1482,7 @@ class _StudentManagementScreenState extends State<StudentManagementScreen>
           studentName: studentName,
           studentId: 'ATTENDANCE_MARK',
           isRegistration: false,
+          instituteId: _instituteId!,
         ),
       ),
     );

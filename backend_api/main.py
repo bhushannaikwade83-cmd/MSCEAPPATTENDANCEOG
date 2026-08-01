@@ -1961,17 +1961,25 @@ async def mark_attendance_auto(
 
         print(f"📋 Checking attendance for {sr_no} on {today}...")
 
+        already_marked = False
         try:
-            # ⚡ FAST: Query only COUNT, not full data
+            # ⚡ FAST: One query, fetch which record_types exist today for this student
             supabase = _get_supabase_client()
-            entry_response = supabase.table('attendance').select(
-                'id', count='exact'
-            ).eq('sr_no', sr_no).eq('attendance_date', today).eq('record_type', 'entry').execute()
+            today_response = supabase.table('attendance').select(
+                'record_type'
+            ).eq('sr_no', sr_no).eq('attendance_date', today).execute()
 
-            entry_count = entry_response.count if entry_response.count is not None else 0
+            marked_types = {row.get('record_type') for row in (today_response.data or [])}
             step7_time = time.time() - step7_start
 
-            if entry_count > 0:
+            has_entry = 'entry' in marked_types
+            has_exit = 'exit' in marked_types
+
+            if has_entry and has_exit:
+                already_marked = True
+                record_type = None
+                print(f"⚠️ Both ENTRY & EXIT already marked today ({step7_time:.3f}s)")
+            elif has_entry:
                 record_type = "exit"  # Already marked entry, now mark exit
                 print(f"✅ Entry found ({step7_time:.3f}s) → Record type: EXIT")
             else:
@@ -1981,6 +1989,20 @@ async def mark_attendance_auto(
             logger.warning(f"⚠️ Could not check attendance: {e}, defaulting to ENTRY")
             record_type = "entry"
             step7_time = time.time() - step7_start
+
+        if already_marked:
+            total_time = time.time() - total_start
+            print(f"⏱️  TOTAL (already marked, skipped save): {total_time:.3f}s")
+            return {
+                "status": "⚠️ Already Marked",
+                "already_marked": True,
+                "student_name": student_name,
+                "sr_no": sr_no,
+                "student_id": student_id,
+                "similarity": float(similarity),
+                "record_type": None,
+                "message": f"{student_name} already has both ENTRY and EXIT marked for today"
+            }
 
         # ⏱️ TIMING SUMMARY
         total_time = time.time() - total_start
@@ -2001,6 +2023,7 @@ async def mark_attendance_auto(
             "status": "✅ Matched",
             "student_name": student_name,
             "sr_no": sr_no,
+            "student_id": student_id,
             "similarity": float(similarity),
             "record_type": record_type,
             "message": f"Attendance marked for {student_name} ({record_type.upper()})",

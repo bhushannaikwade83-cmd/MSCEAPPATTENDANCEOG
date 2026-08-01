@@ -1305,7 +1305,7 @@ class FaceRecognitionService {
       if (rowId.isNotEmpty) {
         final fetched = await appDb
             .from('students')
-            .select('id, user_id, sr_no, fname, lname, year, subject, subjects, face_photo_url, face_embedding_front, face_embedding_left, face_embedding_right')
+            .select('id, user_id, sr_no, fname, lname, year, face_photo_url, face_embedding_front, face_embedding_left, face_embedding_right')
             .eq('institute_id', instId)
             .eq('id', rowId)
             .maybeSingle();
