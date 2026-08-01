@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MSCEAPP Backend Settings</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container { max-width: 700px; margin: 0 auto; }
+
+        header {
+            background: white;
+            padding: 22px 26px;
+            border-radius: 10px;
+            margin-bottom: 24px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+
+        header h1 { color: #667eea; font-size: 1.5em; line-height: 1.3; }
+        header a {
+            display: inline-block;
+            margin-top: 8px;
+            color: #667eea;
+            text-decoration: none;
+            font-weight: 600;
+            font-size: 0.85em;
+        }
+        header a:hover { text-decoration: underline; }
+
+        .card {
+            background: white;
+            border-radius: 10px;
+            padding: 24px;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+
+        .card h2 {
+            color: #333;
+            font-size: 1.15em;
+            margin-bottom: 6px;
+        }
+
+        .card .desc {
+            color: #777;
+            font-size: 0.85em;
+            margin-bottom: 18px;
+            line-height: 1.5;
+        }
+
+        .field-row {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        input[type="number"] {
+            flex: 1;
+            padding: 12px 14px;
+            border: 2px solid #e5e7eb;
+            border-radius: 8px;
+            font-size: 1em;
+            font-family: 'Courier New', monospace;
+        }
+
+        input[type="number"]:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        button {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 8px;
+            font-size: 0.95em;
+            font-weight: 700;
+            cursor: pointer;
+            background: #667eea;
+            color: white;
+            transition: all 0.2s;
+            white-space: nowrap;
+        }
+
+        button:hover { background: #5568d3; }
+        button:disabled { background: #ccc; cursor: not-allowed; }
+
+        .current {
+            margin-top: 12px;
+            font-size: 0.85em;
+            color: #667eea;
+            font-weight: 600;
+        }
+
+        .toast {
+            margin-top: 14px;
+            padding: 10px 14px;
+            border-radius: 8px;
+            font-size: 0.85em;
+            font-weight: 600;
+            display: none;
+        }
+
+        .toast.success { background: #d1fae5; color: #065f46; display: block; }
+        .toast.error { background: #fee2e2; color: #991b1b; display: block; }
+
+        .hint {
+            margin-top: 10px;
+            font-size: 0.78em;
+            color: #999;
+        }
+
+        .live-badge {
+            display: inline-block;
+            padding: 3px 10px;
+            border-radius: 12px;
+            background: #10b981;
+            color: white;
+            font-size: 0.7em;
+            font-weight: 700;
+            margin-left: 8px;
+            vertical-align: middle;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>⚙️ Backend Settings</h1>
+            <a href="/">← Dashboard</a>
+        </header>
+
+        <div class="card">
+            <h2>Face Match Similarity Threshold <span class="live-badge">LIVE — no redeploy</span></h2>
+            <div class="desc">
+                Minimum cosine similarity (0.00 – 1.00) required to accept a face match
+                during attendance marking (<code>/api/mark-attendance-auto</code>). Current
+                default: <strong>0.70</strong>. Lower = more lenient (more false accepts),
+                higher = stricter (more false rejects).
+            </div>
+            <div class="field-row">
+                <input type="number" id="thresholdInput" min="0" max="1" step="0.01" placeholder="0.70">
+                <button id="saveBtn" onclick="saveThreshold()">Save</button>
+            </div>
+            <div class="current" id="currentValue">Loading current value…</div>
+            <div class="toast" id="toast"></div>
+            <div class="hint">Changes take effect within 30 seconds on the live backend — no Railway redeploy needed.</div>
+        </div>
+    </div>
+
+    <script>
+        async function loadSettings() {
+            try {
+                const res = await fetch('/api/settings');
+                const data = await res.json();
+                const val = data.similarity_threshold ?? 0.70;
+                document.getElementById('thresholdInput').value = val;
+                document.getElementById('currentValue').textContent =
+                    `Current live value: ${(val * 100).toFixed(0)}%`;
+            } catch (e) {
+                document.getElementById('currentValue').textContent = '⚠️ Could not load settings: ' + e.message;
+            }
+        }
+
+        async function saveThreshold() {
+            const btn = document.getElementById('saveBtn');
+            const toast = document.getElementById('toast');
+            const val = document.getElementById('thresholdInput').value;
+
+            if (val === '' || isNaN(val) || val < 0 || val > 1) {
+                toast.className = 'toast error';
+                toast.textContent = '❌ Enter a value between 0 and 1';
+                return;
+            }
+
+            btn.disabled = true;
+            btn.textContent = 'Saving...';
+
+            try {
+                const res = await fetch('/api/settings/update', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ key: 'similarity_threshold', value: val }),
+                });
+                const data = await res.json();
+
+                if (res.ok) {
+                    toast.className = 'toast success';
+                    toast.textContent = `✅ Saved! Threshold is now ${(val * 100).toFixed(0)}%`;
+                    loadSettings();
+                } else {
+                    throw new Error(data.detail || 'Update failed');
+                }
+            } catch (e) {
+                toast.className = 'toast error';
+                toast.textContent = '❌ ' + e.message;
+            } finally {
+                btn.disabled = false;
+                btn.textContent = 'Save';
+            }
+        }
+
+        loadSettings();
+    </script>
+</body>
+</html>

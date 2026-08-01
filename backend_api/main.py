@@ -70,6 +70,39 @@ def _get_supabase_client():
         _supabase_client = create_client(supabase_url, supabase_key)
     return _supabase_client
 
+# ⚙️ APP SETTINGS: live-tunable values (Supabase-backed, no redeploy needed)
+_settings_cache = {'values': {}, 'loaded_at': None}
+_SETTINGS_CACHE_TTL_SECONDS = 30
+
+_SETTINGS_DEFAULTS = {
+    'similarity_threshold': 0.70,
+}
+
+def get_setting(key: str, default=None):
+    """Read a tunable setting from Supabase (cached for _SETTINGS_CACHE_TTL_SECONDS)."""
+    global _settings_cache
+    now = datetime.now()
+    stale = (
+        _settings_cache['loaded_at'] is None or
+        (now - _settings_cache['loaded_at']).total_seconds() > _SETTINGS_CACHE_TTL_SECONDS
+    )
+    if stale:
+        try:
+            supabase = _get_supabase_client()
+            response = supabase.table('app_settings').select('key, value').execute()
+            _settings_cache['values'] = {row['key']: row['value'] for row in (response.data or [])}
+            _settings_cache['loaded_at'] = now
+        except Exception as e:
+            logger.warning(f"⚠️ Could not load app_settings: {e}")
+
+    raw = _settings_cache['values'].get(key)
+    if raw is None:
+        return default if default is not None else _SETTINGS_DEFAULTS.get(key)
+    try:
+        return float(raw)
+    except (TypeError, ValueError):
+        return raw
+
 app = FastAPI(title="EduSetu Face Recognition API", version="1.0.0")
 
 # Serve dashboard at root
@@ -80,6 +113,49 @@ async def serve_dashboard():
 
 # Mount dashboard
 app.mount("/dashboard", dashboard_app)
+
+@app.get("/settings", response_class=FileResponse)
+async def serve_settings_page():
+    """⚙️ Live settings UI - change tunables without redeploying"""
+    return "settings.html"
+
+@app.get("/api/settings")
+async def api_get_settings():
+    """Return current values for all known tunable settings."""
+    return {
+        key: get_setting(key, default)
+        for key, default in _SETTINGS_DEFAULTS.items()
+    }
+
+@app.post("/api/settings/update")
+async def api_update_setting(request: Request):
+    """Update one tunable setting. Body: {"key": "similarity_threshold", "value": "0.75"}"""
+    body = await request.json()
+    key = str(body.get("key", "")).strip()
+    value = body.get("value")
+
+    if key not in _SETTINGS_DEFAULTS:
+        raise HTTPException(status_code=400, detail=f"Unknown setting key: {key}")
+    if value is None or str(value).strip() == "":
+        raise HTTPException(status_code=400, detail="Missing value")
+
+    try:
+        supabase = _get_supabase_client()
+        supabase.table('app_settings').upsert({
+            'key': key,
+            'value': str(value).strip(),
+            'updated_at': datetime.now().isoformat(),
+        }).execute()
+
+        # Invalidate cache so the next request picks up the new value immediately
+        global _settings_cache
+        _settings_cache = {'values': {}, 'loaded_at': None}
+
+        logger.info(f"⚙️ Setting updated: {key} = {value}")
+        return {"success": True, "key": key, "value": value}
+    except Exception as e:
+        logger.error(f"❌ Failed to update setting {key}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 # Validation error handler for 422 errors
 @app.exception_handler(RequestValidationError)
@@ -1792,7 +1868,7 @@ async def mark_attendance_auto(
         step5_start = time.time()
         from sklearn.metrics.pairwise import cosine_similarity
 
-        SIMILARITY_THRESHOLD = 0.70
+        SIMILARITY_THRESHOLD = get_setting('similarity_threshold', 0.70)
         valid_students = []
         embeddings_matrix_front = []
         embeddings_matrix_left = []
