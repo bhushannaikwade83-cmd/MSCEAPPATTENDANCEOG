@@ -1074,11 +1074,6 @@ class _StudentManagementScreenState extends State<StudentManagementScreen>
                   SliverToBoxAdapter(child: _buildSearchBar()),
                   if (_instituteId != null)
                     SliverToBoxAdapter(child: _buildSummaryStatCards()),
-                  if (_instituteId != null &&
-                      (_studentCount > 0 || visibleStudents.isNotEmpty))
-                    SliverToBoxAdapter(
-                      child: _buildListProgressHint(visibleStudents.length),
-                    ),
                   ..._buildStudentContentSlivers(
                     context,
                     isDark,
