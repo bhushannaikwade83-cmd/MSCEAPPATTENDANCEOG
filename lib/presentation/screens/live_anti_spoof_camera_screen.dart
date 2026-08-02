@@ -99,11 +99,8 @@ class _LiveAntiSpoofCameraScreenState extends State<LiveAntiSpoofCameraScreen> {
         _cameraInitialized = true;
       });
 
-      _setStatus('👀 Position your face — blink to capture');
+      _setStatus('🎥 Ready - Press CAPTURE');
       print('✅ [INIT] Screen ready for attendance marking');
-
-      // Start streaming frame processing
-      _startCameraFrameStream();
     } catch (e) {
       print('❌ [INIT] Initialization error: $e');
       _setStatus('❌ Error: $e');
@@ -607,7 +604,7 @@ class _LiveAntiSpoofCameraScreenState extends State<LiveAntiSpoofCameraScreen> {
             ),
           ),
 
-          // Bottom Controls (minimal - no manual CAPTURE button)
+          // Bottom Controls
           Positioned(
             bottom: 20,
             left: 20,
@@ -615,42 +612,30 @@ class _LiveAntiSpoofCameraScreenState extends State<LiveAntiSpoofCameraScreen> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                // Auto-capture countdown display
-                if (_autoCountdownStarted && _captureCountdown > 0)
-                  Container(
-                    padding: const EdgeInsets.all(20),
-                    decoration: BoxDecoration(
-                      color: Colors.orange.withOpacity(0.8),
+                // CAPTURE Button
+                ElevatedButton(
+                  onPressed: _isCapturing ? null : _startCapture,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: _isCapturing ? Colors.orange : Colors.green,
+                    disabledBackgroundColor: Colors.orange,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 40,
+                      vertical: 16,
+                    ),
+                    shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Text(
-                      '📸 Capturing in $_captureCountdown...',
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 20,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  )
-                else
-                  // Face detection status
-                  Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: _faceDetected ? Colors.green.withOpacity(0.7) : Colors.grey.withOpacity(0.7),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Text(
-                      _faceDetected ? '✅ Face detected - blink to start' : '👀 Waiting for face...',
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                      ),
                     ),
                   ),
+                  child: Text(
+                    _isCapturing ? 'CAPTURING... $_captureCountdown' : '✅ CAPTURE',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 2,
+                    ),
+                  ),
+                ),
                 const SizedBox(height: 12),
                 // SWITCH Camera Button
                 if (_cameras.length > 1)
