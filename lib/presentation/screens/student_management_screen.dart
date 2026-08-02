@@ -1306,25 +1306,25 @@ class _StudentManagementScreenState extends State<StudentManagementScreen>
     );
   }
 
-  /// Get gradient colors based on stat type
+  /// Get gradient colors based on stat type (orange, green, white theme)
   List<Color> _getGradientForColor(Color baseColor) {
     if (baseColor == AppTheme.primaryGreen) {
-      // Present: Green gradient
+      // Present: Green (Indian tricolor green)
       return [
-        const Color(0xFF10B981),
-        const Color(0xFF059669),
+        const Color(0xFF138808),
+        const Color(0xFF006600),
       ];
     } else if (baseColor == AppTheme.accentRed) {
-      // Absent: Red gradient
+      // Absent: Orange/Saffron (Indian tricolor orange)
       return [
-        const Color(0xFFEF4444),
-        const Color(0xFFDC2626),
+        const Color(0xFFFF9933),
+        const Color(0xFFFF6600),
       ];
     } else {
-      // Total: Blue gradient
+      // Total: Orange/Saffron (Indian tricolor)
       return [
-        const Color(0xFF3B82F6),
-        const Color(0xFF1D4ED8),
+        const Color(0xFFFF9933),
+        const Color(0xFFE8871A),
       ];
     }
   }
