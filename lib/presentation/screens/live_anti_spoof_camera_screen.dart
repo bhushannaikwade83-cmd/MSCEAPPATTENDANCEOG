@@ -501,6 +501,30 @@ class _LiveAntiSpoofCameraScreenState extends State<LiveAntiSpoofCameraScreen> {
       final now = DateTime.now();
       final today = now.toIso8601String().split('T')[0]; // YYYY-MM-DD
 
+      // 🔍 Check if student already has both entry and exit marked
+      print('🔍 Checking if attendance already marked for today...');
+      final existingRecords = await appDb
+          .from('attendance')
+          .select('record_type')
+          .eq('institute_id', widget.instituteId)
+          .eq('sr_no', srNo)
+          .eq('attendance_date', today);
+
+      final hasEntry = existingRecords.any((r) => r['record_type'] == 'entry');
+      final hasExit = existingRecords.any((r) => r['record_type'] == 'exit');
+
+      if (hasEntry && hasExit) {
+        print('✅ [ALREADY MARKED] Student has both entry and exit marked');
+        if (mounted) {
+          setState(() {
+            _currentStage = '✅ Attendance already marked for today!\n(Entry ✓ Exit ✓)';
+          });
+        }
+        await Future.delayed(const Duration(seconds: 3));
+        if (mounted) _resetUI();
+        return;
+      }
+
       // 📸 STEP 1: Compress and upload photo to B2
       String? photoUrl;
       try {
