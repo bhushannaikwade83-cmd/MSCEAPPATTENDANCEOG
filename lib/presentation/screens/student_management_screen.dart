@@ -1847,54 +1847,6 @@ class _StudentManagementScreenState extends State<StudentManagementScreen>
     }
 
     return [
-      // Pagination info bar
-      SliverToBoxAdapter(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-            decoration: BoxDecoration(
-              color: AppTheme.primaryBlue.withOpacity(0.08),
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: AppTheme.primaryBlue.withOpacity(0.2)),
-            ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Expanded(
-                  child: Text(
-                    _attendanceFilter == _StudentAttendanceFilter.all
-                        ? 'Showing ${visibleStudents.length} of $_studentCount students'
-                        : 'Showing ${visibleStudents.length} ${_attendanceFilterLabel(_attendanceFilter)} students from ${_students.length} loaded',
-                    style: TextStyle(
-                      color: AppTheme.primaryBlue,
-                      fontWeight: FontWeight.w600,
-                      fontSize: 13,
-                    ),
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-                if (_hasMore || _isLoadingMore)
-                  Expanded(
-                    child: Text(
-                      _attendanceFilter == _StudentAttendanceFilter.all
-                          ? 'Scroll down to load more ↓'
-                          : 'Load more to check more ↓',
-                      style: TextStyle(
-                        color: AppTheme.textGray,
-                        fontSize: 12,
-                        fontStyle: FontStyle.italic,
-                      ),
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  )
-                else
-                  const Icon(Icons.check_circle, size: 16, color: Colors.green),
-              ],
-            ),
-          ),
-        ),
-      ),
       SliverPadding(
         padding: _studentListOuterPadding(context),
         sliver: SliverList(
