@@ -2409,84 +2409,93 @@ class _StudentManagementScreenState extends State<StudentManagementScreen>
                         ],
                       ),
                     ),
-                  // Timer or Credits
-                  if (newAttendanceCountdown != null || creditedHrLabel != null)
-                    Expanded(
-                      child: Container(
-                        padding: EdgeInsets.all(10.w),
-                        decoration: BoxDecoration(
-                          color: statusColor.withValues(alpha: 0.08),
-                          borderRadius: BorderRadius.circular(12.r),
-                          border: Border.all(
-                            color: statusColor.withValues(alpha: 0.2),
-                          ),
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.center,
-                          children: [
-                            if (newAttendanceCountdown != null) ...[
-                              Text(
-                                '⏱️',
-                                style: TextStyle(fontSize: 24.sp),
-                              ),
-                              SizedBox(height: 6.h),
-                              Text(
-                                'Countdown',
-                                style: TextStyle(
-                                  fontSize: 10.sp,
-                                  fontWeight: FontWeight.w600,
-                                  color: statusColor,
-                                ),
-                              ),
-                              Text(
-                                newAttendanceCountdown.label,
-                                style: TextStyle(
-                                  fontSize: 13.sp,
-                                  fontWeight: FontWeight.w900,
-                                  color: newAttendanceCountdown.overdue ? Colors.red : statusColor,
-                                ),
-                              ),
-                            ] else if (creditedHrLabel != null) ...[
-                              Text(
-                                '✅',
-                                style: TextStyle(fontSize: 24.sp),
-                              ),
-                              SizedBox(height: 6.h),
-                              Text(
-                                'Credited',
-                                style: TextStyle(
-                                  fontSize: 10.sp,
-                                  fontWeight: FontWeight.w600,
-                                  color: statusColor,
-                                ),
-                              ),
-                              Text(
-                                creditedHrLabel,
-                                style: TextStyle(
-                                  fontSize: 13.sp,
-                                  fontWeight: FontWeight.w900,
-                                  color: statusColor,
-                                ),
-                              ),
-                              if (attendanceRemark != null)
-                                Text(
-                                  attendanceRemark,
-                                  style: TextStyle(
-                                    fontSize: 9.sp,
-                                    fontWeight: FontWeight.w600,
-                                    color: Colors.orange.shade700,
-                                  ),
-                                  textAlign: TextAlign.center,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                            ],
-                          ],
-                        ),
-                      ),
-                    ),
                 ],
               ),
+              // Timer or Credits section - moved below photos
+              if (newAttendanceCountdown != null || creditedHrLabel != null) ...[
+                SizedBox(height: 14.h),
+                Container(
+                  padding: EdgeInsets.all(12.w),
+                  decoration: BoxDecoration(
+                    color: statusColor.withValues(alpha: 0.08),
+                    borderRadius: BorderRadius.circular(12.r),
+                    border: Border.all(
+                      color: statusColor.withValues(alpha: 0.2),
+                    ),
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      if (newAttendanceCountdown != null) ...[
+                        Text(
+                          '⏱️',
+                          style: TextStyle(fontSize: 22.sp),
+                        ),
+                        SizedBox(width: 10.w),
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Countdown',
+                              style: TextStyle(
+                                fontSize: 11.sp,
+                                fontWeight: FontWeight.w600,
+                                color: statusColor,
+                              ),
+                            ),
+                            Text(
+                              newAttendanceCountdown.label,
+                              style: TextStyle(
+                                fontSize: 14.sp,
+                                fontWeight: FontWeight.w900,
+                                color: newAttendanceCountdown.overdue ? Colors.red : statusColor,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ] else if (creditedHrLabel != null) ...[
+                        Text(
+                          '✅',
+                          style: TextStyle(fontSize: 22.sp),
+                        ),
+                        SizedBox(width: 10.w),
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Credited',
+                              style: TextStyle(
+                                fontSize: 11.sp,
+                                fontWeight: FontWeight.w600,
+                                color: statusColor,
+                              ),
+                            ),
+                            Text(
+                              creditedHrLabel,
+                              style: TextStyle(
+                                fontSize: 14.sp,
+                                fontWeight: FontWeight.w900,
+                                color: statusColor,
+                              ),
+                            ),
+                            if (attendanceRemark != null)
+                              Text(
+                                attendanceRemark,
+                                style: TextStyle(
+                                  fontSize: 9.sp,
+                                  fontWeight: FontWeight.w600,
+                                  color: Colors.orange.shade700,
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                          ],
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ],
               SizedBox(height: 14.h),
               // Divider before action buttons
               Container(
