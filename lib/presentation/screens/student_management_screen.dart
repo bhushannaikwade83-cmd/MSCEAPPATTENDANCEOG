@@ -56,6 +56,7 @@ class StudentManagementScreen extends StatefulWidget {
 class _StudentManagementScreenState extends State<StudentManagementScreen>
     with TickerProviderStateMixin {
   String? _instituteId;
+  String? _instituteName;
   bool _isLoadingInstitute = true;
 
   // Search with debounce (server-side)
@@ -663,9 +664,23 @@ class _StudentManagementScreenState extends State<StudentManagementScreen>
       final foundInstituteId = row?['institute_id'] as String?;
 
       if (foundInstituteId != null && foundInstituteId.isNotEmpty) {
+        // Fetch institute name
+        String? instituteName;
+        try {
+          final instRow = await appDb
+              .from('institutes')
+              .select('name')
+              .eq('id', foundInstituteId)
+              .maybeSingle();
+          instituteName = instRow?['name'] as String?;
+        } catch (e) {
+          if (kDebugMode) debugPrint('⚠️ Could not fetch institute name: $e');
+        }
+
         if (kDebugMode) {
           debugPrint('✅ User found in institute: $foundInstituteId');
           debugPrint('   📊 Profile institute_id: $foundInstituteId');
+          debugPrint('   📛 Institute name: $instituteName');
 
           // DIAGNOSTIC: Check if students table has entries for this institute
           try {
@@ -681,6 +696,7 @@ class _StudentManagementScreenState extends State<StudentManagementScreen>
         }
         setState(() {
           _instituteId = foundInstituteId;
+          _instituteName = instituteName;
           _isLoadingInstitute = false;
         });
         await _subscribeRealtime();
@@ -1118,32 +1134,9 @@ class _StudentManagementScreenState extends State<StudentManagementScreen>
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     // Welcome message (animated marquee - right to left)
-                    const _ScrollingWelcomeMessage(),
-                    SizedBox(height: 6.h),
-                    // Institute info
-                    Row(
-                      children: [
-                        Text(
-                          '📍 Institute:',
-                          style: TextStyle(
-                            color: Colors.white.withValues(alpha: 0.85),
-                            fontSize: 11.sp,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                        SizedBox(width: 4.w),
-                        Expanded(
-                          child: Text(
-                            _instituteId ?? '—',
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 11.sp,
-                              fontWeight: FontWeight.w700,
-                            ),
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                      ],
+                    _ScrollingWelcomeMessage(
+                      instituteId: _instituteId,
+                      instituteName: _instituteName,
                     ),
                   ],
                 ),
@@ -2739,7 +2732,13 @@ class _StudentManagementScreenState extends State<StudentManagementScreen>
 
 /// 📜 Animated scrolling welcome message (marquee - right to left loop)
 class _ScrollingWelcomeMessage extends StatefulWidget {
-  const _ScrollingWelcomeMessage();
+  final String? instituteId;
+  final String? instituteName;
+
+  const _ScrollingWelcomeMessage({
+    this.instituteId,
+    this.instituteName,
+  });
 
   @override
   State<_ScrollingWelcomeMessage> createState() => _ScrollingWelcomeMessageState();
@@ -2788,7 +2787,10 @@ class _ScrollingWelcomeMessageState extends State<_ScrollingWelcomeMessage>
 
   @override
   Widget build(BuildContext context) {
-    const message = '👋 Welcome Students - Mark your attendance here  •  👋 Welcome Students - Mark your attendance here  •  ';
+    final baseMsg = '👋 Welcome Students - Mark your attendance here';
+    final instId = widget.instituteId ?? '—';
+    final instName = widget.instituteName ?? '—';
+    final message = '$baseMsg  •  Institute Code: $instId  •  Institute: $instName  •  $baseMsg  •  Institute Code: $instId  •  Institute: $instName  •  ';
 
     return SizedBox(
       height: 18.h,
@@ -2800,9 +2802,9 @@ class _ScrollingWelcomeMessageState extends State<_ScrollingWelcomeMessage>
           message,
           style: TextStyle(
             color: Colors.white,
-            fontSize: 13.sp,
-            fontWeight: FontWeight.w700,
-            letterSpacing: 0.3,
+            fontSize: 12.sp,
+            fontWeight: FontWeight.w600,
+            letterSpacing: 0.2,
           ),
           maxLines: 1,
           overflow: TextOverflow.visible,
