@@ -19,6 +19,7 @@ import '../../core/attendance_auto_close_policy.dart';
 import '../../core/theme/app_theme.dart';
 import '../widgets/shimmer_effect.dart';
 import '../widgets/enhanced_animations.dart';
+import '../widgets/empty_state.dart';
 import 'login_screen.dart';
 import 'staff_attendance_portal_screen.dart';
 import 'student_photos_screen.dart';
@@ -111,6 +112,14 @@ class _StudentManagementScreenState extends State<StudentManagementScreen>
 
   late AnimationController _fadeController;
   late Animation<double> _fadeAnimation;
+  AnimationController? _statsAnimController;
+  Animation<double>? _statsScaleAnimation;
+
+  // Photo gallery view toggle (#5)
+  bool _photoGridViewEnabled = false;
+
+  // Error state tracking (#9)
+  String? _errorMessage;
 
   @override
   void initState() {
@@ -120,6 +129,13 @@ class _StudentManagementScreenState extends State<StudentManagementScreen>
     _fadeAnimation =
         CurvedAnimation(parent: _fadeController, curve: Curves.easeOut);
     _fadeController.forward();
+
+    // Stats animation (#7)
+    _statsAnimController =
+        AnimationController(vsync: this, duration: const Duration(milliseconds: 1200));
+    _statsScaleAnimation =
+        CurvedAnimation(parent: _statsAnimController!, curve: Curves.elasticOut);
+    _statsAnimController?.forward();
     _loadInstituteId();
     // ✅ Setup stats auto-refresh (2 sec interval for real-time sync)
     _setupStatsAutoRefresh();
@@ -135,6 +151,7 @@ class _StudentManagementScreenState extends State<StudentManagementScreen>
   @override
   void dispose() {
     _fadeController.dispose();
+    _statsAnimController?.dispose();
     _searchController.removeListener(_onSearchChanged);
     _searchController.dispose();
     _debounce?.cancel();
@@ -1065,15 +1082,37 @@ class _StudentManagementScreenState extends State<StudentManagementScreen>
         backgroundColor: isDark ? const Color(0xFF0F172A) : AppTheme.backgroundGrey,
         floatingActionButton: _instituteId == null
             ? null
-            : FloatingActionButton.extended(
-                onPressed: () => _openAutoFaceScan(),
-                backgroundColor: AppTheme.primaryGreen,
-                icon: const Icon(Icons.face_retouching_natural, color: Colors.white),
-                label: const Text(
-                  'Auto Face Attendance',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w700,
+            : ScaleTransition(
+                scale: Tween<double>(begin: 0.5, end: 1).animate(
+                  CurvedAnimation(parent: _fadeController, curve: Curves.elasticOut),
+                ),
+                child: Container(
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(16.r),
+                    boxShadow: [
+                      BoxShadow(
+                        color: AppTheme.primaryGreen.withOpacity(0.4),
+                        blurRadius: 12,
+                        offset: const Offset(0, 4),
+                      ),
+                    ],
+                  ),
+                  child: FloatingActionButton.extended(
+                    onPressed: () => _openAutoFaceScan(),
+                    backgroundColor: AppTheme.primaryGreen,
+                    elevation: 8,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16.r),
+                    ),
+                    icon: const Icon(Icons.face_retouching_natural, color: Colors.white),
+                    label: const Text(
+                      'Mark Attendance',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w700,
+                        fontSize: 14,
+                      ),
+                    ),
                   ),
                 ),
               ),
@@ -1164,61 +1203,124 @@ class _StudentManagementScreenState extends State<StudentManagementScreen>
           padding: EdgeInsets.fromLTRB(16.w, 12.h, 16.w, 0),
           child: Row(
             children: [
-              // 1️⃣ Absent (Orange)
+              // 1️⃣ Absent (Orange) - Animated
               Expanded(
-                child: GestureDetector(
-                  onTap: () {
-                    setState(() {
-                      _attendanceFilter = _StudentAttendanceFilter.absent;
-                    });
-                  },
-                  child: _bigStatCard(
-                    label: 'Absent',
-                    value: _statsAbsentToday,
-                    icon: Icons.cancel_rounded,
-                    color: AppTheme.accentRed,
-                    isDark: isDark,
-                    isActive: _attendanceFilter == _StudentAttendanceFilter.absent,
-                  ),
-                ),
+                child: _statsAnimController != null
+                    ? ScaleTransition(
+                        scale: Tween<double>(begin: 0.9, end: 1).animate(
+                          CurvedAnimation(parent: _statsAnimController!, curve: Curves.elasticOut),
+                        ),
+                        child: GestureDetector(
+                          onTap: () {
+                            setState(() {
+                              _attendanceFilter = _StudentAttendanceFilter.absent;
+                            });
+                          },
+                          child: _bigStatCard(
+                            label: 'Absent',
+                            value: _statsAbsentToday,
+                            icon: Icons.cancel_rounded,
+                            color: AppTheme.accentRed,
+                            isDark: isDark,
+                            isActive: _attendanceFilter == _StudentAttendanceFilter.absent,
+                          ),
+                        ),
+                      )
+                    : GestureDetector(
+                        onTap: () {
+                          setState(() {
+                            _attendanceFilter = _StudentAttendanceFilter.absent;
+                          });
+                        },
+                        child: _bigStatCard(
+                          label: 'Absent',
+                          value: _statsAbsentToday,
+                          icon: Icons.cancel_rounded,
+                          color: AppTheme.accentRed,
+                          isDark: isDark,
+                          isActive: _attendanceFilter == _StudentAttendanceFilter.absent,
+                        ),
+                      ),
               ),
               SizedBox(width: 10.w),
-              // 2️⃣ Total (White/Neutral)
+              // 2️⃣ Total (White/Neutral) - Animated
               Expanded(
-                child: GestureDetector(
-                  onTap: () {
-                    setState(() {
-                      _attendanceFilter = _StudentAttendanceFilter.all;
-                    });
-                  },
-                  child: _bigStatCard(
-                    label: 'Total',
-                    value: _statsTotal,
-                    icon: Icons.people_alt_rounded,
-                    color: Colors.grey,
-                    isDark: isDark,
-                    isActive: _attendanceFilter == _StudentAttendanceFilter.all,
-                  ),
-                ),
+                child: _statsAnimController != null
+                    ? ScaleTransition(
+                        scale: Tween<double>(begin: 0.9, end: 1).animate(
+                          CurvedAnimation(parent: _statsAnimController!, curve: Curves.elasticOut),
+                        ),
+                        child: GestureDetector(
+                          onTap: () {
+                            setState(() {
+                              _attendanceFilter = _StudentAttendanceFilter.all;
+                            });
+                          },
+                          child: _bigStatCard(
+                            label: 'Total',
+                            value: _statsTotal,
+                            icon: Icons.people_alt_rounded,
+                            color: Colors.grey,
+                            isDark: isDark,
+                            isActive: _attendanceFilter == _StudentAttendanceFilter.all,
+                          ),
+                        ),
+                      )
+                    : GestureDetector(
+                        onTap: () {
+                          setState(() {
+                            _attendanceFilter = _StudentAttendanceFilter.all;
+                          });
+                        },
+                        child: _bigStatCard(
+                          label: 'Total',
+                          value: _statsTotal,
+                          icon: Icons.people_alt_rounded,
+                          color: Colors.grey,
+                          isDark: isDark,
+                          isActive: _attendanceFilter == _StudentAttendanceFilter.all,
+                        ),
+                      ),
               ),
               SizedBox(width: 10.w),
-              // 3️⃣ Present (Green)
+              // 3️⃣ Present (Green) - Animated
               Expanded(
-                child: GestureDetector(
-                  onTap: () {
-                    setState(() {
-                      _attendanceFilter = _StudentAttendanceFilter.present;
-                    });
-                  },
-                  child: _bigStatCard(
-                    label: 'Present',
-                    value: _statsPresentToday,
-                    icon: Icons.check_circle_rounded,
-                    color: AppTheme.primaryGreen,
-                    isDark: isDark,
-                    isActive: _attendanceFilter == _StudentAttendanceFilter.present,
-                  ),
-                ),
+                child: _statsAnimController != null
+                    ? ScaleTransition(
+                        scale: Tween<double>(begin: 0.9, end: 1).animate(
+                          CurvedAnimation(parent: _statsAnimController!, curve: Curves.elasticOut),
+                        ),
+                        child: GestureDetector(
+                          onTap: () {
+                            setState(() {
+                              _attendanceFilter = _StudentAttendanceFilter.present;
+                            });
+                          },
+                          child: _bigStatCard(
+                            label: 'Present',
+                            value: _statsPresentToday,
+                            icon: Icons.check_circle_rounded,
+                            color: AppTheme.primaryGreen,
+                            isDark: isDark,
+                            isActive: _attendanceFilter == _StudentAttendanceFilter.present,
+                          ),
+                        ),
+                      )
+                    : GestureDetector(
+                        onTap: () {
+                          setState(() {
+                            _attendanceFilter = _StudentAttendanceFilter.present;
+                          });
+                        },
+                        child: _bigStatCard(
+                          label: 'Present',
+                          value: _statsPresentToday,
+                          icon: Icons.check_circle_rounded,
+                          color: AppTheme.primaryGreen,
+                          isDark: isDark,
+                          isActive: _attendanceFilter == _StudentAttendanceFilter.present,
+                        ),
+                      ),
               ),
             ],
           ),

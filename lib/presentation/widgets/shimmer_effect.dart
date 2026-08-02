@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:shimmer/shimmer.dart';
+import 'package:flutter_screenutil/flutter_screenutil.dart';
 import '../../core/theme/app_theme.dart';
 
 /// Shimmer Effect Widget for Loading States
-/// Provides a modern, polished loading animation
 class ShimmerEffect extends StatelessWidget {
   final double width;
   final double height;
@@ -25,11 +25,11 @@ class ShimmerEffect extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    
+
     return Shimmer.fromColors(
       baseColor: baseColor ?? (isDark ? Colors.grey.shade800 : Colors.grey.shade300),
       highlightColor: highlightColor ?? (isDark ? Colors.grey.shade700 : Colors.grey.shade100),
-      period: const Duration(milliseconds: 1500),
+      period: const Duration(milliseconds: 1200),
       child: child ??
           Container(
             width: width,
@@ -97,7 +97,7 @@ class ShimmerCard extends StatelessWidget {
   }
 }
 
-/// Shimmer List Item - For loading list placeholders
+/// Shimmer List Item - Student card loading placeholder
 class ShimmerListItem extends StatelessWidget {
   final bool showAvatar;
   final bool showSubtitle;
@@ -110,41 +110,56 @@ class ShimmerListItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return Container(
-      padding: const EdgeInsets.all(16),
-      margin: const EdgeInsets.only(bottom: 12),
+      padding: EdgeInsets.all(12.w),
+      margin: EdgeInsets.only(bottom: 10.h),
       decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
+        color: isDark ? Colors.grey.shade900 : Colors.white,
+        borderRadius: BorderRadius.circular(14.r),
+        border: Border.all(
+          color: isDark ? Colors.white.withOpacity(0.1) : Colors.grey.shade100,
+        ),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withOpacity(0.05),
-            blurRadius: 10,
+            blurRadius: 8,
             offset: const Offset(0, 2),
           ),
         ],
       ),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          if (showAvatar) ...[
-            ShimmerEffect(
-              width: 50,
-              height: 50,
-              borderRadius: BorderRadius.circular(25),
-            ),
-            const SizedBox(width: 16),
-          ],
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                ShimmerEffect(width: double.infinity, height: 16),
-                if (showSubtitle) ...[
-                  const SizedBox(height: 8),
-                  ShimmerEffect(width: 120, height: 14),
-                ],
-              ],
-            ),
+          Row(
+            children: [
+              ShimmerEffect(
+                width: 60.w,
+                height: 60.w,
+                borderRadius: BorderRadius.circular(12.r),
+              ),
+              SizedBox(width: 12.w),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    ShimmerEffect(width: 120.w, height: 14.h),
+                    SizedBox(height: 6.h),
+                    ShimmerEffect(width: 80.w, height: 12.h),
+                  ],
+                ),
+              ),
+              ShimmerEffect(width: 50.w, height: 20.h, borderRadius: BorderRadius.circular(10.r)),
+            ],
+          ),
+          SizedBox(height: 10.h),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              ShimmerEffect(width: 100.w, height: 50.h, borderRadius: BorderRadius.circular(8.r)),
+              ShimmerEffect(width: 100.w, height: 50.h, borderRadius: BorderRadius.circular(8.r)),
+            ],
           ),
         ],
       ),
@@ -180,6 +195,36 @@ class ShimmerGrid extends StatelessWidget {
       itemBuilder: (context, index) {
         return ShimmerCard();
       },
+    );
+  }
+}
+
+/// Shimmer Stat Card - For loading stat placeholders
+class ShimmerStatCard extends StatelessWidget {
+  const ShimmerStatCard({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    return Container(
+      padding: EdgeInsets.all(14.w),
+      decoration: BoxDecoration(
+        color: isDark ? Colors.grey.shade900 : Colors.white,
+        borderRadius: BorderRadius.circular(14.r),
+        border: Border.all(
+          color: isDark ? Colors.white.withOpacity(0.1) : Colors.grey.shade100,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          ShimmerEffect(width: 80.w, height: 12.h),
+          SizedBox(height: 8.h),
+          ShimmerEffect(width: 120.w, height: 20.h),
+        ],
+      ),
     );
   }
 }
