@@ -1159,34 +1159,58 @@ class _StudentManagementScreenState extends State<StudentManagementScreen>
         children: [
           // 1️⃣ Absent (Orange)
           Expanded(
-            child: _bigStatCard(
-              label: 'Absent',
-              value: _statsAbsentToday,
-              icon: Icons.cancel_rounded,
-              color: AppTheme.accentRed,
-              isDark: isDark,
+            child: GestureDetector(
+              onTap: () {
+                setState(() {
+                  _attendanceFilter = _StudentAttendanceFilter.absent;
+                });
+              },
+              child: _bigStatCard(
+                label: 'Absent',
+                value: _statsAbsentToday,
+                icon: Icons.cancel_rounded,
+                color: AppTheme.accentRed,
+                isDark: isDark,
+                isActive: _attendanceFilter == _StudentAttendanceFilter.absent,
+              ),
             ),
           ),
           SizedBox(width: 10.w),
           // 2️⃣ Total (White/Neutral)
           Expanded(
-            child: _bigStatCard(
-              label: 'Total',
-              value: _statsTotal,
-              icon: Icons.people_alt_rounded,
-              color: Colors.grey,
-              isDark: isDark,
+            child: GestureDetector(
+              onTap: () {
+                setState(() {
+                  _attendanceFilter = _StudentAttendanceFilter.all;
+                });
+              },
+              child: _bigStatCard(
+                label: 'Total',
+                value: _statsTotal,
+                icon: Icons.people_alt_rounded,
+                color: Colors.grey,
+                isDark: isDark,
+                isActive: _attendanceFilter == _StudentAttendanceFilter.all,
+              ),
             ),
           ),
           SizedBox(width: 10.w),
           // 3️⃣ Present (Green)
           Expanded(
-            child: _bigStatCard(
-              label: 'Present',
-              value: _statsPresentToday,
-              icon: Icons.check_circle_rounded,
-              color: AppTheme.primaryGreen,
-              isDark: isDark,
+            child: GestureDetector(
+              onTap: () {
+                setState(() {
+                  _attendanceFilter = _StudentAttendanceFilter.present;
+                });
+              },
+              child: _bigStatCard(
+                label: 'Present',
+                value: _statsPresentToday,
+                icon: Icons.check_circle_rounded,
+                color: AppTheme.primaryGreen,
+                isDark: isDark,
+                isActive: _attendanceFilter == _StudentAttendanceFilter.present,
+              ),
             ),
           ),
         ],
@@ -1200,6 +1224,7 @@ class _StudentManagementScreenState extends State<StudentManagementScreen>
     required IconData icon,
     required Color color,
     required bool isDark,
+    bool isActive = false,
   }) {
     // Modern gradient based on color
     final gradientColors = _getGradientForColor(color);
@@ -1225,11 +1250,18 @@ class _StudentManagementScreenState extends State<StudentManagementScreen>
           colors: gradientColors,
         ),
         borderRadius: BorderRadius.circular(18.r),
+        // ✨ Highlight active filter with bright border
+        border: isActive
+            ? Border.all(
+                color: Colors.white,
+                width: 3.w,
+              )
+            : null,
         boxShadow: [
           // Modern depth shadow
           BoxShadow(
-            color: color.withValues(alpha: 0.3),
-            blurRadius: 16,
+            color: isActive ? color.withValues(alpha: 0.6) : color.withValues(alpha: 0.3),
+            blurRadius: isActive ? 20 : 16,
             offset: const Offset(0, 8),
           ),
           BoxShadow(
