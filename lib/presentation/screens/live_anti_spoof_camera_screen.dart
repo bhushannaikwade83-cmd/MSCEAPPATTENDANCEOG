@@ -45,6 +45,8 @@ class _LiveAntiSpoofCameraScreenState extends State<LiveAntiSpoofCameraScreen> {
   // Face detection + eye tracking
   int? _lastEyeOpenCount;
   int _frameCounter = 0;
+  int _framesSkipped = 0;
+  int _framesProcessed = 0;
   static const int _frameSkip = 5; // Process every 5th frame
 
   // Recognition
@@ -179,10 +181,15 @@ class _LiveAntiSpoofCameraScreenState extends State<LiveAntiSpoofCameraScreen> {
 
       _frameCounter++;
       if (_frameCounter % _frameSkip != 0) {
+        _framesSkipped++;
+        if (_framesSkipped % 50 == 0) {
+          print('📹 [FRAME] Frames received: $_frameCounter | Skipped: $_framesSkipped | Processed: $_framesProcessed');
+        }
         return; // Skip frames (every 5th frame)
       }
 
-      print('📹 [FRAME] Processing frame #${_frameCounter}...');
+      _framesProcessed++;
+      print('📹 [FRAME] Processing frame #$_framesProcessed (total: $_frameCounter)...');
 
       try {
         // Combine all planes for proper YUV420 processing
@@ -263,11 +270,14 @@ class _LiveAntiSpoofCameraScreenState extends State<LiveAntiSpoofCameraScreen> {
         _lastEyeOpenCount = eyesOpenStatus;
       } catch (e) {
         print('❌ [STREAM] Frame processing error: $e');
+        print('📍 [STREAM] Stack: ${StackTrace.current}');
       }
     }).then((_) {
-      print('🎬 [STREAM] Frame stream started');
+      print('✅ [STREAM] Frame stream started successfully!');
+      print('   Will process every ${_frameSkip}th frame');
     }).catchError((e) {
       print('❌ [STREAM] Failed to start stream: $e');
+      print('📍 [STREAM] Stack: ${StackTrace.current}');
     });
   }
 
