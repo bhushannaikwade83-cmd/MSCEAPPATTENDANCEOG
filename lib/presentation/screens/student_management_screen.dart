@@ -2756,27 +2756,31 @@ class _ScrollingWelcomeMessageState extends State<_ScrollingWelcomeMessage>
     _animationController = AnimationController(
       duration: const Duration(seconds: 10),
       vsync: this,
-    )..repeat(); // Loop continuously
+    );
 
+    // Add listener for continuous animation
+    _animationController.addListener(_updateScroll);
+
+    // Start animation loop
+    _animationController.repeat();
+
+    // Wait for first frame to calculate max scroll
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      _animateScroll();
+      _updateScroll();
     });
   }
 
-  void _animateScroll() {
+  void _updateScroll() {
     if (!_scrollController.hasClients) return;
     final maxScroll = _scrollController.position.maxScrollExtent;
-    _scrollController.jumpTo(0);
-
-    _animationController.addListener(() {
-      if (_scrollController.hasClients) {
-        _scrollController.jumpTo(_animationController.value * maxScroll);
-      }
-    });
+    if (maxScroll > 0) {
+      _scrollController.jumpTo(_animationController.value * maxScroll);
+    }
   }
 
   @override
   void dispose() {
+    _animationController.removeListener(_updateScroll);
     _animationController.dispose();
     _scrollController.dispose();
     super.dispose();
