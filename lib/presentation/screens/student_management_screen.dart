@@ -1120,73 +1120,7 @@ class _StudentManagementScreenState extends State<StudentManagementScreen>
               overflow: TextOverflow.ellipsis,
             ),
           ),
-          Flexible(
-            child: SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  _headerStatChip('Total', _statsTotal),
-                  SizedBox(width: 6.w),
-                  _headerStatChip('Present', _statsPresentToday),
-                  SizedBox(width: 6.w),
-                  _headerStatChip('Absent', _statsAbsentToday),
-                  SizedBox(width: 8.w),
-                  Material(
-                    color: Colors.white.withValues(alpha: 0.18),
-                    borderRadius: BorderRadius.circular(20),
-                    child: InkWell(
-                      borderRadius: BorderRadius.circular(20),
-                      onTap: _instituteId == null
-                          ? null
-                          : () => _openAutoFaceScan(),
-                      child: Padding(
-                        padding: EdgeInsets.symmetric(horizontal: 10.w, vertical: 6.h),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(
-                              Icons.face_retouching_natural,
-                              color: Colors.white,
-                              size: 18.sp,
-                            ),
-                            SizedBox(width: 4.w),
-                            Text(
-                              'Auto scan',
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontSize: 11.sp,
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
         ],
-      ),
-    );
-  }
-
-  Widget _headerStatChip(String label, int value) {
-    return Container(
-      padding: EdgeInsets.symmetric(horizontal: 8.w, vertical: 4.h),
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.2),
-        borderRadius: BorderRadius.circular(14.r),
-      ),
-      child: Text(
-        '$label $value',
-        style: TextStyle(
-          color: Colors.white,
-          fontSize: 10.sp,
-          fontWeight: FontWeight.w700,
-        ),
       ),
     );
   }
