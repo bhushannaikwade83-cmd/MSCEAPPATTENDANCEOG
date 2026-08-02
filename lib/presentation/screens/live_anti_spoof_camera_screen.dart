@@ -155,7 +155,17 @@ class _LiveAntiSpoofCameraScreenState extends State<LiveAntiSpoofCameraScreen> {
 
   /// Start streaming camera frames for face detection + blink detection
   void _startCameraFrameStream() {
-    if (!_cameraInitialized || _cameraController.value.isStreamingImages) {
+    print('🎬 [STREAM] Checking stream conditions...');
+    print('   Camera initialized: $_cameraInitialized');
+    print('   Already streaming: ${_cameraController.value.isStreamingImages}');
+
+    if (!_cameraInitialized) {
+      print('❌ [STREAM] Camera not initialized yet!');
+      return;
+    }
+
+    if (_cameraController.value.isStreamingImages) {
+      print('⚠️ [STREAM] Already streaming!');
       return;
     }
 
@@ -168,8 +178,10 @@ class _LiveAntiSpoofCameraScreenState extends State<LiveAntiSpoofCameraScreen> {
 
       _frameCounter++;
       if (_frameCounter % _frameSkip != 0) {
-        return; // Skip frames
+        return; // Skip frames (every 5th frame)
       }
+
+      print('📹 [FRAME] Processing frame #${_frameCounter}...');
 
       try {
         final inputImage = InputImage.fromBytes(
@@ -182,11 +194,14 @@ class _LiveAntiSpoofCameraScreenState extends State<LiveAntiSpoofCameraScreen> {
           ),
         );
 
+        print('🔍 [DETECT] Running face detection...');
         final faces = await _faceDetector.processImage(inputImage);
+        print('✅ [DETECT] Detection complete: ${faces.length} faces found');
 
         if (!mounted) return;
 
         if (faces.isEmpty) {
+          print('❌ [DETECT] No faces in this frame');
           if (_faceDetected) {
             print('👤 [DETECT] Face lost');
             setState(() {
@@ -210,12 +225,19 @@ class _LiveAntiSpoofCameraScreenState extends State<LiveAntiSpoofCameraScreen> {
         final leftEye = face.landmarks[FaceLandmarkType.leftEye];
         final rightEye = face.landmarks[FaceLandmarkType.rightEye];
 
+        print('👁️ [EYES] Left eye: $leftEye | Right eye: $rightEye');
+
         // Simple blink detection: if both eyes are visible but tracking suggests closed
         int eyesOpenStatus = 0;
         if (leftEye != null && rightEye != null) {
           // If face is still tracked but eyes appear different, assume blink
           eyesOpenStatus = 1;
+          print('   Eyes open status: OPEN (1)');
+        } else {
+          print('   Eyes open status: CLOSED (0)');
         }
+
+        print('   Last eye status: $_lastEyeOpenCount | Current: $eyesOpenStatus');
 
         // Detect blink transition (open → closed → open)
         if (_lastEyeOpenCount != null && _lastEyeOpenCount == 1 && eyesOpenStatus == 0) {
