@@ -2331,11 +2331,31 @@ class _StudentManagementScreenState extends State<StudentManagementScreen>
                             ),
                           ),
                           SizedBox(height: 6.h),
-                          ClipRRect(
-                            borderRadius: BorderRadius.circular(10.r),
-                            child: SizedBox(
-                              height: 100.h,
-                              child: SecureNetworkImage(
+                          GestureDetector(
+                            onTap: hasEntryPhoto
+                                ? () {
+                                    showDialog(
+                                      context: context,
+                                      builder: (_) => Dialog(
+                                        backgroundColor: Colors.transparent,
+                                        child: GestureDetector(
+                                          onTap: () => Navigator.pop(context),
+                                          child: InteractiveViewer(
+                                            child: SecureNetworkImage(
+                                              imageUrl: entryPhotoUrl,
+                                              fit: BoxFit.contain,
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                    );
+                                  }
+                                : null,
+                            child: ClipRRect(
+                              borderRadius: BorderRadius.circular(10.r),
+                              child: SizedBox(
+                                height: 100.h,
+                                child: SecureNetworkImage(
                                 key: ValueKey('entry_$studentId'),
                                 cacheKey: 'entry_$studentId',
                                 imageUrl: entryPhotoUrl,
@@ -2345,6 +2365,7 @@ class _StudentManagementScreenState extends State<StudentManagementScreen>
                                   child: Icon(Icons.image_not_supported, color: statusColor, size: 24.sp),
                                 ),
                               ),
+                            ),
                             ),
                           ),
                           SizedBox(height: 6.h),
@@ -2379,11 +2400,31 @@ class _StudentManagementScreenState extends State<StudentManagementScreen>
                             ),
                           ),
                           SizedBox(height: 6.h),
-                          ClipRRect(
-                            borderRadius: BorderRadius.circular(10.r),
-                            child: SizedBox(
-                              height: 100.h,
-                              child: SecureNetworkImage(
+                          GestureDetector(
+                            onTap: hasExitPhoto
+                                ? () {
+                                    showDialog(
+                                      context: context,
+                                      builder: (_) => Dialog(
+                                        backgroundColor: Colors.transparent,
+                                        child: GestureDetector(
+                                          onTap: () => Navigator.pop(context),
+                                          child: InteractiveViewer(
+                                            child: SecureNetworkImage(
+                                              imageUrl: exitPhotoUrl,
+                                              fit: BoxFit.contain,
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                    );
+                                  }
+                                : null,
+                            child: ClipRRect(
+                              borderRadius: BorderRadius.circular(10.r),
+                              child: SizedBox(
+                                height: 100.h,
+                                child: SecureNetworkImage(
                                 key: ValueKey('exit_$studentId'),
                                 cacheKey: 'exit_$studentId',
                                 imageUrl: exitPhotoUrl,
@@ -2393,6 +2434,7 @@ class _StudentManagementScreenState extends State<StudentManagementScreen>
                                   child: Icon(Icons.image_not_supported, color: statusColor, size: 24.sp),
                                 ),
                               ),
+                            ),
                             ),
                           ),
                           SizedBox(height: 6.h),
