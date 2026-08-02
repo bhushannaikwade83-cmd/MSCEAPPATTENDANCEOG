@@ -1244,14 +1244,28 @@ class _StudentManagementScreenState extends State<StudentManagementScreen>
     required Color color,
     required bool isDark,
   }) {
+    // Modern gradient based on color
+    final gradientColors = _getGradientForColor(color);
+
     return Container(
-      padding: EdgeInsets.symmetric(vertical: 14.h, horizontal: 8.w),
+      padding: EdgeInsets.symmetric(vertical: 18.h, horizontal: 12.w),
       decoration: BoxDecoration(
-        color: isDark ? Colors.white.withValues(alpha: 0.06) : Colors.white,
-        borderRadius: BorderRadius.circular(14.r),
+        // 🎨 Modern gradient background
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: gradientColors,
+        ),
+        borderRadius: BorderRadius.circular(18.r),
         boxShadow: [
+          // Modern depth shadow
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.06),
+            color: color.withValues(alpha: 0.3),
+            blurRadius: 16,
+            offset: const Offset(0, 8),
+          ),
+          BoxShadow(
+            color: color.withValues(alpha: 0.1),
             blurRadius: 8,
             offset: const Offset(0, 2),
           ),
@@ -1260,27 +1274,64 @@ class _StudentManagementScreenState extends State<StudentManagementScreen>
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, color: color, size: 26.sp),
-          SizedBox(height: 6.h),
+          // ✨ Icon with background circle
+          Container(
+            width: 50.r,
+            height: 50.r,
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.25),
+              borderRadius: BorderRadius.circular(12.r),
+            ),
+            child: Icon(icon, color: Colors.white, size: 28.sp),
+          ),
+          SizedBox(height: 12.h),
+          // 📊 Big number
           Text(
             '$value',
             style: TextStyle(
-              fontSize: 20.sp,
-              fontWeight: FontWeight.w800,
-              color: isDark ? Colors.white : AppTheme.textDark,
+              fontSize: 28.sp,
+              fontWeight: FontWeight.w900,
+              color: Colors.white,
+              letterSpacing: -0.5,
             ),
           ),
+          SizedBox(height: 4.h),
+          // 📝 Label
           Text(
             label,
             style: TextStyle(
-              fontSize: 11.sp,
-              color: isDark ? Colors.white70 : AppTheme.textGray,
+              fontSize: 12.sp,
+              color: Colors.white.withValues(alpha: 0.85),
               fontWeight: FontWeight.w600,
+              letterSpacing: 0.3,
             ),
           ),
         ],
       ),
     );
+  }
+
+  /// Get gradient colors based on stat type
+  List<Color> _getGradientForColor(Color baseColor) {
+    if (baseColor == AppTheme.primaryGreen) {
+      // Present: Green gradient
+      return [
+        const Color(0xFF10B981),
+        const Color(0xFF059669),
+      ];
+    } else if (baseColor == AppTheme.accentRed) {
+      // Absent: Red gradient
+      return [
+        const Color(0xFFEF4444),
+        const Color(0xFFDC2626),
+      ];
+    } else {
+      // Total: Blue gradient
+      return [
+        const Color(0xFF3B82F6),
+        const Color(0xFF1D4ED8),
+      ];
+    }
   }
 
   String? _entryPhotoUrl(Map<String, dynamic> p) =>
