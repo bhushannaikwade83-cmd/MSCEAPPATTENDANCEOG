@@ -2230,7 +2230,7 @@ class _StudentManagementScreenState extends State<StudentManagementScreen>
                                   fontSize: 16.sp,
                                   letterSpacing: -0.3,
                                 ),
-                                maxLines: 2,
+                                maxLines: 3,
                                 overflow: TextOverflow.ellipsis,
                               ),
                             ),
