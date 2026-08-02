@@ -40,7 +40,7 @@ class _QuickStatsWidgetState extends State<QuickStatsWidget>
       duration: const Duration(milliseconds: 1500),
     );
     _statsScale = CurvedAnimation(
-      parent: _statsAnimController,
+      parent: _statsAnimController!,
       curve: Curves.elasticOut,
     );
     _load();
