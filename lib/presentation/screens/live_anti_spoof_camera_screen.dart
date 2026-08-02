@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:typed_data';
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 import 'package:google_mlkit_face_detection/google_mlkit_face_detection.dart';
@@ -185,10 +186,11 @@ class _LiveAntiSpoofCameraScreenState extends State<LiveAntiSpoofCameraScreen> {
 
       try {
         // Combine all planes for proper YUV420 processing
-        final allBytes = <int>[];
+        final allBytesList = <int>[];
         for (int i = 0; i < image.planes.length; i++) {
-          allBytes.addAll(image.planes[i].bytes);
+          allBytesList.addAll(image.planes[i].bytes);
         }
+        final allBytes = Uint8List.fromList(allBytesList);
 
         final inputImage = InputImage.fromBytes(
           bytes: allBytes,
