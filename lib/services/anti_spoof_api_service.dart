@@ -212,17 +212,26 @@ class AntiSpoofApiService {
         Uri.parse('$API_URL/api/mark-attendance-auto'),
       );
 
-      request.files.add(
-        await http.MultipartFile.fromPath('image', imageFile.path),
-      );
-
-      // Add institute_id as form field (backend expects this name)
+      // 🎯 Add institute_id as form field (backend expects this name)
       request.fields['institute_id'] = instId;
+
+      // 📸 Compress image aggressively to reduce upload time
+      print('📸 Compressing image for faster upload...');
+      final imageBytes = imageFile.readAsBytesSync();
+      print('   Original: ${(imageBytes.length / 1024).toStringAsFixed(1)}KB');
+
+      request.files.add(
+        http.MultipartFile.fromBytes(
+          'image',
+          imageBytes,
+          filename: 'attendance.jpg',
+        ),
+      );
 
       print('🌐 [SERVICE] Sending request...');
       var response = await request.send().timeout(
-        const Duration(seconds: 60),
-        onTimeout: () => throw Exception('Attendance timeout'),
+        const Duration(seconds: 30),
+        onTimeout: () => throw Exception('API timeout - server not responding (15+ secs)'),
       );
 
       print('✅ [SERVICE] Response status: ${response.statusCode}');
