@@ -2748,72 +2748,60 @@ class _ScrollingWelcomeMessage extends StatefulWidget {
 class _ScrollingWelcomeMessageState extends State<_ScrollingWelcomeMessage>
     with SingleTickerProviderStateMixin {
   late AnimationController _animationController;
+  final ScrollController _scrollController = ScrollController();
 
   @override
   void initState() {
     super.initState();
     _animationController = AnimationController(
-      duration: const Duration(seconds: 8),
+      duration: const Duration(seconds: 10),
       vsync: this,
     )..repeat(); // Loop continuously
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _animateScroll();
+    });
+  }
+
+  void _animateScroll() {
+    if (!_scrollController.hasClients) return;
+    final maxScroll = _scrollController.position.maxScrollExtent;
+    _scrollController.jumpTo(0);
+
+    _animationController.addListener(() {
+      if (_scrollController.hasClients) {
+        _scrollController.jumpTo(_animationController.value * maxScroll);
+      }
+    });
   }
 
   @override
   void dispose() {
     _animationController.dispose();
+    _scrollController.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    const message = '👋 Welcome Students - Mark your attendance here  •  ';
+    const message = '👋 Welcome Students - Mark your attendance here  •  👋 Welcome Students - Mark your attendance here  •  ';
 
     return SizedBox(
       height: 18.h,
-      child: ClipRect(
-        child: Stack(
-          children: [
-            // Animated text sliding from right to left
-            AnimatedBuilder(
-              animation: _animationController,
-              builder: (context, child) {
-                // Position: starts at right edge (1.0), ends at left edge (-0.5)
-                final offset = (1.0 - _animationController.value) * 2.0 - 1.0;
-
-                return Transform.translate(
-                  offset: Offset(offset * 200.w, 0),
-                  child: child,
-                );
-              },
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    message,
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 13.sp,
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: 0.3,
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.clip,
-                  ),
-                  Text(
-                    message,
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 13.sp,
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: 0.3,
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.clip,
-                  ),
-                ],
-              ),
-            ),
-          ],
+      child: SingleChildScrollView(
+        controller: _scrollController,
+        scrollDirection: Axis.horizontal,
+        physics: const NeverScrollableScrollPhysics(),
+        child: Text(
+          message,
+          style: TextStyle(
+            color: Colors.white,
+            fontSize: 13.sp,
+            fontWeight: FontWeight.w700,
+            letterSpacing: 0.3,
+          ),
+          maxLines: 1,
+          overflow: TextOverflow.visible,
         ),
       ),
     );
