@@ -2036,6 +2036,455 @@ class _StudentManagementScreenState extends State<StudentManagementScreen>
     final hasEntryPhoto = entryPhotoUrl != null && entryPhotoUrl.isNotEmpty;
     final hasExitPhoto = exitPhotoUrl != null && exitPhotoUrl.isNotEmpty;
 
+    // Determine attendance status
+    final isPresent = slice != null && slice.containsKey('record_type') && slice['record_type'] == 'entry';
+    final statusColor = isPresent ? const Color(0xFF138808) : const Color(0xFFFF9933);
+    final statusIcon = isPresent ? Icons.check_circle : Icons.cancel;
+    final statusLabel = isPresent ? 'PRESENT' : 'ABSENT';
+
+    return Padding(
+      padding: EdgeInsets.only(bottom: 14.h, left: 16.w, right: 16.w),
+      child: Container(
+        decoration: BoxDecoration(
+          // ✨ Modern gradient background
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              isDark ? const Color(0xFF1F2937) : Colors.white,
+              isDark ? const Color(0xFF111827) : const Color(0xFFFAFAFA),
+            ],
+          ),
+          borderRadius: BorderRadius.circular(20.r),
+          // 🎯 Beautiful shadow with depth
+          boxShadow: [
+            BoxShadow(
+              color: statusColor.withValues(alpha: 0.15),
+              blurRadius: 20,
+              offset: const Offset(0, 8),
+              spreadRadius: 0,
+            ),
+            BoxShadow(
+              color: Colors.black.withValues(alpha: isDark ? 0.3 : 0.05),
+              blurRadius: 8,
+              offset: const Offset(0, 2),
+            ),
+          ],
+          // Border with status color accent
+          border: Border(
+            left: BorderSide(
+              color: statusColor,
+              width: 5.w,
+            ),
+          ),
+        ),
+        child: Padding(
+          padding: EdgeInsets.fromLTRB(16.w, 14.h, 14.w, 14.h),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Top row: Photo + Name + Status Badge
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // 📸 Modern profile photo with badge
+                  Stack(
+                    children: [
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(16.r),
+                        child: SizedBox(
+                          width: 80.w,
+                          height: 80.h,
+                          child: hasPhoto
+                              ? SecureNetworkImage(
+                                  key: ValueKey('student_face_$studentId'),
+                                  cacheKey: 'student_face_$studentId',
+                                  imageUrl: profileUrl.isNotEmpty ? profileUrl : null,
+                                  width: 80.w,
+                                  height: 80.h,
+                                  version: photoVersion ?? '0',
+                                  fit: BoxFit.cover,
+                                  placeholder: photoThumbnail != null && photoThumbnail.isNotEmpty
+                                      ? Image.memory(
+                                          base64Decode(photoThumbnail),
+                                          width: 80.w,
+                                          height: 80.h,
+                                          fit: BoxFit.cover,
+                                          cacheWidth: 80,
+                                          cacheHeight: 80,
+                                          errorBuilder: (context, error, stackTrace) {
+                                            return Container(
+                                              decoration: BoxDecoration(
+                                                gradient: LinearGradient(
+                                                  colors: [
+                                                    statusColor.withValues(alpha: 0.2),
+                                                    statusColor.withValues(alpha: 0.05),
+                                                  ],
+                                                ),
+                                              ),
+                                              child: Icon(Icons.person, color: statusColor, size: 40.sp),
+                                            );
+                                          },
+                                        )
+                                      : Container(
+                                          decoration: BoxDecoration(
+                                            gradient: LinearGradient(
+                                              colors: [
+                                                statusColor.withValues(alpha: 0.2),
+                                                statusColor.withValues(alpha: 0.05),
+                                              ],
+                                            ),
+                                          ),
+                                          child: Center(
+                                            child: SizedBox(
+                                              width: 24.w,
+                                              height: 24.h,
+                                              child: CircularProgressIndicator(
+                                                strokeWidth: 2,
+                                                valueColor: AlwaysStoppedAnimation(statusColor),
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                  errorWidget: Container(
+                                    decoration: BoxDecoration(
+                                      gradient: LinearGradient(
+                                        colors: [
+                                          statusColor.withValues(alpha: 0.2),
+                                          statusColor.withValues(alpha: 0.05),
+                                        ],
+                                      ),
+                                    ),
+                                    child: Icon(Icons.person, color: statusColor, size: 40.sp),
+                                  ),
+                                )
+                              : Container(
+                                  decoration: BoxDecoration(
+                                    gradient: LinearGradient(
+                                      colors: [
+                                        statusColor.withValues(alpha: 0.2),
+                                        statusColor.withValues(alpha: 0.05),
+                                      ],
+                                    ),
+                                  ),
+                                  child: Icon(Icons.person, color: statusColor, size: 40.sp),
+                                ),
+                        ),
+                      ),
+                      // Status badge on photo corner
+                      Positioned(
+                        bottom: 0,
+                        right: 0,
+                        child: Container(
+                          padding: EdgeInsets.all(6.w),
+                          decoration: BoxDecoration(
+                            color: statusColor,
+                            shape: BoxShape.circle,
+                            boxShadow: [
+                              BoxShadow(
+                                color: statusColor.withValues(alpha: 0.4),
+                                blurRadius: 8,
+                                offset: const Offset(0, 2),
+                              ),
+                            ],
+                          ),
+                          child: Icon(
+                            statusIcon,
+                            color: Colors.white,
+                            size: 20.sp,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  SizedBox(width: 14.w),
+                  // Name, SR NO, and Status
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // Name with status badge
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                name,
+                                style: TextStyle(
+                                  color: isDark ? Colors.white : AppTheme.textDark,
+                                  fontWeight: FontWeight.w800,
+                                  fontSize: 16.sp,
+                                  letterSpacing: -0.3,
+                                ),
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                            SizedBox(width: 8.w),
+                            Container(
+                              padding: EdgeInsets.symmetric(horizontal: 10.w, vertical: 5.h),
+                              decoration: BoxDecoration(
+                                color: statusColor.withValues(alpha: 0.15),
+                                borderRadius: BorderRadius.circular(20.r),
+                                border: Border.all(
+                                  color: statusColor.withValues(alpha: 0.4),
+                                  width: 1,
+                                ),
+                              ),
+                              child: Text(
+                                statusLabel,
+                                style: TextStyle(
+                                  color: statusColor,
+                                  fontWeight: FontWeight.w900,
+                                  fontSize: 10.sp,
+                                  letterSpacing: 0.5,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        SizedBox(height: 8.h),
+                        // SR NO
+                        Row(
+                          children: [
+                            Icon(Icons.tag, size: 14.sp, color: statusColor.withValues(alpha: 0.6)),
+                            SizedBox(width: 4.w),
+                            Text(
+                              'SR NO: ${_formatSrDisplay(srNo)}',
+                              style: TextStyle(
+                                color: isDark ? Colors.white70 : AppTheme.textGray,
+                                fontSize: 13.sp,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ],
+                        ),
+                        if (formSerialNo.isNotEmpty) ...[
+                          SizedBox(height: 6.h),
+                          Row(
+                            children: [
+                              Icon(Icons.document_scanner, size: 13.sp, color: statusColor.withValues(alpha: 0.5)),
+                              SizedBox(width: 4.w),
+                              Text(
+                                'Form: $formSerialNo',
+                                style: TextStyle(
+                                  color: isDark ? Colors.white60 : AppTheme.textGray,
+                                  fontSize: 12.sp,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              SizedBox(height: 12.h),
+              // Divider
+              Container(
+                height: 1,
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [
+                      Colors.transparent,
+                      statusColor.withValues(alpha: 0.1),
+                      statusColor.withValues(alpha: 0.1),
+                      Colors.transparent,
+                    ],
+                  ),
+                ),
+              ),
+              SizedBox(height: 12.h),
+              // Bottom row: Entry/Exit photos + Timer + Face status
+              Row(
+                children: [
+                  // Entry photo
+                  if (hasEntryPhoto)
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            '📸 Entry',
+                            style: TextStyle(
+                              fontSize: 11.sp,
+                              fontWeight: FontWeight.w700,
+                              color: statusColor,
+                              letterSpacing: 0.3,
+                            ),
+                          ),
+                          SizedBox(height: 6.h),
+                          ClipRRect(
+                            borderRadius: BorderRadius.circular(10.r),
+                            child: SizedBox(
+                              height: 60.h,
+                              child: SecureNetworkImage(
+                                key: ValueKey('entry_$studentId'),
+                                cacheKey: 'entry_$studentId',
+                                imageUrl: entryPhotoUrl,
+                                fit: BoxFit.cover,
+                                errorWidget: Container(
+                                  color: statusColor.withValues(alpha: 0.1),
+                                  child: Icon(Icons.image_not_supported, color: statusColor, size: 24.sp),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  if (hasEntryPhoto && hasExitPhoto) SizedBox(width: 10.w),
+                  // Exit photo
+                  if (hasExitPhoto)
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            '🚪 Exit',
+                            style: TextStyle(
+                              fontSize: 11.sp,
+                              fontWeight: FontWeight.w700,
+                              color: statusColor,
+                              letterSpacing: 0.3,
+                            ),
+                          ),
+                          SizedBox(height: 6.h),
+                          ClipRRect(
+                            borderRadius: BorderRadius.circular(10.r),
+                            child: SizedBox(
+                              height: 60.h,
+                              child: SecureNetworkImage(
+                                key: ValueKey('exit_$studentId'),
+                                cacheKey: 'exit_$studentId',
+                                imageUrl: exitPhotoUrl,
+                                fit: BoxFit.cover,
+                                errorWidget: Container(
+                                  color: statusColor.withValues(alpha: 0.1),
+                                  child: Icon(Icons.image_not_supported, color: statusColor, size: 24.sp),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  // Timer or Credits
+                  if (newAttendanceCountdown != null || creditedHrLabel != null)
+                    Expanded(
+                      child: Container(
+                        padding: EdgeInsets.all(10.w),
+                        decoration: BoxDecoration(
+                          color: statusColor.withValues(alpha: 0.08),
+                          borderRadius: BorderRadius.circular(12.r),
+                          border: Border.all(
+                            color: statusColor.withValues(alpha: 0.2),
+                          ),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.center,
+                          children: [
+                            if (newAttendanceCountdown != null) ...[
+                              Text(
+                                '⏱️',
+                                style: TextStyle(fontSize: 24.sp),
+                              ),
+                              SizedBox(height: 6.h),
+                              Text(
+                                'Countdown',
+                                style: TextStyle(
+                                  fontSize: 10.sp,
+                                  fontWeight: FontWeight.w600,
+                                  color: statusColor,
+                                ),
+                              ),
+                              Text(
+                                newAttendanceCountdown.label,
+                                style: TextStyle(
+                                  fontSize: 13.sp,
+                                  fontWeight: FontWeight.w900,
+                                  color: newAttendanceCountdown.overdue ? Colors.red : statusColor,
+                                ),
+                              ),
+                            ] else if (creditedHrLabel != null) ...[
+                              Text(
+                                '✅',
+                                style: TextStyle(fontSize: 24.sp),
+                              ),
+                              SizedBox(height: 6.h),
+                              Text(
+                                'Credited',
+                                style: TextStyle(
+                                  fontSize: 10.sp,
+                                  fontWeight: FontWeight.w600,
+                                  color: statusColor,
+                                ),
+                              ),
+                              Text(
+                                creditedHrLabel,
+                                style: TextStyle(
+                                  fontSize: 13.sp,
+                                  fontWeight: FontWeight.w900,
+                                  color: statusColor,
+                                ),
+                              ),
+                              if (attendanceRemark != null)
+                                Text(
+                                  attendanceRemark,
+                                  style: TextStyle(
+                                    fontSize: 9.sp,
+                                    fontWeight: FontWeight.w600,
+                                    color: Colors.orange.shade700,
+                                  ),
+                                  textAlign: TextAlign.center,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                            ],
+                          ],
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// OLD CODE BELOW (kept for reference, to be removed)
+  Widget _buildModernCardOld(
+    BuildContext context,
+    Map<String, dynamic> data,
+    bool isDark,
+  ) {
+    final name = data['name'] ?? 'Unknown';
+    final srNo = data['srNo']?.toString() ?? data['sr_no']?.toString() ?? '';
+    final rollNumber = srNo.isNotEmpty ? srNo : (data['userId'] ?? '');
+    final subject = data['subject'] ?? '';
+    final profileUrl = (data['photoUrl'] as String?) ?? (data['face_photo_url'] as String?) ?? '';
+    final hasPhoto = profileUrl.isNotEmpty;
+    final studentId = data['id']?.toString() ?? '';
+    final markRollKey = _canonicalAttendanceRollKey(data);
+    final rollKey = markRollKey.isNotEmpty ? markRollKey : rollNumber.toString().trim();
+    final payload = studentId.isNotEmpty ? _todayPayloadByStudentId[studentId] : null;
+    final hasFaceEmbedding = data['hasFaceEmbedding'] == true;
+    final facePhotoChangedOnce = data['facePhotoChangedOnce'] == true;
+    final canChangePhotoOnce = hasFaceEmbedding && !facePhotoChangedOnce;
+    final rawSubs = data['subjectsList'];
+    final photoThumbnail = data['photoThumbnail'] as String?;
+    final photoVersion = data['photoVersion'] as String? ?? (data['photo_version'] as String?);
+    final subjectsList = rawSubs is List
+        ? rawSubs.map((e) => e.toString().trim()).where((s) => s.isNotEmpty).toList()
+        : <String>[];
+    final faceRegistrationStatus = data['face_registration_status'] ?? 'pending';
+    final isFaceReal = data['is_face_real'] ?? false;
+    final averageFaceQuality = 0.0;
+    final formSerialNo = data['form_serial_no'] ?? '';
+
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: _buildModernCard(
