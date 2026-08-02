@@ -518,6 +518,11 @@ class _StudentManagementScreenState extends State<StudentManagementScreen>
         final creditedHr = row['attendance_alloted_hr'];
         final remark = row['remark'];
 
+        // Store record_type in payload for status determination
+        if (type == 'entry' && payload['record_type'] == null) {
+          payload['record_type'] = 'entry';
+        }
+
         if (type == 'exit') {
           if (payload['exitPhoto'] == null && photoUrl.isNotEmpty) {
             payload['exitPhoto'] = photoUrl;
