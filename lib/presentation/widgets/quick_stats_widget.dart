@@ -299,9 +299,10 @@ class _QuickStatsWidgetState extends State<QuickStatsWidget>
               ],
             ),
           ],  // closes if spread
-        ],  // closes Column.children
+        ],  // closes Column.children array
+      ),  // closes Column constructor
       ),  // closes Container
-    );  // closes ScaleTransition
+    );  // closes build (return ScaleTransition)
   }
 
   Widget _buildStatItem(
