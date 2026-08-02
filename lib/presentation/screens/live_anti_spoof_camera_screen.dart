@@ -3,7 +3,9 @@ import 'dart:typed_data';
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 import 'package:google_mlkit_face_detection/google_mlkit_face_detection.dart';
+import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../../core/app_db.dart';
 import '../../services/anti_spoof_api_service.dart';
 import '../../services/attendance_photo_service.dart';
 
@@ -395,7 +397,26 @@ class _LiveAntiSpoofCameraScreenState extends State<LiveAntiSpoofCameraScreen> {
               await Future.delayed(const Duration(seconds: 2));
             } else {
               // ⚡ Backend already determined entry/exit (STEP 7) — no extra round trip
-              final recordType = result['record_type'] ?? 'entry';
+              var recordType = result['record_type'] ?? 'entry';
+
+              // 🔍 Check if student already has entry today to auto-mark as exit
+              try {
+                final today = DateFormat('yyyy-MM-dd').format(DateTime.now());
+                final existingRecords = await appDb
+                    .from('attendance')
+                    .select('record_type')
+                    .eq('institute_id', _instituteId!)
+                    .eq('sr_no', _srNo)
+                    .eq('attendance_date', today);
+
+                final hasEntry = existingRecords.any((r) => r['record_type'] == 'entry');
+                if (hasEntry && recordType == 'entry') {
+                  recordType = 'exit';
+                  print('📍 [RECORD] Entry exists - switching to EXIT');
+                }
+              } catch (e) {
+                print('⚠️ [RECORD] Could not check existing entry: $e');
+              }
 
               print('✅ [MATCH] Student found: $_matchedStudentName');
               print('📊 [MATCH] SR No: $_srNo');
