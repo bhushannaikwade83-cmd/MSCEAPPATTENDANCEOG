@@ -1119,39 +1119,8 @@ class _StudentManagementScreenState extends State<StudentManagementScreen>
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    // Welcome message (scrolling marquee)
-                    SizedBox(
-                      height: 18.h,
-                      child: SingleChildScrollView(
-                        scrollDirection: Axis.horizontal,
-                        child: Row(
-                          children: [
-                            Text(
-                              '👋 Welcome Students - Mark your attendance here  •  ',
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontSize: 13.sp,
-                                fontWeight: FontWeight.w700,
-                                letterSpacing: 0.3,
-                              ),
-                              maxLines: 1,
-                              overflow: TextOverflow.visible,
-                            ),
-                            Text(
-                              '👋 Welcome Students - Mark your attendance here  •  ',
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontSize: 13.sp,
-                                fontWeight: FontWeight.w700,
-                                letterSpacing: 0.3,
-                              ),
-                              maxLines: 1,
-                              overflow: TextOverflow.visible,
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
+                    // Welcome message (animated marquee - right to left)
+                    const _ScrollingWelcomeMessage(),
                     SizedBox(height: 6.h),
                     // Institute info
                     Row(
@@ -2769,6 +2738,90 @@ class _StudentManagementScreenState extends State<StudentManagementScreen>
   }
 
 }
+
+/// 📜 Animated scrolling welcome message (marquee - right to left loop)
+class _ScrollingWelcomeMessage extends StatefulWidget {
+  const _ScrollingWelcomeMessage();
+
+  @override
+  State<_ScrollingWelcomeMessage> createState() => _ScrollingWelcomeMessageState();
+}
+
+class _ScrollingWelcomeMessageState extends State<_ScrollingWelcomeMessage>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _animationController;
+
+  @override
+  void initState() {
+    super.initState();
+    _animationController = AnimationController(
+      duration: const Duration(seconds: 8),
+      vsync: this,
+    )..repeat(); // Loop continuously
+  }
+
+  @override
+  void dispose() {
+    _animationController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    const message = '👋 Welcome Students - Mark your attendance here  •  ';
+
+    return SizedBox(
+      height: 18.h,
+      child: ClipRect(
+        child: Stack(
+          children: [
+            // Animated text sliding from right to left
+            AnimatedBuilder(
+              animation: _animationController,
+              builder: (context, child) {
+                // Position: starts at right edge (1.0), ends at left edge (-0.5)
+                final offset = (1.0 - _animationController.value) * 2.0 - 1.0;
+
+                return Transform.translate(
+                  offset: Offset(offset * 200.w, 0),
+                  child: child,
+                );
+              },
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    message,
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 13.sp,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 0.3,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.visible,
+                  ),
+                  Text(
+                    message,
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 13.sp,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 0.3,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.visible,
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 /// Lightweight value object returned by server-side paginated student queries.
 class _StudentPage {
   final List<Map<String, dynamic>> rows;
