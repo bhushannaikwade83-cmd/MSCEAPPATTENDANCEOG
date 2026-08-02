@@ -1066,59 +1066,138 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> with TickerProviderSt
 
   Widget _buildDateAndClockTimes(bool isDark) {
     final now = DateTime.now();
-    final currentDate = DateFormat('d MMM, yyyy').format(now);
+    final currentDate = DateFormat('EEEE, d MMMM yyyy').format(now);
+    final currentTime = DateFormat('hh:mm a').format(now);
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Expanded(
-              child: Text(
-                currentDate,
-                style: TextStyle(
-                  fontSize: 18.sp,
-                  fontWeight: FontWeight.bold,
-                  color: isDark ? Colors.white : AppTheme.textDark,
-                ),
-                overflow: TextOverflow.ellipsis,
-                maxLines: 1,
-              ),
-            ),
-            SizedBox(width: 8.w),
-            // Total Students Count (from _loadDashboardStats, not polling)
-            Flexible(
-              child: Container(
-                padding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 8.h),
-                decoration: BoxDecoration(
-                  color: AppTheme.primaryBlue,
-                  borderRadius: BorderRadius.circular(20.r),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(Icons.people, color: Colors.white, size: 16.sp),
-                    SizedBox(width: 6.w),
-                    Flexible(
-                      child: Text(
-                        '$_studentCount Students',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 14.sp,
-                          fontWeight: FontWeight.w600,
-                        ),
-                        overflow: TextOverflow.ellipsis,
-                        maxLines: 1,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
+    return Container(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            AppTheme.primaryBlue.withOpacity(isDark ? 0.15 : 0.08),
+            AppTheme.primaryBlue.withOpacity(isDark ? 0.08 : 0.03),
           ],
         ),
-      ],
+        borderRadius: BorderRadius.circular(16.r),
+        border: Border.all(
+          color: AppTheme.primaryBlue.withOpacity(isDark ? 0.3 : 0.2),
+          width: 1.5,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: AppTheme.primaryBlue.withOpacity(isDark ? 0.15 : 0.08),
+            blurRadius: 12.r,
+            offset: Offset(0, 4.h),
+          ),
+        ],
+      ),
+      padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 14.h),
+      child: Row(
+        children: [
+          // 📅 Calendar Icon
+          Container(
+            padding: EdgeInsets.all(12.w),
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              gradient: LinearGradient(
+                colors: [
+                  AppTheme.primaryBlue.withOpacity(0.25),
+                  AppTheme.primaryBlue.withOpacity(0.12),
+                ],
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: AppTheme.primaryBlue.withOpacity(0.3),
+                  blurRadius: 10,
+                  offset: const Offset(0, 3),
+                ),
+              ],
+            ),
+            child: Icon(Icons.calendar_today_rounded,
+                color: AppTheme.primaryBlue, size: 22.sp),
+          ),
+          SizedBox(width: 14.w),
+          // 📅 Date and Time
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  currentDate,
+                  style: TextStyle(
+                    fontSize: 15.sp,
+                    fontWeight: FontWeight.w800,
+                    color: isDark ? Colors.white : AppTheme.textDark,
+                    letterSpacing: 0.2,
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                  maxLines: 1,
+                ),
+                SizedBox(height: 4.h),
+                Text(
+                  currentTime,
+                  style: TextStyle(
+                    fontSize: 12.sp,
+                    fontWeight: FontWeight.w600,
+                    color: AppTheme.primaryBlue.withOpacity(0.8),
+                    letterSpacing: 0.1,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          SizedBox(width: 12.w),
+          // 👥 Students Count Badge
+          Container(
+            padding: EdgeInsets.symmetric(horizontal: 14.w, vertical: 10.h),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  AppTheme.primaryBlue,
+                  AppTheme.primaryBlue.withOpacity(0.8),
+                ],
+              ),
+              borderRadius: BorderRadius.circular(12.r),
+              boxShadow: [
+                BoxShadow(
+                  color: AppTheme.primaryBlue.withOpacity(0.4),
+                  blurRadius: 12,
+                  offset: const Offset(0, 4),
+                ),
+              ],
+            ),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.people_rounded, color: Colors.white, size: 18.sp),
+                SizedBox(height: 3.h),
+                Text(
+                  '$_studentCount',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 14.sp,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 0.2,
+                  ),
+                ),
+                SizedBox(height: 2.h),
+                Text(
+                  'Students',
+                  style: TextStyle(
+                    color: Colors.white.withOpacity(0.85),
+                    fontSize: 9.sp,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -1272,29 +1351,66 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> with TickerProviderSt
     final instituteAddress = _instituteData?['address'] as String? ?? 'Address not set';
     final instituteId = _instituteData?['id'] as String? ?? 'N/A';
 
-    return GovElevatedCard(
-      padding: EdgeInsets.symmetric(horizontal: 14.w, vertical: 12.h),
+    return Container(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            AppTheme.primaryBlue.withOpacity(isDark ? 0.12 : 0.06),
+            AppTheme.primaryBlue.withOpacity(isDark ? 0.06 : 0.02),
+          ],
+        ),
+        borderRadius: BorderRadius.circular(18.r),
+        border: Border.all(
+          color: AppTheme.primaryBlue.withOpacity(isDark ? 0.3 : 0.15),
+          width: 1.5,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: AppTheme.primaryBlue.withOpacity(isDark ? 0.2 : 0.1),
+            blurRadius: 16.r,
+            offset: Offset(0, 6.h),
+          ),
+        ],
+      ),
+      padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 14.h),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // Header with Icon
           Row(
             children: [
               Container(
-                padding: EdgeInsets.all(8.w),
+                padding: EdgeInsets.all(10.w),
                 decoration: BoxDecoration(
-                  color: AppTheme.primaryBlue.withValues(alpha: 0.2),
-                  borderRadius: BorderRadius.circular(8.r),
+                  shape: BoxShape.circle,
+                  gradient: LinearGradient(
+                    colors: [
+                      AppTheme.primaryBlue.withOpacity(0.3),
+                      AppTheme.primaryBlue.withOpacity(0.15),
+                    ],
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: AppTheme.primaryBlue.withOpacity(0.3),
+                      blurRadius: 12,
+                      offset: const Offset(0, 3),
+                    ),
+                  ],
                 ),
-                child: Icon(Icons.school, color: AppTheme.primaryBlue, size: 24.sp),
+                child: Icon(Icons.school_rounded,
+                    color: AppTheme.primaryBlue, size: 26.sp),
               ),
-              SizedBox(width: 12.w),
+              SizedBox(width: 14.w),
               Expanded(
                 child: Text(
                   instituteName,
                   style: TextStyle(
                     color: isDark ? Colors.white : AppTheme.textDark,
-                    fontSize: 17.sp,
-                    fontWeight: FontWeight.bold,
+                    fontSize: 16.sp,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 0.3,
                   ),
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
@@ -1302,17 +1418,35 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> with TickerProviderSt
               ),
             ],
           ),
-          SizedBox(height: 12.h),
+          SizedBox(height: 14.h),
+          // Divider
+          Container(
+            height: 1,
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: [
+                  Colors.transparent,
+                  AppTheme.primaryBlue.withOpacity(0.2),
+                  Colors.transparent,
+                ],
+              ),
+            ),
+          ),
+          SizedBox(height: 14.h),
+          // Location
           Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Icon(Icons.location_on, color: AppTheme.primaryBlue, size: 16.sp),
-              SizedBox(width: 8.w),
+              Icon(Icons.location_on_rounded,
+                  color: AppTheme.primaryBlue, size: 18.sp),
+              SizedBox(width: 10.w),
               Expanded(
                 child: Text(
                   instituteAddress,
                   style: TextStyle(
-                    color: isDark ? Colors.white70 : AppTheme.textGray,
-                    fontSize: 13.sp,
+                    color: isDark ? Colors.white.withOpacity(0.8) : AppTheme.textGray,
+                    fontSize: 12.sp,
+                    height: 1.4,
                   ),
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
@@ -1320,24 +1454,35 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> with TickerProviderSt
               ),
             ],
           ),
-          SizedBox(height: 8.h),
-          Row(
-            children: [
-              Icon(Icons.badge, color: AppTheme.primaryBlue, size: 16.sp),
-              SizedBox(width: 8.w),
-              Expanded(
-                child: Text(
+          SizedBox(height: 10.h),
+          // ID Badge
+          Container(
+            padding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 8.h),
+            decoration: BoxDecoration(
+              color: AppTheme.primaryBlue.withOpacity(isDark ? 0.15 : 0.08),
+              borderRadius: BorderRadius.circular(8.r),
+              border: Border.all(
+                color: AppTheme.primaryBlue.withOpacity(0.3),
+                width: 1,
+              ),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.badge_rounded,
+                    color: AppTheme.primaryBlue, size: 14.sp),
+                SizedBox(width: 6.w),
+                Text(
                   'ID: ${formatInstituteIdForDisplay(instituteId)}',
                   style: TextStyle(
-                    color: isDark ? Colors.white70 : AppTheme.textGray,
-                    fontSize: 12.sp,
+                    color: isDark ? Colors.white : AppTheme.textDark,
+                    fontSize: 11.sp,
+                    fontWeight: FontWeight.w600,
                     fontFamily: 'monospace',
                   ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ],
       ),
@@ -1733,7 +1878,7 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> with TickerProviderSt
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Icon(Icons.lightning_bolt_rounded,
+                        Icon(Icons.flash_on_rounded,
                             color: AppTheme.primaryBlue, size: 16.sp),
                         SizedBox(width: 6.w),
                         Text(
