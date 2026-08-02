@@ -184,12 +184,18 @@ class _LiveAntiSpoofCameraScreenState extends State<LiveAntiSpoofCameraScreen> {
       print('📹 [FRAME] Processing frame #${_frameCounter}...');
 
       try {
+        // Combine all planes for proper YUV420 processing
+        final allBytes = <int>[];
+        for (int i = 0; i < image.planes.length; i++) {
+          allBytes.addAll(image.planes[i].bytes);
+        }
+
         final inputImage = InputImage.fromBytes(
-          bytes: image.planes[0].bytes,
+          bytes: allBytes,
           metadata: InputImageMetadata(
             size: Size(image.width.toDouble(), image.height.toDouble()),
             rotation: InputImageRotation.rotation0deg,
-            format: InputImageFormat.yuv420,
+            format: InputImageFormat.nv21,
             bytesPerRow: image.planes[0].bytesPerRow,
           ),
         );
