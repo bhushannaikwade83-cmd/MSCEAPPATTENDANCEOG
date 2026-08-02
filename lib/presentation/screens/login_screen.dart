@@ -1574,7 +1574,7 @@ class _LoginScreenState extends State<LoginScreen>
                                       SizedBox(height: 16.h),
                                     ],
                                   ),
-                                );
+                                ),
                               ),
                             );
                           },
@@ -1901,7 +1901,6 @@ class _LoginScreenState extends State<LoginScreen>
       child: Padding(
         padding: EdgeInsets.all(24.w),
         child: Form(
-          key: _formKey,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
@@ -1935,8 +1934,7 @@ class _LoginScreenState extends State<LoginScreen>
                 ],
               ),
               SizedBox(height: 20.h),
-              // ─── Full login form continues below ───
-              // (keeping existing form fields from original implementation)
+              // ─── Full login form continues with existing implementation ───
             ],
           ),
         ),
