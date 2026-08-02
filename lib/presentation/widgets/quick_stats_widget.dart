@@ -298,10 +298,10 @@ class _QuickStatsWidgetState extends State<QuickStatsWidget>
                 ),
               ],
             ),
-          ],
-        ),
-      ),
-    );
+          ],  // closes if spread
+        ],  // closes Column.children
+      ),  // closes Container
+    );  // closes ScaleTransition
   }
 
   Widget _buildStatItem(
