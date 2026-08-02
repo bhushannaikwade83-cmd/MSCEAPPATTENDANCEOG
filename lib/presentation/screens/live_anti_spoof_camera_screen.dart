@@ -57,6 +57,9 @@ class _LiveAntiSpoofCameraScreenState extends State<LiveAntiSpoofCameraScreen> {
   String _srNo = '';
   String _matchedStudentId = '';
 
+  // Face quality tracking
+  double _faceQuality = 0.0; // 0.0 to 1.0
+
   @override
   void initState() {
     super.initState();
@@ -228,10 +231,22 @@ class _LiveAntiSpoofCameraScreenState extends State<LiveAntiSpoofCameraScreen> {
 
         // Face detected
         final face = faces[0];
+
+        // Calculate face quality (0-1 based on various factors)
+        double quality = 0.8; // Base quality
+        if (face.headEulerAngleY != null && face.headEulerAngleY! < 15) quality += 0.1;
+        if (face.headEulerAngleZ != null && face.headEulerAngleZ! < 10) quality += 0.1;
+        quality = quality.clamp(0.0, 1.0);
+
         if (!_faceDetected) {
-          print('✅ [DETECT] Face detected!');
+          print('✅ [DETECT] Face detected! Quality: ${(quality * 100).toStringAsFixed(0)}%');
           setState(() {
             _faceDetected = true;
+            _faceQuality = quality;
+          });
+        } else {
+          setState(() {
+            _faceQuality = quality;
           });
         }
 
@@ -568,16 +583,33 @@ class _LiveAntiSpoofCameraScreenState extends State<LiveAntiSpoofCameraScreen> {
           // Camera Feed
           SizedBox.expand(child: CameraPreview(_cameraController)),
 
-          // Top Status
+          // Top Status - Modern Design
           Positioned(
-            top: 16,
+            top: 20,
             left: 16,
             right: 16,
             child: Container(
-              padding: const EdgeInsets.all(12),
+              padding: const EdgeInsets.all(14),
               decoration: BoxDecoration(
-                color: Colors.black.withOpacity(0.6),
-                borderRadius: BorderRadius.circular(8),
+                gradient: LinearGradient(
+                  colors: [
+                    Colors.black.withOpacity(0.8),
+                    Colors.black.withOpacity(0.5),
+                  ],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: Colors.white.withOpacity(0.1),
+                  width: 1,
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.3),
+                    blurRadius: 8,
+                  ),
+                ],
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -625,6 +657,91 @@ class _LiveAntiSpoofCameraScreenState extends State<LiveAntiSpoofCameraScreen> {
             ),
           ),
 
+          // Face Quality Meter (Center-bottom)
+          if (_faceDetected)
+            Positioned(
+              bottom: 120,
+              left: 20,
+              right: 20,
+              child: Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [
+                      Colors.black.withOpacity(0.7),
+                      Colors.black.withOpacity(0.5),
+                    ],
+                  ),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: _faceQuality > 0.7
+                        ? Colors.greenAccent
+                        : _faceQuality > 0.4
+                            ? Colors.yellowAccent
+                            : Colors.redAccent,
+                    width: 2,
+                  ),
+                ),
+                child: Column(
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          '📊 Face Quality',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        Text(
+                          '${(_faceQuality * 100).toStringAsFixed(0)}%',
+                          style: TextStyle(
+                            color: _faceQuality > 0.7
+                                ? Colors.greenAccent
+                                : _faceQuality > 0.4
+                                    ? Colors.yellowAccent
+                                    : Colors.redAccent,
+                            fontSize: 14,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(8),
+                      child: LinearProgressIndicator(
+                        value: _faceQuality,
+                        minHeight: 8,
+                        backgroundColor: Colors.white.withOpacity(0.2),
+                        valueColor: AlwaysStoppedAnimation(
+                          _faceQuality > 0.7
+                              ? Colors.greenAccent
+                              : _faceQuality > 0.4
+                                  ? Colors.yellowAccent
+                                  : Colors.redAccent,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      _faceQuality > 0.7
+                          ? '✅ Good quality - Ready to capture'
+                          : _faceQuality > 0.4
+                              ? '⚠️ Fair quality - Try to center face'
+                              : '❌ Low quality - Improve position',
+                      style: TextStyle(
+                        color: Colors.white70,
+                        fontSize: 11,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+
           // Bottom Controls
           Positioned(
             bottom: 20,
@@ -633,27 +750,48 @@ class _LiveAntiSpoofCameraScreenState extends State<LiveAntiSpoofCameraScreen> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                // CAPTURE Button
-                ElevatedButton(
-                  onPressed: _isCapturing ? null : _startCapture,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: _isCapturing ? Colors.orange : Colors.green,
-                    disabledBackgroundColor: Colors.orange,
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 40,
-                      vertical: 16,
+                // CAPTURE Button - Modern Gradient
+                Container(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: _isCapturing
+                          ? [Colors.orange.shade600, Colors.orange.shade800]
+                          : [Colors.green.shade400, Colors.green.shade600],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
                     ),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
+                    borderRadius: BorderRadius.circular(16),
+                    boxShadow: [
+                      BoxShadow(
+                        color: (_isCapturing ? Colors.orange : Colors.green)
+                            .withOpacity(0.4),
+                        blurRadius: 12,
+                        offset: const Offset(0, 6),
+                      ),
+                    ],
                   ),
-                  child: Text(
-                    _isCapturing ? 'CAPTURING... $_captureCountdown' : '✅ CAPTURE',
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                      letterSpacing: 2,
+                  child: Material(
+                    color: Colors.transparent,
+                    child: InkWell(
+                      onTap: _isCapturing ? null : _startCapture,
+                      borderRadius: BorderRadius.circular(16),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 48,
+                          vertical: 18,
+                        ),
+                        child: Text(
+                          _isCapturing
+                              ? '🔴 CAPTURING... $_captureCountdown'
+                              : '📸 CAPTURE',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 18,
+                            fontWeight: FontWeight.w900,
+                            letterSpacing: 1.5,
+                          ),
+                        ),
+                      ),
                     ),
                   ),
                 ),
