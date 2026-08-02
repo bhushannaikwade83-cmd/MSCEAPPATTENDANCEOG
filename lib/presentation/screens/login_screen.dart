@@ -1521,17 +1521,19 @@ class _LoginScreenState extends State<LoginScreen>
           _buildAnimatedGradientBackground(isDark),
 
           // ─── MAIN CONTENT ───
-          SafeArea(
-            bottom: false,
-            child: AnimatedBuilder(
-              animation: _masterController,
-              builder: (context, _) {
-                return Opacity(
-                  opacity: _screenFade.value.clamp(0.0, 1.0),
-                  child: Column(
-                    children: [
-                      _buildModernHeader(isDark),
-                      Expanded(
+          AnimatedBuilder(
+            animation: _masterController,
+            builder: (context, _) {
+              return Opacity(
+                opacity: _screenFade.value.clamp(0.0, 1.0),
+                child: Column(
+                  children: [
+                    // ─── HEADER (Edge-to-Edge) ───
+                    _buildModernHeader(isDark),
+                    // ─── CONTENT (Safe Area) ───
+                    Expanded(
+                      child: SafeArea(
+                        top: false,
                         child: LayoutBuilder(
                           builder: (context, constraints) {
                             final maxWidth = context.contentMaxWidth(
@@ -1580,11 +1582,12 @@ class _LoginScreenState extends State<LoginScreen>
                           },
                         ),
                       ),
-                    ],
-                  ),
-                );
-              },
-            ),
+                    ),
+                    ),
+                  ],
+                ),
+              );
+            },
           ),
         ],
       ),
@@ -1631,27 +1634,7 @@ class _LoginScreenState extends State<LoginScreen>
   }
 
   Widget _buildModernHeader(bool isDark) {
-    return Container(
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [
-            AppTheme.primaryBlue.withOpacity(isDark ? 0.1 : 0.05),
-            AppTheme.primaryBlue.withOpacity(isDark ? 0.05 : 0.02),
-          ],
-        ),
-        border: Border(
-          bottom: BorderSide(
-            color: AppTheme.primaryBlue.withOpacity(isDark ? 0.15 : 0.08),
-            width: 1,
-          ),
-        ),
-      ),
-      padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 10.h),
-      child: Padding(
-        padding: EdgeInsets.only(top: 4.h),
-        child: const GovPortalHeader(),
-      ),
-    );
+    return const GovPortalHeader();
   }
 
   Widget _buildModernLogoSection(BuildContext context, bool isDark) {
