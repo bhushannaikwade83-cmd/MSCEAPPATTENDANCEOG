@@ -2093,15 +2093,15 @@ class _StudentManagementScreenState extends State<StudentManagementScreen>
                       ClipRRect(
                         borderRadius: BorderRadius.circular(16.r),
                         child: SizedBox(
-                          width: 80.w,
-                          height: 80.h,
+                          width: 100.w,
+                          height: 100.h,
                           child: hasPhoto
                               ? SecureNetworkImage(
                                   key: ValueKey('student_face_$studentId'),
                                   cacheKey: 'student_face_$studentId',
                                   imageUrl: profileUrl.isNotEmpty ? profileUrl : null,
-                                  width: 80.w,
-                                  height: 80.h,
+                                  width: 100.w,
+                                  height: 100.h,
                                   version: photoVersion ?? '0',
                                   fit: BoxFit.cover,
                                   placeholder: photoThumbnail != null && photoThumbnail.isNotEmpty
@@ -2318,7 +2318,7 @@ class _StudentManagementScreenState extends State<StudentManagementScreen>
                           ClipRRect(
                             borderRadius: BorderRadius.circular(10.r),
                             child: SizedBox(
-                              height: 60.h,
+                              height: 100.h,
                               child: SecureNetworkImage(
                                 key: ValueKey('entry_$studentId'),
                                 cacheKey: 'entry_$studentId',
@@ -2354,7 +2354,7 @@ class _StudentManagementScreenState extends State<StudentManagementScreen>
                           ClipRRect(
                             borderRadius: BorderRadius.circular(10.r),
                             child: SizedBox(
-                              height: 60.h,
+                              height: 100.h,
                               child: SecureNetworkImage(
                                 key: ValueKey('exit_$studentId'),
                                 cacheKey: 'exit_$studentId',
