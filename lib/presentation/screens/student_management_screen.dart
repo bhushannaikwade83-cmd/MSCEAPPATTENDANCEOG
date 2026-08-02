@@ -2759,7 +2759,7 @@ class _ScrollingWelcomeMessageState extends State<_ScrollingWelcomeMessage>
   void initState() {
     super.initState();
     _animationController = AnimationController(
-      duration: const Duration(seconds: 12),
+      duration: const Duration(seconds: 20),
       vsync: this,
     );
 
