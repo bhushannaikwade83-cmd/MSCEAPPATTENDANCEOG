@@ -24,6 +24,21 @@ class SharedStatsService {
   static final Map<String, DateTime> _totalCacheAt = {};
   static const _kTotalTtl = Duration(minutes: 5);
 
+  // Track last date for midnight reset
+  static String _lastDateChecked = '';
+
+  /// ✅ Auto-reset cache at midnight (12:00 AM)
+  static void _checkAndResetAtMidnight() {
+    final today = DateFormat('yyyy-MM-dd').format(DateTime.now());
+    if (_lastDateChecked != today) {
+      if (kDebugMode) {
+        debugPrint('🌙 MIDNIGHT RESET: Date changed from $_lastDateChecked to $today');
+      }
+      _lastDateChecked = today;
+      invalidateTotalCache(); // Reset cache for all institutes
+    }
+  }
+
   static void invalidateTotalCache([String? instituteId]) {
     if (instituteId == null) { _totalCache.clear(); _totalCacheAt.clear(); }
     else { _totalCache.remove(instituteId); _totalCacheAt.remove(instituteId); }
@@ -32,6 +47,9 @@ class SharedStatsService {
   /// ✅ Get today's stats directly from database
   /// Returns: {present, absent, total}
   static Future<Map<String, int>> getTodayStats(String instituteId) async {
+    // ✅ Auto-reset at midnight
+    _checkAndResetAtMidnight();
+
     final today = DateFormat('yyyy-MM-dd').format(DateTime.now());
 
     try {
@@ -70,63 +88,44 @@ class SharedStatsService {
         debugPrint('📊 STATS: Institute codes to check: $instituteCodes, code=$code');
       }
 
-      // Get today's attendance records from database
+      // ✅ Get today's attendance records from NEW attendance table
+      // Using record_type = 'entry' to mark students as present
       final List<dynamic> rows = [];
       try {
         final tempRows = await appDb
-            .from('attendance_in_out')
-            .select('student_id,sr_no,type,additional')
-            .inFilter('institute_code', instituteCodes.toList())
-            .eq('attendance_date', today);
+            .from('attendance')
+            .select('sr_no,record_type')
+            .eq('institute_id', instituteId)
+            .eq('attendance_date', today)
+            .eq('record_type', 'entry'); // ✅ Only entries count as present
         rows.addAll(tempRows);
+
+        if (kDebugMode) {
+          debugPrint('✅ Attendance query successful: ${rows.length} entries found');
+        }
       } catch (e) {
-        if (kDebugMode) debugPrint('⚠️ First query failed: $e, trying alternative...');
-      }
-
-      // Fallback: if no results, try without inFilter (check both codes separately)
-      if (rows.isEmpty && instituteCodes.isNotEmpty) {
-        try {
-          for (final ic in instituteCodes) {
-            final tempRows = await appDb
-                .from('attendance_in_out')
-                .select('student_id,sr_no,type,additional')
-                .eq('institute_code', ic)
-                .eq('attendance_date', today);
-            rows.addAll(tempRows);
-          }
-        } catch (e) {
-          if (kDebugMode) debugPrint('⚠️ Fallback query also failed: $e');
-        }
+        if (kDebugMode) debugPrint('❌ Attendance query failed: $e');
       }
 
       if (kDebugMode) {
-        debugPrint('📊 STATS: Found ${rows.length} attendance records for date=$today');
+        debugPrint('📊 STATS: Found ${rows.length} entry records for date=$today');
       }
 
-      // Group by student key
-      final Map<String, List<Map<String, dynamic>>> byStudentKey = {};
-      for (final raw in rows) {
-        final row = Map<String, dynamic>.from(raw as Map);
-        final sid = row['student_id']?.toString().trim() ?? '';
+      // ✅ Extract unique sr_no values (students with entry = present)
+      final presentStudents = <String>{};
+      for (final row in rows) {
         final sr = row['sr_no']?.toString().trim() ?? '';
-        final key = sid.isNotEmpty ? sid : sr;
-        if (key.isEmpty) continue;
-        byStudentKey.putIfAbsent(key, () => []).add(row);
-      }
-
-      if (kDebugMode) {
-        debugPrint('📊 STATS: Grouped ${byStudentKey.length} unique students');
-      }
-
-      // Count present students using attendance rules
-      final presentRolls = <String>{};
-      for (final e in byStudentKey.entries) {
-        if (studentDayPresentFromInOutRows(e.value)) {
-          presentRolls.add(e.key);
+        if (sr.isNotEmpty) {
+          presentStudents.add(sr);
         }
       }
 
-      final present = presentRolls.length;
+      if (kDebugMode) {
+        debugPrint('📊 STATS: Found ${presentStudents.length} unique students with entry records');
+      }
+
+      // ✅ Count present and absent
+      final present = presentStudents.length;
       final absent = (total - present).clamp(0, total);
 
       if (kDebugMode) {
