@@ -1698,8 +1698,8 @@ class _LoginScreenState extends State<LoginScreen>
             ),
             SizedBox(height: 18.h),
             // ─── TITLE ───
-            FadeTransition(
-              opacity: _cardFade,
+            Opacity(
+              opacity: _cardFade.value.clamp(0.0, 1.0),
               child: Text(
                 l10n.loginAppTitle,
                 textAlign: TextAlign.center,
@@ -1715,8 +1715,8 @@ class _LoginScreenState extends State<LoginScreen>
             ),
             SizedBox(height: 6.h),
             // ─── SUBTITLE ───
-            FadeTransition(
-              opacity: _cardFade,
+            Opacity(
+              opacity: _cardFade.value.clamp(0.0, 1.0),
               child: Text(
                 l10n.loginSubtitle,
                 textAlign: TextAlign.center,
