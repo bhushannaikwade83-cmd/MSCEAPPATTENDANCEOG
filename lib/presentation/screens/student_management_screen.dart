@@ -2059,7 +2059,8 @@ class _StudentManagementScreenState extends State<StudentManagementScreen>
 
     return Padding(
       padding: EdgeInsets.only(bottom: 14.h, left: 16.w, right: 16.w),
-      child: Container(
+      child: RepaintBoundary(
+        child: Container(
         decoration: BoxDecoration(
           // ✨ Modern gradient background
           gradient: LinearGradient(
@@ -2627,6 +2628,7 @@ class _StudentManagementScreenState extends State<StudentManagementScreen>
             ],
           ),
         ),
+      ),
       ),
     );
   }
