@@ -2753,12 +2753,13 @@ class _ScrollingWelcomeMessageState extends State<_ScrollingWelcomeMessage>
   final ScrollController _scrollController = ScrollController();
   String? _instituteName;
   bool _nameLoaded = false;
+  double _halfScrollExtent = 0;
 
   @override
   void initState() {
     super.initState();
     _animationController = AnimationController(
-      duration: const Duration(seconds: 15),
+      duration: const Duration(seconds: 12),
       vsync: this,
     );
 
@@ -2766,7 +2767,7 @@ class _ScrollingWelcomeMessageState extends State<_ScrollingWelcomeMessage>
     _animationController.repeat();
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      _updateScroll();
+      _initializeScroll();
     });
 
     // Fetch institute name if not provided
@@ -2776,6 +2777,19 @@ class _ScrollingWelcomeMessageState extends State<_ScrollingWelcomeMessage>
     } else if (widget.instituteId != null && !_nameLoaded) {
       _fetchInstituteName();
     }
+  }
+
+  void _initializeScroll() {
+    if (!_scrollController.hasClients) return;
+    _halfScrollExtent = _scrollController.position.maxScrollExtent / 2;
+    _updateScroll();
+  }
+
+  void _updateScroll() {
+    if (!_scrollController.hasClients || _halfScrollExtent <= 0) return;
+    final normalizedValue = _animationController.value;
+    final scrollPos = normalizedValue * _halfScrollExtent;
+    _scrollController.jumpTo(scrollPos);
   }
 
   Future<void> _fetchInstituteName() async {
@@ -2823,15 +2837,6 @@ class _ScrollingWelcomeMessageState extends State<_ScrollingWelcomeMessage>
     }
   }
 
-  void _updateScroll() {
-    if (!_scrollController.hasClients) return;
-    final maxScroll = _scrollController.position.maxScrollExtent;
-    if (maxScroll > 0) {
-      final scrollPos = _animationController.value * maxScroll;
-      _scrollController.jumpTo(scrollPos);
-    }
-  }
-
   @override
   void dispose() {
     _animationController.removeListener(_updateScroll);
@@ -2845,7 +2850,8 @@ class _ScrollingWelcomeMessageState extends State<_ScrollingWelcomeMessage>
     final instId = widget.instituteId ?? '—';
     final instName = _instituteName ?? widget.instituteName ?? '—';
     final segment = '   👋 Welcome Students - Mark your attendance here  •  Institute: $instId - $instName  •  ';
-    final message = segment + segment + segment;
+    // Repeat 4x to ensure seamless loop (first half scrolls, second half mirrors for seamless wrap)
+    final message = segment + segment + segment + segment;
 
     return SizedBox(
       height: 20.h,
