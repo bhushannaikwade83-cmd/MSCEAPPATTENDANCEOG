@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'dart:ui' as ui;
 
 import '../../core/app_db.dart';
 import '../../core/credential_strength.dart';
@@ -304,225 +305,25 @@ class _AddInstituteAttendanceUserScreenState extends State<AddInstituteAttendanc
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final atLimit = _staffRows.length >= _kMaxInstructors;
     return Scaffold(
-      backgroundColor: AppTheme.backgroundGrey,
+      backgroundColor: isDark ? const Color(0xFF0A0A0A) : const Color(0xFFF5F5F5),
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           const GovTricolorStrip(),
           Expanded(
             child: ResponsiveScrollBody(
-              padding: EdgeInsets.symmetric(horizontal: 20.w, vertical: 16.h),
+              padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 12.h),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
+                  _buildHeaderCard(isDark),
+                  SizedBox(height: 20.h),
                   Form(
                     key: _formKey,
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        Text(
-                          'Institute instructor',
-                          style: TextStyle(
-                            fontSize: 20.sp,
-                            fontWeight: FontWeight.w800,
-                            color: isDark ? Colors.white : AppTheme.textDark,
-                          ),
-                        ),
-                        SizedBox(height: 8.h),
-                        Text(
-                          'Up to $_kMaxInstructors instructor accounts per institute. Each signs in with Institute ID and their own PIN.',
-                          style: TextStyle(fontSize: 12.sp, color: AppTheme.textGray),
-                        ),
-                        if (atLimit) ...[
-                          SizedBox(height: 10.h),
-                          Text(
-                            'Maximum reached ($_kMaxInstructors/$_kMaxInstructors). Remove an instructor in Dashboard → Auth before adding another.',
-                            style: TextStyle(
-                              fontSize: 12.sp,
-                              fontWeight: FontWeight.w600,
-                              color: AppTheme.accentRed.withValues(alpha: 0.9),
-                            ),
-                          ),
-                        ],
-                        if (_instituteId != null) ...[
-                          SizedBox(height: 8.h),
-                          Text(
-                            'Institute ID: ${formatInstituteIdForDisplay(_instituteId!)}',
-                            style: TextStyle(
-                              fontSize: 13.sp,
-                              fontWeight: FontWeight.w600,
-                              color: AppTheme.primaryBlue,
-                            ),
-                          ),
-                        ],
-                        SizedBox(height: 20.h),
-                        Text(
-                          'Add user',
-                          style: TextStyle(
-                            fontSize: 15.sp,
-                            fontWeight: FontWeight.w700,
-                            color: isDark ? Colors.white70 : AppTheme.textDark,
-                          ),
-                        ),
-                        SizedBox(height: 12.h),
-                        TextFormField(
-                          controller: _firstCtrl,
-                          textCapitalization: TextCapitalization.words,
-                          decoration: const InputDecoration(
-                            labelText: 'First name',
-                            border: OutlineInputBorder(),
-                          ),
-                          validator: (v) {
-                            if (v == null || v.trim().isEmpty) return 'Required';
-                            return null;
-                          },
-                        ),
-                        SizedBox(height: 14.h),
-                        TextFormField(
-                          controller: _middleCtrl,
-                          textCapitalization: TextCapitalization.words,
-                          decoration: const InputDecoration(
-                            labelText: 'Middle name',
-                            border: OutlineInputBorder(),
-                          ),
-                          validator: (v) {
-                            if (v == null || v.trim().isEmpty) return 'Required';
-                            return null;
-                          },
-                        ),
-                        SizedBox(height: 14.h),
-                        TextFormField(
-                          controller: _lastCtrl,
-                          textCapitalization: TextCapitalization.words,
-                          decoration: const InputDecoration(
-                            labelText: 'Last name',
-                            border: OutlineInputBorder(),
-                          ),
-                          validator: (v) {
-                            if (v == null || v.trim().isEmpty) return 'Required';
-                            return null;
-                          },
-                        ),
-                        SizedBox(height: 14.h),
-                        TextFormField(
-                          controller: _mobileCtrl,
-                          keyboardType: TextInputType.phone,
-                          inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                          decoration: const InputDecoration(
-                            labelText: 'Mobile number',
-                            border: OutlineInputBorder(),
-                            counterText: '',
-                          ),
-                          maxLength: 15,
-                          validator: (v) {
-                            final d = (v ?? '').trim().replaceAll(RegExp(r'\D'), '');
-                            if (d.isEmpty) return 'Required';
-                            if (d.length < 10 || d.length > 15) {
-                              return 'Use 10–15 digits';
-                            }
-                            return null;
-                          },
-                        ),
-                        SizedBox(height: 14.h),
-                        TextFormField(
-                          controller: _pinCtrl,
-                          obscureText: true,
-                          keyboardType: TextInputType.number,
-                          onChanged: (_) => setState(() {}),
-                          inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                          maxLength: 4,
-                          decoration: const InputDecoration(
-                            labelText: 'PIN (4 digits)',
-                            border: OutlineInputBorder(),
-                            counterText: '',
-                          ),
-                          validator: (v) {
-                            final p = v?.trim() ?? '';
-                            if (!AuthService.isValidLoginPinLength(p)) {
-                              return AuthService.loginPinLengthMessage;
-                            }
-                            final pa = CredentialStrengthAnalysis.analyzePinFour(p);
-                            if (pa.level == CredentialStrengthLevel.weak) {
-                              return pa.hint ?? 'Choose a stronger PIN';
-                            }
-                            return null;
-                          },
-                        ),
-                        CredentialStrengthIndicator(
-                          analysis: CredentialStrengthAnalysis.analyzePinFour(_pinCtrl.text.trim()),
-                          dense: true,
-                          forPin: true,
-                        ),
-                        SizedBox(height: 14.h),
-                        TextFormField(
-                          controller: _confirmPinCtrl,
-                          obscureText: true,
-                          keyboardType: TextInputType.number,
-                          inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                          maxLength: 4,
-                          decoration: const InputDecoration(
-                            labelText: 'Confirm PIN',
-                            border: OutlineInputBorder(),
-                            counterText: '',
-                          ),
-                          validator: (v) {
-                            if (v != _pinCtrl.text) return 'PINs do not match';
-                            return null;
-                          },
-                        ),
-                        SizedBox(height: 24.h),
-                        FilledButton(
-                          onPressed: (_busy || atLimit) ? null : _submit,
-                          style: FilledButton.styleFrom(
-                            backgroundColor: AppTheme.primaryBlue,
-                            padding: EdgeInsets.symmetric(vertical: 14.h),
-                          ),
-                          child: _busy
-                              ? const SizedBox(
-                                  height: 22,
-                                  width: 22,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                    color: Colors.white,
-                                  ),
-                                )
-                              : const Text('Create user'),
-                        ),
-                      ],
-                    ),
+                    child: _buildFormCard(isDark, atLimit),
                   ),
                   SizedBox(height: 28.h),
-                  Row(
-                    children: [
-                      Icon(Icons.people_outline, size: 22.sp, color: AppTheme.primaryBlue),
-                      SizedBox(width: 8.w),
-                      Expanded(
-                        child: Text(
-                          _staffRows.isEmpty
-                              ? 'Institute instructors'
-                              : 'Institute instructors (${_staffRows.length}/$_kMaxInstructors)',
-                          style: TextStyle(
-                            fontSize: 16.sp,
-                            fontWeight: FontWeight.w800,
-                            color: isDark ? Colors.white : AppTheme.textDark,
-                          ),
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                      if (_instituteId != null)
-                        IconButton(
-                          tooltip: 'Refresh list',
-                          onPressed: _loadingStaff ? null : () => _loadStaffUsers(_instituteId!),
-                          icon: const Icon(Icons.refresh),
-                        ),
-                    ],
-                  ),
-                  SizedBox(height: 6.h),
-                  Text(
-                    'Only instructor accounts for your institute are shown (not admins or students).',
-                    style: TextStyle(fontSize: 11.sp, color: AppTheme.textGray),
-                  ),
+                  _buildInstructorsHeader(isDark),
                   SizedBox(height: 12.h),
                   if (_loadingStaff)
                     const Padding(
@@ -530,111 +331,625 @@ class _AddInstituteAttendanceUserScreenState extends State<AddInstituteAttendanc
                       child: Center(child: CircularProgressIndicator()),
                     )
                   else if (_staffRows.isEmpty)
-                    Container(
-                      width: double.infinity,
-                      padding: EdgeInsets.symmetric(vertical: 24.h, horizontal: 16.w),
-                      decoration: BoxDecoration(
-                        color: isDark ? Colors.white.withValues(alpha: 0.06) : Colors.white,
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(
-                          color: AppTheme.primaryBlue.withValues(alpha: 0.2),
-                        ),
-                      ),
-                      child: Text(
-                        'No institute instructor yet. Add one using the form above.\n\n'
-                        'If add fails with "already exists" but this list is empty, a leftover login '
-                        'is in Supabase Auth only — ask your coder to delete users ending with '
-                        '@staff.msce-attendance.app for your institute, then try again.',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          fontSize: 13.sp,
-                          color: AppTheme.textGray,
-                        ),
-                      ),
-                    )
+                    _buildEmptyState(isDark)
                   else
-                    ListView.separated(
-                      shrinkWrap: true,
-                      physics: const NeverScrollableScrollPhysics(),
-                      itemCount: _staffRows.length,
-                      separatorBuilder: (context, _) => SizedBox(height: 8.h),
-                      itemBuilder: (context, index) {
-                        final r = _staffRows[index];
-                        final name = (r['name'] as String?)?.trim() ?? '—';
-                        final email = (r['email'] as String?)?.trim() ?? '';
-                        final mob = (r['phone_number'] as String?)?.trim() ?? '';
-                        return Material(
-                          color: isDark ? Colors.white.withValues(alpha: 0.06) : Colors.white,
-                          borderRadius: BorderRadius.circular(12),
-                          child: ListTile(
-                            contentPadding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 4.h),
-                            onTap: () => _showInstructorDetails(r, isDark),
-                            trailing: Icon(
-                              Icons.info_outline,
-                              size: 22.sp,
-                              color: AppTheme.primaryBlue.withValues(alpha: 0.85),
-                            ),
-                            leading: CircleAvatar(
-                              backgroundColor: AppTheme.primaryBlue.withValues(alpha: 0.15),
-                              child: Text(
-                                name.isNotEmpty ? name.substring(0, 1).toUpperCase() : '?',
-                                style: TextStyle(
-                                  color: AppTheme.primaryBlue,
-                                  fontWeight: FontWeight.w700,
-                                ),
-                              ),
-                            ),
-                            title: Text(
-                              name,
-                              style: TextStyle(
-                                fontWeight: FontWeight.w600,
-                                fontSize: 15.sp,
-                                color: isDark ? Colors.white : AppTheme.textDark,
-                              ),
-                            ),
-                            subtitle: Padding(
-                              padding: EdgeInsets.only(top: 4.h),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    'Login: Institute ${formatInstituteIdForDisplay(_instituteId)} + PIN',
-                                    style: TextStyle(fontSize: 12.sp, color: AppTheme.textGray),
-                                  ),
-                                  if (mob.isNotEmpty)
-                                    Text(
-                                      'Mobile: $mob',
-                                      style: TextStyle(fontSize: 12.sp, color: AppTheme.textGray),
-                                    ),
-                                  if (email.isNotEmpty)
-                                    Text(
-                                      email,
-                                      style: TextStyle(
-                                        fontSize: 11.sp,
-                                        color: AppTheme.textGray.withValues(alpha: 0.9),
-                                      ),
-                                    ),
-                                  Text(
-                                    'Added: ${_formatDateTime(r['created_at'])} (local)',
-                                    style: TextStyle(fontSize: 11.sp, color: AppTheme.textGray),
-                                  ),
-                                  Text(
-                                    'Last sign-in: ${_formatDateTime(r['last_login'])} (local)',
-                                    style: TextStyle(fontSize: 11.sp, color: AppTheme.textGray),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                        );
-                      },
-                    ),
+                    _buildInstructorsList(isDark),
                   SizedBox(height: 24.h),
                 ],
               ),
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildHeaderCard(bool isDark) {
+    return Container(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            AppTheme.primaryBlue.withOpacity(isDark ? 0.15 : 0.08),
+            AppTheme.primaryBlue.withOpacity(isDark ? 0.08 : 0.03),
+          ],
+        ),
+        borderRadius: BorderRadius.circular(18.r),
+        border: Border.all(
+          color: AppTheme.primaryBlue.withOpacity(isDark ? 0.3 : 0.15),
+          width: 1.5,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: AppTheme.primaryBlue.withOpacity(isDark ? 0.15 : 0.08),
+            blurRadius: 16.r,
+            offset: Offset(0, 4.h),
+          ),
+        ],
+      ),
+      padding: EdgeInsets.all(16.w),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: EdgeInsets.all(10.w),
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: LinearGradient(
+                    colors: [
+                      AppTheme.primaryBlue.withOpacity(0.3),
+                      AppTheme.primaryBlue.withOpacity(0.15),
+                    ],
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: AppTheme.primaryBlue.withOpacity(0.3),
+                      blurRadius: 12,
+                      offset: const Offset(0, 3),
+                    ),
+                  ],
+                ),
+                child: Icon(Icons.person_add_rounded, color: AppTheme.primaryBlue, size: 24.sp),
+              ),
+              SizedBox(width: 12.w),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Institute Instructor',
+                      style: TextStyle(
+                        fontSize: 17.sp,
+                        fontWeight: FontWeight.w800,
+                        color: isDark ? Colors.white : AppTheme.textDark,
+                        letterSpacing: 0.3,
+                      ),
+                    ),
+                    SizedBox(height: 4.h),
+                    Text(
+                      'Add up to $_kMaxInstructors instructors',
+                      style: TextStyle(
+                        fontSize: 12.sp,
+                        color: isDark ? Colors.white70 : AppTheme.textGray,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          if (_instituteId != null) ...[
+            SizedBox(height: 12.h),
+            Container(
+              padding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 8.h),
+              decoration: BoxDecoration(
+                color: AppTheme.primaryBlue.withOpacity(isDark ? 0.15 : 0.08),
+                borderRadius: BorderRadius.circular(8.r),
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.info_rounded, size: 16.sp, color: AppTheme.primaryBlue),
+                  SizedBox(width: 8.w),
+                  Expanded(
+                    child: Text(
+                      'Institute ID: ${formatInstituteIdForDisplay(_instituteId!)}',
+                      style: TextStyle(
+                        fontSize: 12.sp,
+                        fontWeight: FontWeight.w600,
+                        color: AppTheme.primaryBlue,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+          if (atLimit) ...[
+            SizedBox(height: 12.h),
+            Container(
+              padding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 8.h),
+              decoration: BoxDecoration(
+                color: AppTheme.accentRed.withOpacity(isDark ? 0.15 : 0.08),
+                borderRadius: BorderRadius.circular(8.r),
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.warning_rounded, size: 16.sp, color: AppTheme.accentRed),
+                  SizedBox(width: 8.w),
+                  Expanded(
+                    child: Text(
+                      'Maximum reached ($_kMaxInstructors/$_kMaxInstructors)',
+                      style: TextStyle(
+                        fontSize: 12.sp,
+                        fontWeight: FontWeight.w600,
+                        color: AppTheme.accentRed.withValues(alpha: 0.9),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFormCard(bool isDark, bool atLimit) {
+    return Container(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            AppTheme.accentSaffron.withOpacity(isDark ? 0.12 : 0.06),
+            AppTheme.accentSaffron.withOpacity(isDark ? 0.06 : 0.02),
+          ],
+        ),
+        borderRadius: BorderRadius.circular(18.r),
+        border: Border.all(
+          color: AppTheme.accentSaffron.withOpacity(isDark ? 0.3 : 0.15),
+          width: 1.5,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: AppTheme.accentSaffron.withOpacity(isDark ? 0.1 : 0.06),
+            blurRadius: 16.r,
+            offset: Offset(0, 4.h),
+          ),
+        ],
+      ),
+      padding: EdgeInsets.all(18.w),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            'Add New Instructor',
+            style: TextStyle(
+              fontSize: 15.sp,
+              fontWeight: FontWeight.w700,
+              color: isDark ? Colors.white : AppTheme.textDark,
+              letterSpacing: 0.3,
+            ),
+          ),
+          SizedBox(height: 16.h),
+          _buildModernTextField(
+            controller: _firstCtrl,
+            label: 'First name',
+            icon: Icons.person_outline,
+            isDark: isDark,
+            validator: (v) {
+              if (v == null || v.trim().isEmpty) return 'Required';
+              return null;
+            },
+          ),
+          SizedBox(height: 14.h),
+          _buildModernTextField(
+            controller: _middleCtrl,
+            label: 'Middle name',
+            icon: Icons.person_outline,
+            isDark: isDark,
+            validator: (v) {
+              if (v == null || v.trim().isEmpty) return 'Required';
+              return null;
+            },
+          ),
+          SizedBox(height: 14.h),
+          _buildModernTextField(
+            controller: _lastCtrl,
+            label: 'Last name',
+            icon: Icons.person_outline,
+            isDark: isDark,
+            validator: (v) {
+              if (v == null || v.trim().isEmpty) return 'Required';
+              return null;
+            },
+          ),
+          SizedBox(height: 14.h),
+          _buildModernTextField(
+            controller: _mobileCtrl,
+            label: 'Mobile number',
+            icon: Icons.phone_outlined,
+            isDark: isDark,
+            keyboardType: TextInputType.phone,
+            inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+            maxLength: 15,
+            validator: (v) {
+              final d = (v ?? '').trim().replaceAll(RegExp(r'\D'), '');
+              if (d.isEmpty) return 'Required';
+              if (d.length < 10 || d.length > 15) {
+                return 'Use 10–15 digits';
+              }
+              return null;
+            },
+          ),
+          SizedBox(height: 14.h),
+          _buildModernTextField(
+            controller: _pinCtrl,
+            label: 'PIN (4 digits)',
+            icon: Icons.lock_outline,
+            isDark: isDark,
+            obscureText: true,
+            keyboardType: TextInputType.number,
+            onChanged: (_) => setState(() {}),
+            inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+            maxLength: 4,
+            validator: (v) {
+              final p = v?.trim() ?? '';
+              if (!AuthService.isValidLoginPinLength(p)) {
+                return AuthService.loginPinLengthMessage;
+              }
+              final pa = CredentialStrengthAnalysis.analyzePinFour(p);
+              if (pa.level == CredentialStrengthLevel.weak) {
+                return pa.hint ?? 'Choose a stronger PIN';
+              }
+              return null;
+            },
+          ),
+          Padding(
+            padding: EdgeInsets.only(top: 8.h),
+            child: CredentialStrengthIndicator(
+              analysis: CredentialStrengthAnalysis.analyzePinFour(_pinCtrl.text.trim()),
+              dense: true,
+              forPin: true,
+            ),
+          ),
+          SizedBox(height: 14.h),
+          _buildModernTextField(
+            controller: _confirmPinCtrl,
+            label: 'Confirm PIN',
+            icon: Icons.lock_outline,
+            isDark: isDark,
+            obscureText: true,
+            keyboardType: TextInputType.number,
+            inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+            maxLength: 4,
+            validator: (v) {
+              if (v != _pinCtrl.text) return 'PINs do not match';
+              return null;
+            },
+          ),
+          SizedBox(height: 24.h),
+          _buildModernButton(isDark, atLimit),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildModernTextField({
+    required TextEditingController controller,
+    required String label,
+    required IconData icon,
+    required bool isDark,
+    TextInputType? keyboardType,
+    List<TextInputFormatter>? inputFormatters,
+    int? maxLength,
+    bool obscureText = false,
+    Function(String)? onChanged,
+    String? Function(String?)? validator,
+  }) {
+    return TextFormField(
+      controller: controller,
+      keyboardType: keyboardType,
+      inputFormatters: inputFormatters,
+      maxLength: maxLength,
+      obscureText: obscureText,
+      onChanged: onChanged,
+      textCapitalization: !obscureText ? TextCapitalization.words : TextCapitalization.none,
+      validator: validator,
+      style: TextStyle(
+        fontSize: 14.sp,
+        color: isDark ? Colors.white : AppTheme.textDark,
+      ),
+      decoration: InputDecoration(
+        labelText: label,
+        prefixIcon: Icon(icon, color: AppTheme.primaryBlue, size: 20.sp),
+        counterText: '',
+        filled: true,
+        fillColor: isDark
+            ? Colors.white.withOpacity(0.05)
+            : AppTheme.primaryBlue.withOpacity(0.04),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12.r),
+          borderSide: BorderSide(
+            color: AppTheme.primaryBlue.withOpacity(isDark ? 0.3 : 0.15),
+            width: 1.5,
+          ),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12.r),
+          borderSide: BorderSide(
+            color: AppTheme.primaryBlue.withOpacity(isDark ? 0.25 : 0.1),
+            width: 1.5,
+          ),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12.r),
+          borderSide: BorderSide(
+            color: AppTheme.primaryBlue,
+            width: 2,
+          ),
+        ),
+        labelStyle: TextStyle(
+          fontSize: 13.sp,
+          color: isDark ? Colors.white70 : AppTheme.textGray,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildModernButton(bool isDark, bool atLimit) {
+    return Container(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            AppTheme.primaryBlue,
+            AppTheme.primaryBlue.withValues(alpha: 0.8),
+          ],
+        ),
+        borderRadius: BorderRadius.circular(12.r),
+        boxShadow: [
+          BoxShadow(
+            color: AppTheme.primaryBlue.withOpacity(_busy ? 0 : 0.3),
+            blurRadius: 12,
+            offset: Offset(0, 4.h),
+            spreadRadius: 1,
+          ),
+        ],
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: (_busy || atLimit) ? null : _submit,
+          borderRadius: BorderRadius.circular(12.r),
+          child: Padding(
+            padding: EdgeInsets.symmetric(vertical: 16.h),
+            child: Center(
+              child: _busy
+                  ? SizedBox(
+                      height: 24,
+                      width: 24,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Colors.white,
+                      ),
+                    )
+                  : Text(
+                      'Create Instructor',
+                      style: TextStyle(
+                        fontSize: 15.sp,
+                        fontWeight: FontWeight.w700,
+                        color: Colors.white,
+                        letterSpacing: 0.3,
+                      ),
+                    ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildInstructorsHeader(bool isDark) {
+    return Row(
+      children: [
+        Container(
+          padding: EdgeInsets.all(8.w),
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            gradient: LinearGradient(
+              colors: [
+                AppTheme.primaryGreen.withOpacity(0.2),
+                AppTheme.primaryGreen.withOpacity(0.08),
+              ],
+            ),
+          ),
+          child: Icon(Icons.people_rounded, size: 20.sp, color: AppTheme.primaryGreen),
+        ),
+        SizedBox(width: 10.w),
+        Expanded(
+          child: Text(
+            _staffRows.isEmpty
+                ? 'Institute Instructors'
+                : 'Instructors (${_staffRows.length}/$_kMaxInstructors)',
+            style: TextStyle(
+              fontSize: 16.sp,
+              fontWeight: FontWeight.w800,
+              color: isDark ? Colors.white : AppTheme.textDark,
+              letterSpacing: 0.2,
+            ),
+          ),
+        ),
+        if (_instituteId != null)
+          IconButton(
+            tooltip: 'Refresh list',
+            onPressed: _loadingStaff ? null : () => _loadStaffUsers(_instituteId!),
+            icon: Icon(
+              Icons.refresh_rounded,
+              color: AppTheme.primaryGreen,
+              size: 20.sp,
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget _buildEmptyState(bool isDark) {
+    return Container(
+      width: double.infinity,
+      padding: EdgeInsets.symmetric(vertical: 32.h, horizontal: 16.w),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            AppTheme.primaryBlue.withOpacity(isDark ? 0.08 : 0.04),
+            AppTheme.primaryBlue.withOpacity(isDark ? 0.04 : 0.02),
+          ],
+        ),
+        borderRadius: BorderRadius.circular(16.r),
+        border: Border.all(
+          color: AppTheme.primaryBlue.withOpacity(isDark ? 0.2 : 0.1),
+          width: 1.5,
+        ),
+      ),
+      child: Column(
+        children: [
+          Text(
+            '👥',
+            style: TextStyle(fontSize: 48.sp),
+          ),
+          SizedBox(height: 12.h),
+          Text(
+            'No Instructors Yet',
+            style: TextStyle(
+              fontSize: 16.sp,
+              fontWeight: FontWeight.w700,
+              color: isDark ? Colors.white : AppTheme.textDark,
+            ),
+          ),
+          SizedBox(height: 8.h),
+          Text(
+            'Add your first instructor using the form above',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontSize: 12.sp,
+              color: isDark ? Colors.white70 : AppTheme.textGray,
+              height: 1.5,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildInstructorsList(bool isDark) {
+    return ListView.separated(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      itemCount: _staffRows.length,
+      separatorBuilder: (context, _) => SizedBox(height: 10.h),
+      itemBuilder: (context, index) {
+        final r = _staffRows[index];
+        final name = (r['name'] as String?)?.trim() ?? '—';
+        return _buildInstructorCard(r, name, isDark);
+      },
+    );
+  }
+
+  Widget _buildInstructorCard(Map<String, dynamic> r, String name, bool isDark) {
+    final email = (r['email'] as String?)?.trim() ?? '';
+    final mob = (r['phone_number'] as String?)?.trim() ?? '';
+
+    return GestureDetector(
+      onTap: () => _showInstructorDetails(r, isDark),
+      child: Container(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              AppTheme.primaryGreen.withOpacity(isDark ? 0.1 : 0.05),
+              AppTheme.primaryGreen.withOpacity(isDark ? 0.05 : 0.02),
+            ],
+          ),
+          borderRadius: BorderRadius.circular(14.r),
+          border: Border.all(
+            color: AppTheme.primaryGreen.withOpacity(isDark ? 0.3 : 0.15),
+            width: 1.5,
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: AppTheme.primaryGreen.withOpacity(isDark ? 0.08 : 0.04),
+              blurRadius: 12.r,
+              offset: Offset(0, 3.h),
+            ),
+          ],
+        ),
+        padding: EdgeInsets.all(14.w),
+        child: Row(
+          children: [
+            Container(
+              width: 44.r,
+              height: 44.r,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                gradient: LinearGradient(
+                  colors: [
+                    AppTheme.primaryGreen.withOpacity(0.25),
+                    AppTheme.primaryGreen.withOpacity(0.12),
+                  ],
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: AppTheme.primaryGreen.withOpacity(0.2),
+                    blurRadius: 8,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
+              ),
+              child: Center(
+                child: Text(
+                  name.isNotEmpty ? name.substring(0, 1).toUpperCase() : '?',
+                  style: TextStyle(
+                    color: AppTheme.primaryGreen,
+                    fontWeight: FontWeight.w800,
+                    fontSize: 18.sp,
+                  ),
+                ),
+              ),
+            ),
+            SizedBox(width: 12.w),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    name,
+                    style: TextStyle(
+                      fontWeight: FontWeight.w700,
+                      fontSize: 15.sp,
+                      color: isDark ? Colors.white : AppTheme.textDark,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  SizedBox(height: 4.h),
+                  if (mob.isNotEmpty)
+                    Text(
+                      mob,
+                      style: TextStyle(fontSize: 12.sp, color: AppTheme.textGray),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  if (mob.isNotEmpty && email.isNotEmpty) SizedBox(height: 2.h),
+                  if (email.isNotEmpty)
+                    Text(
+                      email,
+                      style: TextStyle(
+                        fontSize: 11.sp,
+                        color: AppTheme.textGray.withValues(alpha: 0.8),
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                ],
+              ),
+            ),
+            SizedBox(width: 8.w),
+            Icon(
+              Icons.chevron_right_rounded,
+              color: AppTheme.primaryGreen.withOpacity(0.6),
+              size: 24.sp,
+            ),
+          ],
+        ),
       ),
     );
   }
