@@ -1072,7 +1072,6 @@ class _StudentManagementScreenState extends State<StudentManagementScreen>
                   SliverToBoxAdapter(child: _buildAutoFaceScanBanner()),
                   SliverToBoxAdapter(child: _buildPhotoInstructionsCard()),
                   SliverToBoxAdapter(child: _buildSearchBar()),
-                  SliverToBoxAdapter(child: _buildAttendanceFilterBar()),
                   if (_instituteId != null)
                     SliverToBoxAdapter(child: _buildSummaryStatCards()),
                   if (_instituteId != null &&
