@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:ui' as ui;
 
 import 'package:flutter/foundation.dart' show kDebugMode, debugPrint;
 import 'package:flutter/material.dart';
@@ -485,9 +486,11 @@ class _GpsSettingsScreenState extends State<GpsSettingsScreen> with WidgetsBindi
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     if (_isCheckingRole) {
       return Scaffold(
-        backgroundColor: AppTheme.backgroundGrey,
+        backgroundColor: isDark ? const Color(0xFF0A0A0A) : const Color(0xFFF5F5F5),
         body: const SafeArea(
           top: false,
           child: Center(
@@ -514,265 +517,589 @@ class _GpsSettingsScreenState extends State<GpsSettingsScreen> with WidgetsBindi
         }
       },
       child: Scaffold(
-        backgroundColor: AppTheme.backgroundGrey,
+        backgroundColor: isDark ? const Color(0xFF0A0A0A) : const Color(0xFFF5F5F5),
         body: SafeArea(
           top: false,
           child: SingleChildScrollView(
-            padding: const EdgeInsets.all(20),
+            padding: EdgeInsets.all(16.w),
             child: Form(
               key: _formKey,
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  // Info Card
-                  Container(
-                    padding: const EdgeInsets.all(20),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(16),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withOpacity(0.08),
-                          blurRadius: 12,
-                          offset: const Offset(0, 4),
-                        ),
-                      ],
-                    ),
-                    child: Row(
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.all(12),
-                          decoration: BoxDecoration(
-                            color: AppTheme.primaryBlue.withOpacity(0.1),
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: const Icon(Icons.info_outline, color: AppTheme.primaryBlue, size: 28),
-                        ),
-                        const SizedBox(width: 16),
-                        Expanded(
-                          child: Text(
-                            "Set your personal attendance zone. Each admin has their own geo-fencing settings. You can only mark attendance within your configured radius.\n\n"
-                            "Unlock or save location on the website? This screen updates automatically every few seconds, and when you return to the app.",
-                            style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                              color: AppTheme.textGray,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 32),
-
-              // Radius Lock Banner (Always shown - radius is always locked)
-              Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: Colors.blue.withValues(alpha: 0.1),
-                  border: Border.all(color: Colors.blue, width: 2),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Row(
-                  children: [
-                    const Icon(Icons.lock, color: Colors.blue, size: 24),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text(
-                            "Radius fixed at 15 m",
-                            style: TextStyle(
-                              fontWeight: FontWeight.bold,
-                              color: Colors.blue,
-                              fontSize: 16,
-                            ),
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            "Attendance may only be marked within about ${kAttendanceMaxEffectiveFenceMeters.toStringAsFixed(0)} m of your locked point (nominal ${kAttendanceFenceRadiusMeters.toStringAsFixed(0)} m + small GPS tolerance). This cannot be changed.",
-                            style: TextStyle(
-                              color: Colors.blue.withValues(alpha: 0.8),
-                              fontSize: 12,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 24),
-
-              // Location Lock Banner (Only shown if location is set and locked)
-              Visibility(
-                visible: _isLocked,
-                maintainSize: true,
-                maintainAnimation: true,
-                maintainState: true,
-                child: Column(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        color: Colors.orange.withValues(alpha: 0.1),
-                        border: Border.all(color: Colors.orange, width: 2),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Row(
-                        children: [
-                          const Icon(Icons.lock, color: Colors.orange, size: 24),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                const Text(
-                                  "Location Locked",
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    color: Colors.orange,
-                                    fontSize: 16,
-                                  ),
-                                ),
-                                const SizedBox(height: 4),
-                                Text(
-                                  "Location coordinates are locked after being set. Contact super admin to unlock for changes.",
-                                  style: TextStyle(
-                                    color: Colors.orange.withValues(alpha: 0.8),
-                                    fontSize: 12,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 24),
-                  ],
-                ),
-              ),
-
-              Text(
-                "School Coordinates",
-                style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                  fontWeight: FontWeight.bold,
-                  color: AppTheme.textDark,
-                ),
-              ),
-              const SizedBox(height: 16),
-              
-              Row(
-                children: [
-                  Expanded(
-                    child: TextFormField(
-                      controller: _latController,
-                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                      decoration: const InputDecoration(
-                        labelText: "Latitude",
-                        prefixIcon: Icon(Icons.map_outlined),
-                        helperText: "Auto-filled — use current location",
-                        helperMaxLines: 2,
-                      ),
-                      enabled: false,
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: TextFormField(
-                      controller: _lngController,
-                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                      decoration: const InputDecoration(
-                        labelText: "Longitude",
-                        prefixIcon: Icon(Icons.map_outlined),
-                        helperText: "Auto-filled — use current location",
-                        helperMaxLines: 2,
-                      ),
-                      enabled: false,
-                    ),
-                  ),
+                  _buildHeaderCard(isDark),
+                  SizedBox(height: 20.h),
+                  _buildInfoCard(isDark),
+                  SizedBox(height: 20.h),
+                  _buildRadiusLockBanner(isDark),
+                  SizedBox(height: 20.h),
+                  if (_isLocked) _buildLocationLockBanner(isDark),
+                  if (_isLocked) SizedBox(height: 20.h),
+                  _buildCoordinatesSection(isDark),
+                  SizedBox(height: 28.h),
+                  _buildRadiusSection(isDark),
+                  SizedBox(height: 32.h),
+                  _buildSaveButton(isDark),
+                  SizedBox(height: 24.h),
                 ],
               ),
-              
-              const SizedBox(height: 16),
-              SizedBox(
-                width: double.infinity,
-                child: OutlinedButton.icon(
-                  onPressed: (_isLoading || _isLocked) ? null : _getCurrentLocation,
-                  icon: const Icon(Icons.my_location),
-                  label: const Text("Use Current Location"),
-                  style: OutlinedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                    side: const BorderSide(color: AppTheme.primaryBlue),
-                    foregroundColor: AppTheme.primaryBlue,
-                  ),
-                ),
-              ),
-
-              const SizedBox(height: 32),
-
-              Text(
-                "Allowed Radius",
-                style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                  fontWeight: FontWeight.bold,
-                  color: AppTheme.textDark,
-                ),
-              ),
-              const SizedBox(height: 16),
-              TextFormField(
-                controller: _radiusController,
-                keyboardType: TextInputType.number,
-                decoration: InputDecoration(
-                  labelText: "Radius in Meters",
-                  prefixIcon: const Icon(Icons.radar_outlined),
-                  helperText:
-                      "Radius is fixed at 15 m for all admins. It cannot be changed, even by super admin.",
-                  helperMaxLines: 2,
-                ),
-                validator: (v) {
-                  if (v!.isEmpty) return "Required";
-                  final radius = double.tryParse(v);
-                  if (radius == null) return "Invalid number";
-                  if (radius != kAttendanceFenceRadiusMeters) {
-                    return "Radius must be exactly ${kAttendanceFenceRadiusMeters.toStringAsFixed(0)} m.";
-                  }
-                  return null;
-                },
-                enabled: false,
-                readOnly: true,
-              ),
-
-              const SizedBox(height: 40),
-
-              SizedBox(
-                width: double.infinity,
-                height: 56,
-                child: ElevatedButton(
-                  onPressed: (_isLoading || _isLocked) ? null : _saveSettings,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: _isLocked ? Colors.grey : AppTheme.primaryBlue,
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                  ),
-                  child: _isLoading 
-                    ? const SizedBox(
-                        height: 24,
-                        width: 24,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2.5,
-                          color: Colors.white,
-                        ),
-                      )
-                    : Text(
-                        _isLocked ? "Location Locked" : "Save Configuration",
-                        style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-                      ),
-                ),
-              ),
-            ],
+            ),
           ),
         ),
       ),
+    );
+  }
+
+  Widget _buildHeaderCard(bool isDark) {
+    return Container(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            AppTheme.primaryBlue.withOpacity(isDark ? 0.15 : 0.08),
+            AppTheme.primaryBlue.withOpacity(isDark ? 0.08 : 0.03),
+          ],
+        ),
+        borderRadius: BorderRadius.circular(18.r),
+        border: Border.all(
+          color: AppTheme.primaryBlue.withOpacity(isDark ? 0.3 : 0.15),
+          width: 1.5,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: AppTheme.primaryBlue.withOpacity(isDark ? 0.1 : 0.06),
+            blurRadius: 16.r,
+            offset: Offset(0, 4.h),
+          ),
+        ],
+      ),
+      padding: EdgeInsets.all(16.w),
+      child: Row(
+        children: [
+          Container(
+            padding: EdgeInsets.all(10.w),
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              gradient: LinearGradient(
+                colors: [
+                  AppTheme.primaryBlue.withOpacity(0.3),
+                  AppTheme.primaryBlue.withOpacity(0.15),
+                ],
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: AppTheme.primaryBlue.withOpacity(0.3),
+                  blurRadius: 12,
+                  offset: const Offset(0, 3),
+                ),
+              ],
+            ),
+            child: Icon(Icons.location_on_rounded, color: AppTheme.primaryBlue, size: 24.sp),
+          ),
+          SizedBox(width: 12.w),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'GPS Attendance Zone',
+                  style: TextStyle(
+                    fontSize: 17.sp,
+                    fontWeight: FontWeight.w800,
+                    color: isDark ? Colors.white : AppTheme.textDark,
+                    letterSpacing: 0.3,
+                  ),
+                ),
+                SizedBox(height: 4.h),
+                Text(
+                  'Configure your location boundary',
+                  style: TextStyle(
+                    fontSize: 12.sp,
+                    color: isDark ? Colors.white70 : AppTheme.textGray,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildInfoCard(bool isDark) {
+    return Container(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            AppTheme.accentSaffron.withOpacity(isDark ? 0.1 : 0.05),
+            AppTheme.accentSaffron.withOpacity(isDark ? 0.05 : 0.02),
+          ],
+        ),
+        borderRadius: BorderRadius.circular(14.r),
+        border: Border.all(
+          color: AppTheme.accentSaffron.withOpacity(isDark ? 0.25 : 0.15),
+          width: 1.5,
+        ),
+      ),
+      padding: EdgeInsets.all(14.w),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            padding: EdgeInsets.all(8.w),
+            decoration: BoxDecoration(
+              color: AppTheme.accentSaffron.withOpacity(isDark ? 0.2 : 0.1),
+              borderRadius: BorderRadius.circular(8.r),
+            ),
+            child: Icon(Icons.info_rounded, color: AppTheme.accentSaffron, size: 20.sp),
+          ),
+          SizedBox(width: 12.w),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Personal Attendance Zone',
+                  style: TextStyle(
+                    fontSize: 13.sp,
+                    fontWeight: FontWeight.w700,
+                    color: isDark ? Colors.white : AppTheme.textDark,
+                  ),
+                ),
+                SizedBox(height: 6.h),
+                Text(
+                  'Each admin has their own geo-fencing settings. You can only mark attendance within your configured radius.',
+                  style: TextStyle(
+                    fontSize: 12.sp,
+                    color: isDark ? Colors.white70 : AppTheme.textGray,
+                    height: 1.4,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildRadiusLockBanner(bool isDark) {
+    return Container(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            AppTheme.primaryBlue.withOpacity(isDark ? 0.12 : 0.06),
+            AppTheme.primaryBlue.withOpacity(isDark ? 0.06 : 0.02),
+          ],
+        ),
+        borderRadius: BorderRadius.circular(12.r),
+        border: Border.all(
+          color: AppTheme.primaryBlue.withOpacity(isDark ? 0.4 : 0.2),
+          width: 1.5,
+        ),
+      ),
+      padding: EdgeInsets.all(14.w),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            padding: EdgeInsets.all(8.w),
+            decoration: BoxDecoration(
+              color: AppTheme.primaryBlue.withOpacity(isDark ? 0.2 : 0.1),
+              borderRadius: BorderRadius.circular(8.r),
+            ),
+            child: Icon(Icons.lock_rounded, color: AppTheme.primaryBlue, size: 20.sp),
+          ),
+          SizedBox(width: 12.w),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Radius Fixed at ${kAttendanceFenceRadiusMeters.toStringAsFixed(0)} m',
+                  style: TextStyle(
+                    fontSize: 13.sp,
+                    fontWeight: FontWeight.w700,
+                    color: isDark ? Colors.white : AppTheme.textDark,
+                  ),
+                ),
+                SizedBox(height: 4.h),
+                Text(
+                  'Attendance may only be marked within about ${kAttendanceMaxEffectiveFenceMeters.toStringAsFixed(0)} m of your location (nominal ${kAttendanceFenceRadiusMeters.toStringAsFixed(0)} m + GPS tolerance).',
+                  style: TextStyle(
+                    fontSize: 11.sp,
+                    color: isDark ? Colors.white70 : AppTheme.textGray,
+                    height: 1.4,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildLocationLockBanner(bool isDark) {
+    return Container(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            AppTheme.accentRed.withOpacity(isDark ? 0.12 : 0.06),
+            AppTheme.accentRed.withOpacity(isDark ? 0.06 : 0.02),
+          ],
+        ),
+        borderRadius: BorderRadius.circular(12.r),
+        border: Border.all(
+          color: AppTheme.accentRed.withOpacity(isDark ? 0.4 : 0.2),
+          width: 1.5,
+        ),
+      ),
+      padding: EdgeInsets.all(14.w),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            padding: EdgeInsets.all(8.w),
+            decoration: BoxDecoration(
+              color: AppTheme.accentRed.withOpacity(isDark ? 0.2 : 0.1),
+              borderRadius: BorderRadius.circular(8.r),
+            ),
+            child: Icon(Icons.lock_outline_rounded, color: AppTheme.accentRed, size: 20.sp),
+          ),
+          SizedBox(width: 12.w),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Location Locked',
+                  style: TextStyle(
+                    fontSize: 13.sp,
+                    fontWeight: FontWeight.w700,
+                    color: isDark ? Colors.white : AppTheme.textDark,
+                  ),
+                ),
+                SizedBox(height: 4.h),
+                Text(
+                  'Coordinates are locked after being set. Contact super admin to unlock for changes.',
+                  style: TextStyle(
+                    fontSize: 11.sp,
+                    color: isDark ? Colors.white70 : AppTheme.textGray,
+                    height: 1.4,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCoordinatesSection(bool isDark) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Container(
+              padding: EdgeInsets.all(6.w),
+              decoration: BoxDecoration(
+                color: AppTheme.primaryGreen.withOpacity(0.15),
+                borderRadius: BorderRadius.circular(8.r),
+              ),
+              child: Icon(Icons.map_rounded, color: AppTheme.primaryGreen, size: 18.sp),
+            ),
+            SizedBox(width: 8.w),
+            Text(
+              'School Coordinates',
+              style: TextStyle(
+                fontSize: 15.sp,
+                fontWeight: FontWeight.w700,
+                color: isDark ? Colors.white : AppTheme.textDark,
+              ),
+            ),
+          ],
+        ),
+        SizedBox(height: 14.h),
+        Row(
+          children: [
+            Expanded(
+              child: _buildModernField(
+                controller: _latController,
+                label: 'Latitude',
+                icon: Icons.location_on_outlined,
+                isDark: isDark,
+                enabled: false,
+              ),
+            ),
+            SizedBox(width: 12.w),
+            Expanded(
+              child: _buildModernField(
+                controller: _lngController,
+                label: 'Longitude',
+                icon: Icons.location_on_outlined,
+                isDark: isDark,
+                enabled: false,
+              ),
+            ),
+          ],
+        ),
+        SizedBox(height: 14.h),
+        _buildLocationButton(isDark),
+      ],
+    );
+  }
+
+  Widget _buildModernField({
+    required TextEditingController controller,
+    required String label,
+    required IconData icon,
+    required bool isDark,
+    bool enabled = true,
+  }) {
+    return TextFormField(
+      controller: controller,
+      enabled: enabled,
+      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+      style: TextStyle(
+        fontSize: 13.sp,
+        color: isDark ? Colors.white : AppTheme.textDark,
+      ),
+      decoration: InputDecoration(
+        labelText: label,
+        prefixIcon: Icon(icon, color: AppTheme.primaryGreen, size: 18.sp),
+        filled: true,
+        fillColor: isDark
+            ? Colors.white.withOpacity(0.05)
+            : AppTheme.primaryGreen.withOpacity(0.04),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(10.r),
+          borderSide: BorderSide(
+            color: AppTheme.primaryGreen.withOpacity(isDark ? 0.2 : 0.1),
+            width: 1.5,
+          ),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(10.r),
+          borderSide: BorderSide(
+            color: AppTheme.primaryGreen.withOpacity(isDark ? 0.15 : 0.08),
+            width: 1.5,
+          ),
+        ),
+        disabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(10.r),
+          borderSide: BorderSide(
+            color: AppTheme.primaryGreen.withOpacity(isDark ? 0.1 : 0.05),
+            width: 1.5,
+          ),
+        ),
+        labelStyle: TextStyle(
+          fontSize: 12.sp,
+          color: isDark ? Colors.white70 : AppTheme.textGray,
+        ),
+        contentPadding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 12.h),
+      ),
+    );
+  }
+
+  Widget _buildLocationButton(bool isDark) {
+    return Container(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [
+            AppTheme.primaryGreen.withOpacity(0.1),
+            AppTheme.primaryGreen.withOpacity(0.05),
+          ],
+        ),
+        borderRadius: BorderRadius.circular(10.r),
+        border: Border.all(
+          color: AppTheme.primaryGreen.withOpacity(isDark ? 0.4 : 0.2),
+          width: 1.5,
+        ),
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: (_isLoading || _isLocked) ? null : _getCurrentLocation,
+          borderRadius: BorderRadius.circular(10.r),
+          child: Padding(
+            padding: EdgeInsets.symmetric(vertical: 14.h, horizontal: 12.w),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(
+                  Icons.my_location_rounded,
+                  color: AppTheme.primaryGreen,
+                  size: 20.sp,
+                ),
+                SizedBox(width: 8.w),
+                Text(
+                  'Use Current Location',
+                  style: TextStyle(
+                    fontSize: 13.sp,
+                    fontWeight: FontWeight.w700,
+                    color: AppTheme.primaryGreen,
+                    letterSpacing: 0.2,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildRadiusSection(bool isDark) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Container(
+              padding: EdgeInsets.all(6.w),
+              decoration: BoxDecoration(
+                color: AppTheme.accentOrange.withOpacity(0.15),
+                borderRadius: BorderRadius.circular(8.r),
+              ),
+              child: Icon(Icons.radar_rounded, color: AppTheme.accentOrange, size: 18.sp),
+            ),
+            SizedBox(width: 8.w),
+            Text(
+              'Allowed Radius',
+              style: TextStyle(
+                fontSize: 15.sp,
+                fontWeight: FontWeight.w700,
+                color: isDark ? Colors.white : AppTheme.textDark,
+              ),
+            ),
+          ],
+        ),
+        SizedBox(height: 14.h),
+        TextFormField(
+          controller: _radiusController,
+          enabled: false,
+          readOnly: true,
+          keyboardType: TextInputType.number,
+          style: TextStyle(
+            fontSize: 13.sp,
+            color: isDark ? Colors.white70 : AppTheme.textGray,
+          ),
+          decoration: InputDecoration(
+            labelText: 'Radius in Meters',
+            prefixIcon: Icon(Icons.radar_rounded, color: AppTheme.accentOrange, size: 18.sp),
+            filled: true,
+            fillColor: isDark
+                ? Colors.white.withOpacity(0.03)
+                : AppTheme.accentOrange.withOpacity(0.03),
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(10.r),
+              borderSide: BorderSide(
+                color: AppTheme.accentOrange.withOpacity(isDark ? 0.15 : 0.08),
+                width: 1.5,
+              ),
+            ),
+            disabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(10.r),
+              borderSide: BorderSide(
+                color: AppTheme.accentOrange.withOpacity(isDark ? 0.15 : 0.08),
+                width: 1.5,
+              ),
+            ),
+            labelStyle: TextStyle(
+              fontSize: 12.sp,
+              color: isDark ? Colors.white70 : AppTheme.textGray,
+            ),
+            contentPadding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 12.h),
+          ),
+          validator: (v) {
+            if (v!.isEmpty) return 'Required';
+            final radius = double.tryParse(v);
+            if (radius == null) return 'Invalid number';
+            if (radius != kAttendanceFenceRadiusMeters) {
+              return 'Radius must be exactly ${kAttendanceFenceRadiusMeters.toStringAsFixed(0)} m';
+            }
+            return null;
+          },
+        ),
+        SizedBox(height: 10.h),
+        Container(
+          padding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 8.h),
+          decoration: BoxDecoration(
+            color: AppTheme.accentOrange.withOpacity(isDark ? 0.08 : 0.04),
+            borderRadius: BorderRadius.circular(8.r),
+          ),
+          child: Text(
+            'This value is fixed and cannot be changed.',
+            style: TextStyle(
+              fontSize: 11.sp,
+              color: isDark ? Colors.white70 : AppTheme.textGray,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildSaveButton(bool isDark) {
+    return Container(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            _isLocked ? Colors.grey.withOpacity(0.5) : AppTheme.primaryBlue,
+            _isLocked
+                ? Colors.grey.withOpacity(0.4)
+                : AppTheme.primaryBlue.withValues(alpha: 0.8),
+          ],
+        ),
+        borderRadius: BorderRadius.circular(12.r),
+        boxShadow: [
+          BoxShadow(
+            color: (_isLocked ? Colors.grey : AppTheme.primaryBlue).withOpacity(_isLoading ? 0 : 0.3),
+            blurRadius: 12,
+            offset: Offset(0, 4.h),
+          ),
+        ],
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: (_isLoading || _isLocked) ? null : _saveSettings,
+          borderRadius: BorderRadius.circular(12.r),
+          child: Padding(
+            padding: EdgeInsets.symmetric(vertical: 16.h),
+            child: Center(
+              child: _isLoading
+                  ? SizedBox(
+                      height: 24,
+                      width: 24,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Colors.white,
+                      ),
+                    )
+                  : Text(
+                      _isLocked ? '✓ Location Locked' : 'Save Configuration',
+                      style: TextStyle(
+                        fontSize: 15.sp,
+                        fontWeight: FontWeight.w700,
+                        color: Colors.white,
+                        letterSpacing: 0.3,
+                      ),
+                    ),
+            ),
+          ),
         ),
       ),
     );
