@@ -1112,8 +1112,6 @@ class _StudentManagementScreenState extends State<StudentManagementScreen>
                 ),
                 SizedBox(width: 4.w),
               ],
-              Icon(Icons.school_rounded, color: Colors.white.withValues(alpha: 0.95), size: 22.sp),
-              SizedBox(width: 8.w),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
