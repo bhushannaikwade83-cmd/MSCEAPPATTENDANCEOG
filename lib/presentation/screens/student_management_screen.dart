@@ -2678,16 +2678,23 @@ class _StudentManagementScreenState extends State<StudentManagementScreen>
 
   Widget _buildSearchBar() {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    
+
     return Container(
-      padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 12.h),
+      padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 14.h),
       decoration: BoxDecoration(
-        color: isDark ? Colors.white.withOpacity(0.05) : Colors.white,
+        gradient: LinearGradient(
+          colors: isDark
+              ? [Colors.white.withOpacity(0.08), Colors.white.withOpacity(0.04)]
+              : [Colors.white, Colors.grey.shade50],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 4,
-            offset: const Offset(0, 2),
+            color: AppTheme.primaryBlue.withOpacity(0.08),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+            spreadRadius: 1,
           ),
         ],
       ),
@@ -2697,20 +2704,21 @@ class _StudentManagementScreenState extends State<StudentManagementScreen>
           if (mounted) setState(() {});
         },
         decoration: InputDecoration(
-          hintText: 'Search by name, SR no., year, subject…',
+          hintText: '🔍 Search name, SR no., year…',
           hintStyle: TextStyle(
             color: isDark ? Colors.white.withOpacity(0.5) : AppTheme.textGray,
             fontSize: 14.sp,
+            fontWeight: FontWeight.w500,
           ),
           prefixIcon: Icon(
-            Icons.search,
-            color: isDark ? Colors.white.withOpacity(0.7) : AppTheme.primaryBlue,
+            Icons.search_rounded,
+            color: AppTheme.primaryBlue.withOpacity(isDark ? 0.6 : 0.7),
             size: 24.sp,
           ),
           suffixIcon: _searchController.text.isNotEmpty
               ? IconButton(
                   icon: Icon(
-                    Icons.clear,
+                    Icons.close_rounded,
                     color: isDark ? Colors.white.withOpacity(0.7) : AppTheme.textGray,
                     size: 20.sp,
                   ),
