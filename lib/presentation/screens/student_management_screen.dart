@@ -1198,32 +1198,35 @@ class _StudentManagementScreenState extends State<StudentManagementScreen>
       padding: EdgeInsets.fromLTRB(16.w, 12.h, 16.w, 0),
       child: Row(
         children: [
-          Expanded(
-            child: _bigStatCard(
-              label: 'Total',
-              value: _statsTotal,
-              icon: Icons.people_alt_rounded,
-              color: AppTheme.primaryBlue,
-              isDark: isDark,
-            ),
-          ),
-          SizedBox(width: 10.w),
-          Expanded(
-            child: _bigStatCard(
-              label: 'Present',
-              value: _statsPresentToday,
-              icon: Icons.check_circle_rounded,
-              color: AppTheme.primaryGreen,
-              isDark: isDark,
-            ),
-          ),
-          SizedBox(width: 10.w),
+          // 1️⃣ Absent (Orange)
           Expanded(
             child: _bigStatCard(
               label: 'Absent',
               value: _statsAbsentToday,
               icon: Icons.cancel_rounded,
               color: AppTheme.accentRed,
+              isDark: isDark,
+            ),
+          ),
+          SizedBox(width: 10.w),
+          // 2️⃣ Total (White/Neutral)
+          Expanded(
+            child: _bigStatCard(
+              label: 'Total',
+              value: _statsTotal,
+              icon: Icons.people_alt_rounded,
+              color: Colors.grey,
+              isDark: isDark,
+            ),
+          ),
+          SizedBox(width: 10.w),
+          // 3️⃣ Present (Green)
+          Expanded(
+            child: _bigStatCard(
+              label: 'Present',
+              value: _statsPresentToday,
+              icon: Icons.check_circle_rounded,
+              color: AppTheme.primaryGreen,
               isDark: isDark,
             ),
           ),
@@ -1320,8 +1323,14 @@ class _StudentManagementScreenState extends State<StudentManagementScreen>
         const Color(0xFFFF9933),
         const Color(0xFFFF6600),
       ];
+    } else if (baseColor == Colors.grey) {
+      // Total: White/Grey neutral
+      return [
+        const Color(0xFFF5F5F5),
+        const Color(0xFFE0E0E0),
+      ];
     } else {
-      // Total: Orange/Saffron (Indian tricolor)
+      // Default fallback
       return [
         const Color(0xFFFF9933),
         const Color(0xFFE8871A),
