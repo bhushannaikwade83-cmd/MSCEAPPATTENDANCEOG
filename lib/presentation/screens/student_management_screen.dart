@@ -2799,7 +2799,7 @@ class _ScrollingWelcomeMessageState extends State<_ScrollingWelcomeMessage>
                       letterSpacing: 0.3,
                     ),
                     maxLines: 1,
-                    overflow: TextOverflow.visible,
+                    overflow: TextOverflow.clip,
                   ),
                   Text(
                     message,
@@ -2810,7 +2810,7 @@ class _ScrollingWelcomeMessageState extends State<_ScrollingWelcomeMessage>
                       letterSpacing: 0.3,
                     ),
                     maxLines: 1,
-                    overflow: TextOverflow.visible,
+                    overflow: TextOverflow.clip,
                   ),
                 ],
               ),
