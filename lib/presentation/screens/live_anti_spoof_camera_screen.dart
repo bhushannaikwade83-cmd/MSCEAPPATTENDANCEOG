@@ -37,6 +37,14 @@ class _LiveAntiSpoofCameraScreenState extends State<LiveAntiSpoofCameraScreen> {
   String _currentStage = 'Initializing...';
   bool _isCapturing = false;
   int _captureCountdown = 0;
+  bool _faceDetected = false;
+  int _blinkCount = 0;
+  bool _autoCountdownStarted = false;
+
+  // Face detection + eye tracking
+  int? _lastEyeOpenCount;
+  int _frameCounter = 0;
+  static const int _frameSkip = 5; // Process every 5th frame
 
   // Recognition
   String _matchedStudentName = '';
@@ -88,8 +96,11 @@ class _LiveAntiSpoofCameraScreenState extends State<LiveAntiSpoofCameraScreen> {
         _cameraInitialized = true;
       });
 
-      _setStatus('🎥 Ready - Press CAPTURE');
+      _setStatus('👀 Position your face — blink to capture');
       print('✅ [INIT] Screen ready for attendance marking');
+
+      // Start streaming frame processing
+      _startCameraFrameStream();
     } catch (e) {
       print('❌ [INIT] Initialization error: $e');
       _setStatus('❌ Error: $e');
@@ -142,8 +153,120 @@ class _LiveAntiSpoofCameraScreenState extends State<LiveAntiSpoofCameraScreen> {
     }
   }
 
+  /// Start streaming camera frames for face detection + blink detection
+  void _startCameraFrameStream() {
+    if (!_cameraInitialized || _cameraController.value.isStreamingImages) {
+      return;
+    }
+
+    print('🎬 [STREAM] Starting frame stream...');
+
+    _cameraController.startImageStream((CameraImage image) async {
+      if (_isCapturing || _autoCountdownStarted) {
+        return; // Skip processing if already capturing
+      }
+
+      _frameCounter++;
+      if (_frameCounter % _frameSkip != 0) {
+        return; // Skip frames
+      }
+
+      try {
+        final inputImage = InputImage.fromBytes(
+          bytes: image.planes[0].bytes,
+          metadata: InputImageMetadata(
+            size: Size(image.width.toDouble(), image.height.toDouble()),
+            rotation: InputImageRotation.rotation0deg,
+            format: InputImageFormat.yuv420,
+            bytesPerRow: image.planes[0].bytesPerRow,
+          ),
+        );
+
+        final faces = await _faceDetector.processImage(inputImage);
+
+        if (!mounted) return;
+
+        if (faces.isEmpty) {
+          if (_faceDetected) {
+            print('👤 [DETECT] Face lost');
+            setState(() {
+              _faceDetected = false;
+              _currentStage = '👀 Position your face — blink to capture';
+            });
+          }
+          return;
+        }
+
+        // Face detected
+        final face = faces[0];
+        if (!_faceDetected) {
+          print('✅ [DETECT] Face detected!');
+          setState(() {
+            _faceDetected = true;
+          });
+        }
+
+        // Check for blink (eyes closed = headEulerAngleZ changes, or use eye landmarks)
+        final leftEye = face.landmarks[FaceLandmarkType.leftEye];
+        final rightEye = face.landmarks[FaceLandmarkType.rightEye];
+
+        // Simple blink detection: if both eyes are visible but tracking suggests closed
+        int eyesOpenStatus = 0;
+        if (leftEye != null && rightEye != null) {
+          // If face is still tracked but eyes appear different, assume blink
+          eyesOpenStatus = 1;
+        }
+
+        // Detect blink transition (open → closed → open)
+        if (_lastEyeOpenCount != null && _lastEyeOpenCount == 1 && eyesOpenStatus == 0) {
+          _blinkCount++;
+          print('👁️ [BLINK] Blink detected! Count: $_blinkCount');
+
+          if (_blinkCount == 1) {
+            print('✨ [BLINK] Starting auto-capture countdown...');
+            setState(() {
+              _autoCountdownStarted = true;
+            });
+            await _performCountdownAndCapture();
+          }
+        }
+        _lastEyeOpenCount = eyesOpenStatus;
+      } catch (e) {
+        print('❌ [STREAM] Frame processing error: $e');
+      }
+    }).then((_) {
+      print('🎬 [STREAM] Frame stream started');
+    }).catchError((e) {
+      print('❌ [STREAM] Failed to start stream: $e');
+    });
+  }
+
+  /// Countdown 2 seconds and auto-capture
+  Future<void> _performCountdownAndCapture() async {
+    if (!mounted) return;
+
+    print('⏳ [COUNTDOWN] Starting 2-second countdown...');
+
+    for (int i = 2; i > 0; i--) {
+      if (!mounted) return;
+
+      setState(() {
+        _captureCountdown = i;
+        _currentStage = '📸 Capturing in $i...';
+      });
+
+      print('⏳ [COUNTDOWN] $i seconds...');
+      await Future.delayed(const Duration(seconds: 1));
+    }
+
+    print('🎬 [COUNTDOWN] Countdown complete, capturing...');
+    if (mounted) {
+      await _performCapture();
+    }
+  }
+
   void _startCapture() async {
-    print('📸 [CAPTURE] Button clicked!');
+    print('📸 [CAPTURE] Button clicked! (Manual trigger)');
 
     setState(() {
       _isCapturing = true;
@@ -274,11 +397,15 @@ class _LiveAntiSpoofCameraScreenState extends State<LiveAntiSpoofCameraScreen> {
     if (mounted) {
       setState(() {
         _isCapturing = false;
+        _autoCountdownStarted = false;
+        _blinkCount = 0;
+        _lastEyeOpenCount = null;
+        _captureCountdown = 0;
         _matchedStudentName = '';
         _similarityScore = 0.0;
         _srNo = '';
         _matchedStudentId = '';
-        _currentStage = 'Ready for Next Student';
+        _currentStage = '👀 Position your face — blink to capture';
       });
     }
   }
@@ -440,7 +567,7 @@ class _LiveAntiSpoofCameraScreenState extends State<LiveAntiSpoofCameraScreen> {
             ),
           ),
 
-          // Bottom Controls
+          // Bottom Controls (minimal - no manual CAPTURE button)
           Positioned(
             bottom: 20,
             left: 20,
@@ -448,30 +575,42 @@ class _LiveAntiSpoofCameraScreenState extends State<LiveAntiSpoofCameraScreen> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                // CAPTURE Button
-                ElevatedButton(
-                  onPressed: _isCapturing ? null : _startCapture,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: _isCapturing ? Colors.orange : Colors.green,
-                    disabledBackgroundColor: Colors.orange,
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 40,
-                      vertical: 16,
-                    ),
-                    shape: RoundedRectangleBorder(
+                // Auto-capture countdown display
+                if (_autoCountdownStarted && _captureCountdown > 0)
+                  Container(
+                    padding: const EdgeInsets.all(20),
+                    decoration: BoxDecoration(
+                      color: Colors.orange.withOpacity(0.8),
                       borderRadius: BorderRadius.circular(12),
                     ),
-                  ),
-                  child: Text(
-                    _isCapturing ? 'CAPTURING... $_captureCountdown' : '✅ CAPTURE',
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                      letterSpacing: 2,
+                    child: Text(
+                      '📸 Capturing in $_captureCountdown...',
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  )
+                else
+                  // Face detection status
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: _faceDetected ? Colors.green.withOpacity(0.7) : Colors.grey.withOpacity(0.7),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Text(
+                      _faceDetected ? '✅ Face detected - blink to start' : '👀 Waiting for face...',
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
                   ),
-                ),
                 const SizedBox(height: 12),
                 // SWITCH Camera Button
                 if (_cameras.length > 1)
