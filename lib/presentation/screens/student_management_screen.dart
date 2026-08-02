@@ -2777,24 +2777,46 @@ class _ScrollingWelcomeMessageState extends State<_ScrollingWelcomeMessage>
 
   Future<void> _fetchInstituteName() async {
     if (widget.instituteId == null) return;
+    if (kDebugMode) {
+      debugPrint('🔍 Widget fetching institute name for: ${widget.instituteId}');
+    }
     try {
       final result = await appDb
           .from('institutes')
-          .select('name')
+          .select('*')
           .eq('id', widget.instituteId!)
           .maybeSingle();
 
+      if (kDebugMode) {
+        debugPrint('📋 Full result: $result');
+      }
+
       if (mounted && result != null) {
+        final name = result['name'] ?? '—';
         setState(() {
-          _instituteName = result['name'] as String?;
+          _instituteName = name;
           _nameLoaded = true;
         });
         if (kDebugMode) {
           debugPrint('✅ Fetched institute name: $_instituteName');
         }
+      } else if (mounted) {
+        setState(() {
+          _instituteName = '—';
+          _nameLoaded = true;
+        });
+        if (kDebugMode) {
+          debugPrint('⚠️ No result for institute: ${widget.instituteId}');
+        }
       }
     } catch (e) {
       if (kDebugMode) debugPrint('❌ Error fetching institute name: $e');
+      if (mounted) {
+        setState(() {
+          _instituteName = '—';
+          _nameLoaded = true;
+        });
+      }
     }
   }
 
