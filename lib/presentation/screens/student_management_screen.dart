@@ -3037,6 +3037,74 @@ class _StudentManagementScreenState extends State<StudentManagementScreen>
     );
   }
 
+  // #8: Better Dialog - Modern dialog with rounded corners and shadow
+  Future<T?> _showModernDialog<T>({
+    required BuildContext context,
+    required String title,
+    required Widget content,
+    Widget? actions,
+    bool dismissible = true,
+  }) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    return showDialog<T>(
+      context: context,
+      barrierDismissible: dismissible,
+      builder: (BuildContext ctx) => AlertDialog(
+        title: Text(
+          title,
+          style: TextStyle(
+            fontSize: 18.sp,
+            fontWeight: FontWeight.w700,
+            color: isDark ? Colors.white : AppTheme.textDark,
+          ),
+        ),
+        content: content,
+        actions: actions != null ? [actions] : null,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20.r),
+        ),
+        backgroundColor: isDark ? Colors.grey.shade900 : Colors.white,
+        elevation: 8,
+      ),
+    );
+  }
+
+  // #9: Error State Handler
+  void _handleError(String message) {
+    setState(() {
+      _errorMessage = message;
+    });
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          message,
+          style: TextStyle(
+            fontSize: 13.sp,
+            fontWeight: FontWeight.w500,
+            color: Colors.white,
+          ),
+        ),
+        backgroundColor: Colors.red.shade600,
+        duration: const Duration(seconds: 4),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12.r),
+        ),
+        margin: EdgeInsets.all(16.w),
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+
+    Future.delayed(const Duration(seconds: 4), () {
+      if (mounted) {
+        setState(() {
+          _errorMessage = null;
+        });
+      }
+    });
+  }
+
 }
 
 /// 📜 Animated scrolling welcome message (marquee - right to left loop)
