@@ -2524,12 +2524,22 @@ class _StudentManagementScreenState extends State<StudentManagementScreen>
                       color: Colors.transparent,
                       child: InkWell(
                         onTap: () {
-                          // TODO: Navigate to face registration screen
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text('📸 Start face registration for $name'),
-                              backgroundColor: statusColor,
-                              duration: const Duration(seconds: 2),
+                          // Navigate to face registration camera
+                          if (!context.mounted || _instituteId == null) return;
+                          Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (_) => StudentFaceRegistrationWrapper(
+                                studentId: studentId,
+                                studentName: name,
+                                srNo: _formatSrDisplay(srNo),
+                                instituteId: _instituteId!,
+                                onRegistrationSuccess: () {
+                                  // Refresh student list after registration
+                                  if (mounted) {
+                                    _bootstrapStudentList();
+                                  }
+                                },
+                              ),
                             ),
                           );
                         },
