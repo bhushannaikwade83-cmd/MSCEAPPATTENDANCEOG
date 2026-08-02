@@ -1803,6 +1803,15 @@ async def mark_attendance_auto(
     """
     try:
         total_start = time.time()
+
+        # 🔍 DEBUG: Print exact institute_id value received
+        print(f"\n{'='*60}")
+        print(f"🎯 BACKEND RECEIVED ATTENDANCE REQUEST")
+        print(f"   Institute ID type: {type(institute_id)} value: '{institute_id}'")
+        print(f"   Institute ID length: {len(str(institute_id))}")
+        print(f"   Institute ID hex: {institute_id.encode('utf-8').hex() if isinstance(institute_id, str) else 'N/A'}")
+        print(f"{'='*60}\n")
+
         logger.info(f"🎯 Attendance request for institute: {institute_id}")
 
         # ⏱️ STEP 1: Initialize services
@@ -1852,6 +1861,30 @@ async def mark_attendance_auto(
         students = await _get_embeddings_for_institute(institute_id)
         step4_time = time.time() - step4_start
         print(f"⏱️  STEP 4 (Load Embeddings): {step4_time:.3f}s")
+
+        # 🔍 DEBUG: Show students loaded and their institute_id values
+        print(f"\n{'='*60}")
+        print(f"📊 STUDENTS LOADED FOR INSTITUTE: {institute_id}")
+        print(f"   Total students loaded: {len(students)}")
+        if students:
+            # Show first 5 students' institute_id values to verify they match request
+            for i, student in enumerate(students[:5]):
+                inst = student.get('institute_id', 'N/A')
+                sr = student.get('sr_no', 'N/A')
+                name_parts = []
+                for key in ['fname', 'mname', 'lname']:
+                    val = student.get(key)
+                    if val:
+                        name_parts.append(val)
+                name = ' '.join(name_parts) or 'Unknown'
+                print(f"      [{i}] SR:{sr} | Name:{name} | InstID:{inst}")
+
+            # Show institute_id distribution
+            inst_ids = [s.get('institute_id', 'N/A') for s in students]
+            unique_insts = set(inst_ids)
+            print(f"\n   Unique institutes in loaded students: {unique_insts}")
+            print(f"   Does institute_id match request? {institute_id in inst_ids}")
+        print(f"{'='*60}\n")
 
         if not students:
             logger.warning(f"❌ No students found for institute {institute_id}")
@@ -2095,7 +2128,8 @@ async def mark_attendance_auto(
         print(f"   TOTAL: {total_time:.3f}s")
         print(f"{'='*60}\n")
 
-        return {
+        # 🔍 DEBUG: Show final response being sent to Flutter
+        response_data = {
             "status": "✅ Matched",
             "student_name": student_name,
             "sr_no": sr_no,
@@ -2114,6 +2148,19 @@ async def mark_attendance_auto(
                 "total": total_time
             }
         }
+
+        # 🔍 DEBUG: Print response before returning
+        print(f"\n{'='*60}")
+        print(f"🚀 SENDING RESPONSE TO FLUTTER (institute_id={institute_id})")
+        print(f"   Status: {response_data['status']}")
+        print(f"   Student: {response_data['student_name']}")
+        print(f"   SR No: {response_data['sr_no']}")
+        print(f"   Similarity: {response_data['similarity']:.4f}")
+        print(f"   Record Type: {response_data['record_type']}")
+        print(f"   Student ID: {response_data['student_id']}")
+        print(f"{'='*60}\n")
+
+        return response_data
 
     except HTTPException:
         raise
