@@ -1069,7 +1069,6 @@ class _StudentManagementScreenState extends State<StudentManagementScreen>
                 ),
                 slivers: [
                   SliverToBoxAdapter(child: _buildBlueStudentsHeader()),
-                  SliverToBoxAdapter(child: _buildAutoFaceScanBanner()),
                   SliverToBoxAdapter(child: _buildPhotoInstructionsCard()),
                   SliverToBoxAdapter(child: _buildSearchBar()),
                   if (_instituteId != null)
@@ -2739,67 +2738,6 @@ class _StudentManagementScreenState extends State<StudentManagementScreen>
             count: _statsAbsentToday,
           ),
         ],
-      ),
-    );
-  }
-
-  Widget _buildAutoFaceScanBanner() {
-    return Padding(
-      padding: EdgeInsets.fromLTRB(16.w, 12.h, 16.w, 0),
-      child: Material(
-        color: AppTheme.primaryGreen,
-        borderRadius: BorderRadius.circular(14.r),
-        elevation: 2,
-        child: InkWell(
-          borderRadius: BorderRadius.circular(14.r),
-          onTap: _instituteId == null ? null : () => _openAutoFaceScan(),
-          child: Padding(
-            padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 14.h),
-            child: Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.2),
-                    shape: BoxShape.circle,
-                  ),
-                  child: Icon(
-                    Icons.face_retouching_natural,
-                    color: Colors.white,
-                    size: 28.sp,
-                  ),
-                ),
-                SizedBox(width: 12.w),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Auto Face Attendance',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 16.sp,
-                          fontWeight: FontWeight.w800,
-                        ),
-                      ),
-                      SizedBox(height: 4.h),
-                      Text(
-                        'Tap here — ${DistanceCheckService.recommendedDistanceShort}. '
-                        'Entry/exit marked automatically.',
-                        style: TextStyle(
-                          color: Colors.white.withValues(alpha: 0.92),
-                          fontSize: 12.sp,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                Icon(Icons.chevron_right, color: Colors.white, size: 26.sp),
-              ],
-            ),
-          ),
-        ),
       ),
     );
   }
