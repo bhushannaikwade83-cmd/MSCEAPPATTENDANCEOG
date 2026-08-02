@@ -1119,16 +1119,38 @@ class _StudentManagementScreenState extends State<StudentManagementScreen>
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    // Welcome message
-                    Text(
-                      '👋 Welcome Students - Mark your attendance here',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 14.sp,
-                        fontWeight: FontWeight.w700,
-                        letterSpacing: 0.3,
+                    // Welcome message (scrolling marquee)
+                    SizedBox(
+                      height: 18.h,
+                      child: SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        child: Row(
+                          children: [
+                            Text(
+                              '👋 Welcome Students - Mark your attendance here  •  ',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 13.sp,
+                                fontWeight: FontWeight.w700,
+                                letterSpacing: 0.3,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.visible,
+                            ),
+                            Text(
+                              '👋 Welcome Students - Mark your attendance here  •  ',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 13.sp,
+                                fontWeight: FontWeight.w700,
+                                letterSpacing: 0.3,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.visible,
+                            ),
+                          ],
+                        ),
                       ),
-                      overflow: TextOverflow.ellipsis,
                     ),
                     SizedBox(height: 6.h),
                     // Institute info
