@@ -2331,6 +2331,18 @@ class _StudentManagementScreenState extends State<StudentManagementScreen>
                               ),
                             ),
                           ),
+                          SizedBox(height: 6.h),
+                          // Entry timestamp
+                          Text(
+                            '🕐 ${_formatPayloadTime(slice, true)}',
+                            style: TextStyle(
+                              fontSize: 10.sp,
+                              fontWeight: FontWeight.w600,
+                              color: isDark ? Colors.white70 : AppTheme.textGray,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
                         ],
                       ),
                     ),
@@ -2366,6 +2378,18 @@ class _StudentManagementScreenState extends State<StudentManagementScreen>
                                 ),
                               ),
                             ),
+                          ),
+                          SizedBox(height: 6.h),
+                          // Exit timestamp
+                          Text(
+                            '🕐 ${_formatPayloadTime(slice, false)}',
+                            style: TextStyle(
+                              fontSize: 10.sp,
+                              fontWeight: FontWeight.w600,
+                              color: isDark ? Colors.white70 : AppTheme.textGray,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                           ),
                         ],
                       ),
