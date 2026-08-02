@@ -1,3 +1,4 @@
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -610,164 +611,213 @@ class _GovPortalHeaderState extends State<GovPortalHeader>
     final l10n = AppLocalizations.of(context);
     final p = widget.primaryLine ?? l10n.portalPrimaryLine;
     final s = widget.secondaryLine ?? l10n.portalSecondaryLineDefault;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
-    return Container(
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            AppTheme.primaryBlueDark,
-            AppTheme.primaryBlueDark.withOpacity(0.85),
-          ],
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: AppTheme.primaryBlue.withValues(alpha: 0.25),
-            blurRadius: 20,
-            offset: const Offset(0, 8),
-            spreadRadius: 2,
+    return Stack(
+      children: [
+        // Solid dark blue header - professional & authentic
+        Container(
+          decoration: BoxDecoration(
+            color: isDark ? AppTheme.primaryBlueDark : AppTheme.primaryBlueDark,
+            boxShadow: [
+              BoxShadow(
+                color: AppTheme.primaryBlue.withValues(alpha: 0.25),
+                blurRadius: 20,
+                offset: const Offset(0, 8),
+                spreadRadius: 2,
+              ),
+            ],
           ),
-        ],
-      ),
-      child: SafeArea(
-        bottom: false,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const GovTricolorStrip(),
-            Padding(
-              padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 14.h),
-              child: Row(
-                children: [
-                  // 🎯 Animated Logo with pulse effect
-                  ScaleTransition(
-                    scale: _logoPulse,
-                    child: Container(
-                      width: 52.r,
-                      height: 52.r,
+        ),
+
+
+        // Content
+        SafeArea(
+          bottom: false,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const GovTricolorStrip(),
+              Padding(
+                padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 14.h),
+                child: Row(
+                  children: [
+                    // 🎯 Animated Logo with enhanced glow
+                    ScaleTransition(
+                      scale: _logoPulse,
+                      child: Container(
+                        width: 56.r,
+                        height: 56.r,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          gradient: LinearGradient(
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                            colors: [
+                              Colors.white.withValues(alpha: 0.95),
+                              Colors.white.withValues(alpha: 0.80),
+                            ],
+                          ),
+                          border: Border.all(
+                            color: Colors.white.withValues(alpha: 0.6),
+                            width: 2.5,
+                          ),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.white.withValues(alpha: 0.5),
+                              blurRadius: 16,
+                              offset: const Offset(0, 2),
+                              spreadRadius: 3,
+                            ),
+                            BoxShadow(
+                              color: AppTheme.primaryBlue.withValues(alpha: 0.4),
+                              blurRadius: 24,
+                              offset: const Offset(0, 8),
+                              spreadRadius: 2,
+                            ),
+                            BoxShadow(
+                              color: AppTheme.accentSaffron.withValues(alpha: 0.2),
+                              blurRadius: 12,
+                              offset: const Offset(0, 4),
+                              spreadRadius: 1,
+                            ),
+                          ],
+                        ),
+                        clipBehavior: Clip.antiAlias,
+                        padding: EdgeInsets.all(4.r),
+                        child: Image.asset(
+                          AppUI.appLogoAsset,
+                          fit: BoxFit.contain,
+                        ),
+                      ),
+                    ),
+                    SizedBox(width: 14.w),
+
+                    // 📱 Name Section with improved typography
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            p,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 13.5.sp,
+                              fontWeight: FontWeight.w800,
+                              letterSpacing: 0.4,
+                              height: 1.2,
+                              shadows: [
+                                Shadow(
+                                  color: Colors.black.withOpacity(0.3),
+                                  offset: const Offset(0, 2),
+                                  blurRadius: 4,
+                                ),
+                              ],
+                            ),
+                          ),
+                          SizedBox(height: 4.h),
+                          Text(
+                            s,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              color: Colors.white.withValues(alpha: 0.85),
+                              fontSize: 10.sp,
+                              fontWeight: FontWeight.w500,
+                              letterSpacing: 0.2,
+                              shadows: [
+                                Shadow(
+                                  color: Colors.black.withOpacity(0.2),
+                                  offset: const Offset(0, 1),
+                                  blurRadius: 2,
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    SizedBox(width: 10.w),
+
+                    // 🏆 Ultra-premium Official Badge with glassmorphism
+                    Container(
+                      padding: EdgeInsets.symmetric(horizontal: 11.w, vertical: 7.h),
                       decoration: BoxDecoration(
-                        shape: BoxShape.circle,
                         gradient: LinearGradient(
                           begin: Alignment.topLeft,
                           end: Alignment.bottomRight,
                           colors: [
-                            Colors.white.withValues(alpha: 0.95),
-                            Colors.white.withValues(alpha: 0.85),
+                            AppUI.officialBadgeColor.withOpacity(0.9),
+                            AppUI.officialBadgeColor.withOpacity(0.7),
                           ],
                         ),
+                        borderRadius: BorderRadius.circular(10.r),
                         border: Border.all(
-                          color: Colors.white.withValues(alpha: 0.5),
-                          width: 2,
+                          color: Colors.white.withValues(alpha: 0.4),
+                          width: 1.5,
                         ),
                         boxShadow: [
                           BoxShadow(
-                            color: Colors.white.withValues(alpha: 0.4),
-                            blurRadius: 12,
-                            offset: const Offset(0, 4),
+                            color: AppUI.officialBadgeColor.withValues(alpha: 0.6),
+                            blurRadius: 16,
+                            offset: const Offset(0, 6),
                             spreadRadius: 2,
                           ),
                           BoxShadow(
-                            color: AppTheme.primaryBlue.withValues(alpha: 0.3),
-                            blurRadius: 16,
-                            offset: const Offset(0, 6),
+                            color: Colors.black.withOpacity(0.2),
+                            blurRadius: 8,
+                            offset: const Offset(0, 3),
+                            spreadRadius: 1,
                           ),
                         ],
                       ),
-                      clipBehavior: Clip.antiAlias,
-                      padding: EdgeInsets.all(4.r),
-                      child: Image.asset(
-                        AppUI.appLogoAsset,
-                        fit: BoxFit.contain,
+                      child: TweenAnimationBuilder<double>(
+                        tween: Tween(begin: 0.95, end: 1.05),
+                        duration: const Duration(milliseconds: 1500),
+                        builder: (context, value, child) {
+                          return Transform.scale(
+                            scale: value,
+                            child: child,
+                          );
+                        },
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              Icons.verified_user_rounded,
+                              color: Colors.white,
+                              size: 11.sp,
+                              shadows: [
+                                Shadow(
+                                  color: Colors.black.withOpacity(0.3),
+                                  offset: const Offset(0, 2),
+                                  blurRadius: 4,
+                                ),
+                              ],
+                            ),
+                            SizedBox(width: 5.w),
+                            Text(
+                              l10n.officialBadge,
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 9.sp,
+                                fontWeight: FontWeight.w800,
+                                letterSpacing: 0.9,
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
                     ),
-                  ),
-                  SizedBox(width: 14.w),
-                  // 📱 Name Section (English + Marathi)
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          p,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 13.5.sp,
-                            fontWeight: FontWeight.w800,
-                            letterSpacing: 0.3,
-                            height: 1.2,
-                          ),
-                        ),
-                        SizedBox(height: 3.h),
-                        Text(
-                          s,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            color: Colors.white.withValues(alpha: 0.80),
-                            fontSize: 10.sp,
-                            fontWeight: FontWeight.w500,
-                            letterSpacing: 0.1,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  SizedBox(width: 10.w),
-                  // 🏆 Modern Official Badge with Gradient
-                  Container(
-                    padding:
-                        EdgeInsets.symmetric(horizontal: 10.w, vertical: 6.h),
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                        colors: [
-                          Color.lerp(AppUI.officialBadgeColor,
-                              Colors.red.shade600, 0.3)!,
-                          AppUI.officialBadgeColor,
-                        ],
-                      ),
-                      borderRadius: BorderRadius.circular(8.r),
-                      border: Border.all(
-                        color: Colors.white.withValues(alpha: 0.3),
-                        width: 1.2,
-                      ),
-                      boxShadow: [
-                        BoxShadow(
-                          color: AppUI.officialBadgeColor.withValues(alpha: 0.5),
-                          blurRadius: 12,
-                          offset: const Offset(0, 4),
-                          spreadRadius: 1,
-                        ),
-                      ],
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(Icons.verified_user_rounded,
-                            color: Colors.white, size: 10.sp),
-                        SizedBox(width: 4.w),
-                        Text(
-                          l10n.officialBadge,
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 9.sp,
-                            fontWeight: FontWeight.w800,
-                            letterSpacing: 0.8,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
+                  ],
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
-      ),
+      ],
     );
   }
 }

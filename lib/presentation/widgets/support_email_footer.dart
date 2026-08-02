@@ -69,33 +69,37 @@ class _SupportEmailFooterState extends State<SupportEmailFooter> {
               children: [
                 Icon(
                   Icons.mail_outline_rounded,
-                  size: 14.sp,
+                  size: 13.sp,
                   color: AppTheme.primaryBlue,
                 ),
-                SizedBox(width: 6.w),
-                Text.rich(
-                  TextSpan(
-                    style: TextStyle(
-                      fontSize: 11.sp,
-                      height: 1.4,
-                      color: isDark ? Colors.white70 : AppTheme.textGray,
-                      fontWeight: FontWeight.w500,
-                    ),
-                    children: [
-                      const TextSpan(text: 'Issues or support: '),
-                      TextSpan(
-                        text: kGccTbcSupportEmail,
-                        style: TextStyle(
-                          color: AppTheme.primaryBlue,
-                          fontWeight: FontWeight.w700,
-                          decoration: TextDecoration.underline,
-                          decorationColor: AppTheme.primaryBlue,
-                          decorationThickness: 1.5,
-                        ),
+                SizedBox(width: 5.w),
+                Flexible(
+                  child: Text.rich(
+                    TextSpan(
+                      style: TextStyle(
+                        fontSize: 10.sp,
+                        height: 1.3,
+                        color: isDark ? Colors.white70 : AppTheme.textGray,
+                        fontWeight: FontWeight.w500,
                       ),
-                    ],
+                      children: [
+                        const TextSpan(text: 'Support: '),
+                        TextSpan(
+                          text: 'gcc-tbc',
+                          style: TextStyle(
+                            color: AppTheme.primaryBlue,
+                            fontWeight: FontWeight.w700,
+                            fontSize: 9.5.sp,
+                            decoration: TextDecoration.underline,
+                            decorationColor: AppTheme.primaryBlue,
+                            decorationThickness: 1.5,
+                          ),
+                        ),
+                      ],
+                    ),
+                    textAlign: TextAlign.center,
+                    overflow: TextOverflow.ellipsis,
                   ),
-                  textAlign: TextAlign.center,
                 ),
               ],
             ),

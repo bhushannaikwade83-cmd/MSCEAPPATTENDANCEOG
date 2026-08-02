@@ -387,19 +387,21 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> with TickerProviderSt
         // Prevent back button from exiting app - admin home is main screen
       },
       child: Scaffold(
-        backgroundColor: isDark ? const Color(0xFF0F172A) : AppTheme.backgroundGrey,
-        body: SafeArea(
-          top: false,
-          child: FadeTransition(
-            opacity: _fadeAnimation,
-            child: Column(
-              children: [
-                Expanded(
-                  child: ResponsiveScrollBody(
-                        padding: EdgeInsets.all(16.w),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [
+        backgroundColor: Colors.transparent,
+        body: Container(
+          color: isDark ? const Color(0xFF0F172A) : AppTheme.backgroundGrey,
+          child: SafeArea(
+            top: false,
+            child: FadeTransition(
+              opacity: _fadeAnimation,
+              child: Column(
+                children: [
+                  Expanded(
+                    child: ResponsiveScrollBody(
+                          padding: EdgeInsets.all(16.w),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
                             _buildProfileGovCard(isDark),
                             SizedBox(height: 16.h),
 
@@ -432,7 +434,7 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> with TickerProviderSt
                             _buildQuickActions(isDark),
                             SizedBox(height: 20.h),
 
-                            const Center(child: SupportEmailFooter()),
+                            Center(child: SupportEmailFooter()),
                             SizedBox(height: 16.h),
 
                             SizedBox(height: 24.h),
@@ -445,6 +447,7 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> with TickerProviderSt
           ),
         ),
       ),
+    ),
     );
   }
 

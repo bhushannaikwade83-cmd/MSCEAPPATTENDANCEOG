@@ -92,9 +92,13 @@ class SharedStatsService {
       // Using record_type = 'entry' to mark students as present
       final List<dynamic> rows = [];
       try {
+        if (kDebugMode) {
+          debugPrint('🔍 QUERYING: institute_id=$instituteId, date=$today, record_type=entry');
+        }
+
         final tempRows = await appDb
             .from('attendance')
-            .select('sr_no,record_type')
+            .select('sr_no,record_type,institute_id,attendance_date')
             .eq('institute_id', instituteId)
             .eq('attendance_date', today)
             .eq('record_type', 'entry'); // ✅ Only entries count as present
@@ -102,9 +106,31 @@ class SharedStatsService {
 
         if (kDebugMode) {
           debugPrint('✅ Attendance query successful: ${rows.length} entries found');
+          for (final row in rows) {
+            debugPrint('   Row: ${row}');
+          }
         }
       } catch (e) {
         if (kDebugMode) debugPrint('❌ Attendance query failed: $e');
+        // Try without institute_id filter to debug
+        try {
+          if (kDebugMode) {
+            debugPrint('🔍 DEBUG: Trying query without institute_id filter...');
+          }
+          final debugRows = await appDb
+              .from('attendance')
+              .select('sr_no,record_type,institute_id,attendance_date')
+              .eq('attendance_date', today)
+              .eq('record_type', 'entry');
+          if (kDebugMode) {
+            debugPrint('🔍 DEBUG: Found ${debugRows.length} total entries for $today');
+            for (final row in debugRows) {
+              debugPrint('   DEBUG Row: ${row}');
+            }
+          }
+        } catch (debugE) {
+          if (kDebugMode) debugPrint('❌ Debug query also failed: $debugE');
+        }
       }
 
       if (kDebugMode) {
