@@ -1922,7 +1922,7 @@ class _LoginScreenState extends State<LoginScreen>
                   SizedBox(width: 12.w),
                   Expanded(
                     child: Text(
-                      'Sign In',
+                      'Secure Login',
                       style: TextStyle(
                         color: isDark ? Colors.white : AppTheme.primaryBlue,
                         fontSize: 16.sp,
@@ -1933,11 +1933,278 @@ class _LoginScreenState extends State<LoginScreen>
                   ),
                 ],
               ),
-              SizedBox(height: 20.h),
-              // ─── Full login form continues with existing implementation ───
+              SizedBox(height: 6.h),
+              Divider(
+                color: AppTheme.primaryBlue.withOpacity(isDark ? 0.2 : 0.15),
+                thickness: 1,
+              ),
+              SizedBox(height: 16.h),
+
+              // ─── INFO BOX ───
+              Container(
+                padding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 8.h),
+                decoration: BoxDecoration(
+                  color: AppTheme.primaryBlue.withOpacity(isDark ? 0.1 : 0.06),
+                  borderRadius: BorderRadius.circular(8.r),
+                  border: Border.all(
+                    color: AppTheme.primaryBlue.withOpacity(isDark ? 0.25 : 0.15),
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    Icon(Icons.info_outline,
+                      color: AppTheme.primaryBlue,
+                      size: 16.sp,
+                    ),
+                    SizedBox(width: 8.w),
+                    Expanded(
+                      child: Text(
+                        'Enter Institute ID, password and CAPTCHA',
+                        style: TextStyle(
+                          color: isDark ? Colors.white70 : AppTheme.primaryBlue,
+                          fontSize: 11.sp,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              SizedBox(height: 18.h),
+
+              // ─── INSTITUTE ID FIELD ───
+              if (_instituteIdFieldDisabled && _instituteIdController.text.isNotEmpty)
+                _buildLockedInstituteIdDisplay()
+              else
+                _buildGovTextField(
+                  controller: _instituteIdController,
+                  icon: Icons.domain_outlined,
+                  label: 'Institute ID',
+                  hint: 'e.g. 00000',
+                  keyboardType: TextInputType.number,
+                  enabled: !_instituteIdFieldDisabled,
+                  validator: (value) {
+                    if (value == null || value.isEmpty) return 'Institute ID is required';
+                    if (!RegExp(r'^\d+$').hasMatch(value)) return 'Use numeric ID only';
+                    return null;
+                  },
+                ),
+              SizedBox(height: 14.h),
+
+              // ─── PASSWORD FIELD ───
+              _buildGovTextField(
+                controller: _passwordController,
+                icon: Icons.lock_outline_rounded,
+                label: 'Password',
+                hint: '••••••••',
+                isPassword: true,
+                validator: (value) {
+                  if (value == null || value.isEmpty) return 'Password is required';
+                  return null;
+                },
+              ),
+              SizedBox(height: 8.h),
+
+              // ─── FORGOT PASSWORD ───
+              Align(
+                alignment: Alignment.centerRight,
+                child: _buildForgotPasswordButton(),
+              ),
+              SizedBox(height: 18.h),
+
+              // ─── CAPTCHA ───
+              _buildCaptchaSection(),
+              SizedBox(height: 24.h),
+
+              // ─── LOGIN & SIGNUP BUTTONS ───
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  LayoutBuilder(
+                    builder: (context, c) {
+                      final signupBtn = SizedBox(
+                        height: 52.h,
+                        child: OutlinedButton(
+                          onPressed: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => const InstituteSearchScreen(),
+                              ),
+                            );
+                          },
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: AppTheme.primaryBlue,
+                            side: BorderSide(
+                              color: AppTheme.primaryBlue,
+                              width: 1.5,
+                            ),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12.r),
+                            ),
+                          ),
+                          child: Text(
+                            'SIGN UP',
+                            style: TextStyle(
+                              fontSize: 13.sp,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                        ),
+                      );
+
+                      if (c.maxWidth < 400) {
+                        return Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            _buildModernLoginButton(
+                              label: 'LOGIN',
+                              onTap: _handleFullFormLogin,
+                              isDark: isDark,
+                            ),
+                            SizedBox(height: 12.h),
+                            signupBtn,
+                          ],
+                        );
+                      }
+
+                      return Row(
+                        children: [
+                          Expanded(
+                            child: _buildModernLoginButton(
+                              label: 'LOGIN',
+                              onTap: _handleFullFormLogin,
+                              isDark: isDark,
+                            ),
+                          ),
+                          SizedBox(width: 12.w),
+                          Expanded(child: signupBtn),
+                        ],
+                      );
+                    },
+                  ),
+                  SizedBox(height: 10.h),
+                  TextButton(
+                    onPressed: () {
+                      Navigator.push<void>(
+                        context,
+                        MaterialPageRoute<void>(
+                          settings: const RouteSettings(
+                            name: AttendanceStaffLoginScreen.routeName,
+                          ),
+                          builder: (_) => const AttendanceStaffLoginScreen(),
+                        ),
+                      );
+                    },
+                    child: Text(
+                      'Institute instructor login',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontSize: 13.sp,
+                        fontWeight: FontWeight.w700,
+                        color: AppTheme.primaryBlue,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildLockedInstituteIdDisplay() {
+    return Container(
+      padding: EdgeInsets.all(14.w),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [
+            AppTheme.primaryBlue.withOpacity(0.08),
+            AppTheme.primaryBlue.withOpacity(0.03),
+          ],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(14.r),
+        border: Border.all(
+          color: AppTheme.primaryBlue.withOpacity(0.25),
+          width: 1.5,
+        ),
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: EdgeInsets.all(10.w),
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.85),
+              borderRadius: BorderRadius.circular(12.r),
+            ),
+            child: Icon(Icons.domain_outlined,
+              color: AppTheme.primaryBlue,
+              size: 20.sp,
+            ),
+          ),
+          SizedBox(width: 12.w),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Institute ID',
+                  style: TextStyle(
+                    fontSize: 11.sp,
+                    color: AppTheme.primaryBlue,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                SizedBox(height: 4.h),
+                Text(
+                  _instituteIdController.text,
+                  style: TextStyle(
+                    fontSize: 18.sp,
+                    fontWeight: FontWeight.w800,
+                    color: AppTheme.primaryBlue,
+                    letterSpacing: 1.8,
+                  ),
+                ),
+                SizedBox(height: 6.h),
+                Text(
+                  'Locked after setup',
+                  style: TextStyle(
+                    fontSize: 11.sp,
+                    color: AppTheme.textGray,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Container(
+            padding: EdgeInsets.symmetric(horizontal: 10.w, vertical: 7.h),
+            decoration: BoxDecoration(
+              color: AppTheme.primaryBlue,
+              borderRadius: BorderRadius.circular(999.r),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.lock, color: Colors.white, size: 13.sp),
+                SizedBox(width: 5.w),
+                Text(
+                  'LOCKED',
+                  style: TextStyle(
+                    fontSize: 10.sp,
+                    color: Colors.white,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 0.8,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
