@@ -2474,13 +2474,14 @@ class _StudentManagementScreenState extends State<StudentManagementScreen>
                       child: InkWell(
                         onTap: () {
                           // Navigate to student photos screen
-                          if (!context.mounted) return;
+                          if (!context.mounted || _instituteId == null) return;
                           Navigator.of(context).push(
                             MaterialPageRoute(
                               builder: (_) => StudentPhotosScreen(
                                 studentId: studentId,
                                 studentName: name,
-                                studentRoll: _formatSrDisplay(srNo),
+                                rollNumber: _formatSrDisplay(srNo),
+                                instituteId: _instituteId!,
                               ),
                             ),
                           );
