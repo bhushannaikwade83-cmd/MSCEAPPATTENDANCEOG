@@ -1710,17 +1710,63 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> with TickerProviderSt
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              'Quick Actions',
-              style: TextStyle(
-                fontSize: Responsive.fontSize(context, 18).sp,
-                fontWeight: FontWeight.bold,
-                color: isDark ? Colors.white : AppTheme.textDark,
+            // 🎯 Modern Section Header
+            Container(
+              margin: EdgeInsets.only(bottom: 16.h),
+              child: Row(
+                children: [
+                  Container(
+                    padding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 6.h),
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        colors: [
+                          AppTheme.primaryBlue.withOpacity(0.2),
+                          AppTheme.primaryBlue.withOpacity(0.08),
+                        ],
+                      ),
+                      borderRadius: BorderRadius.circular(8.r),
+                      border: Border.all(
+                        color: AppTheme.primaryBlue.withOpacity(0.3),
+                        width: 1.2,
+                      ),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.lightning_bolt_rounded,
+                            color: AppTheme.primaryBlue, size: 16.sp),
+                        SizedBox(width: 6.w),
+                        Text(
+                          'Quick Actions',
+                          style: TextStyle(
+                            fontSize: Responsive.fontSize(context, 18).sp,
+                            fontWeight: FontWeight.w800,
+                            color: isDark ? Colors.white : AppTheme.textDark,
+                            letterSpacing: 0.3,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Spacer(),
+                  Container(
+                    width: 4.w,
+                    height: 24.h,
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        colors: [
+                          AppTheme.primaryBlue,
+                          AppTheme.primaryGreen,
+                        ],
+                      ),
+                      borderRadius: BorderRadius.circular(2.r),
+                    ),
+                  ),
+                ],
               ),
-              overflow: TextOverflow.ellipsis,
-              maxLines: 1,
             ),
-            SizedBox(height: 12.h),
             Row(
               children: [
                 Expanded(
@@ -1991,46 +2037,125 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> with TickerProviderSt
   Widget _buildActionCard(String title, IconData icon, Color color, VoidCallback onTap, bool isDark) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        return GestureDetector(
-          onTap: onTap,
-          child: Container(
-            padding: EdgeInsets.all(16.w),
-            decoration: BoxDecoration(
-              color: isDark ? Colors.white.withOpacity(0.05) : Colors.white,
-              borderRadius: BorderRadius.circular(12.r),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.05),
-                  blurRadius: 10.r,
-                  offset: Offset(0, 2.h),
-                ),
-              ],
-            ),
-            child: Row(
-              children: [
-                Container(
-                  padding: EdgeInsets.all(8.w),
-                  decoration: BoxDecoration(
-                    color: color.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(8.r),
+        return MouseRegion(
+          cursor: SystemMouseCursors.click,
+          child: GestureDetector(
+            onTap: onTap,
+            child: TweenAnimationBuilder<double>(
+              tween: Tween(begin: 0, end: 1),
+              duration: Duration(milliseconds: 600 + title.length * 30),
+              curve: Curves.elasticOut,
+              builder: (context, value, child) {
+                return Transform.scale(
+                  scale: value,
+                  child: Opacity(
+                    opacity: value,
+                    child: child,
                   ),
-                  child: Icon(icon, color: color, size: 20.sp),
-                ),
-                SizedBox(width: 8.w),
-                Expanded(
-                  child: Text(
-                    title,
-                    style: TextStyle(
-                      fontSize: 14.sp,
-                      fontWeight: FontWeight.w600,
-                      color: isDark ? Colors.white : AppTheme.textDark,
+                );
+              },
+              child: Container(
+                padding: EdgeInsets.all(16.w),
+                decoration: BoxDecoration(
+                  // 🌈 Modern gradient based on color
+                  gradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [
+                      color.withOpacity(isDark ? 0.15 : 0.08),
+                      color.withOpacity(isDark ? 0.08 : 0.03),
+                    ],
+                  ),
+                  color: isDark ? Colors.white.withOpacity(0.05) : Colors.white,
+                  borderRadius: BorderRadius.circular(16.r),
+                  border: Border.all(
+                    color: color.withOpacity(isDark ? 0.4 : 0.2),
+                    width: 1.5,
+                  ),
+                  boxShadow: [
+                    // Primary shadow
+                    BoxShadow(
+                      color: color.withOpacity(isDark ? 0.25 : 0.15),
+                      blurRadius: 16.r,
+                      offset: Offset(0, 6.h),
+                      spreadRadius: 1,
                     ),
-                    overflow: TextOverflow.ellipsis,
-                    maxLines: 1,
-                    textAlign: TextAlign.left,
-                  ),
+                    // Glow effect
+                    BoxShadow(
+                      color: color.withOpacity(0.1),
+                      blurRadius: 24.r,
+                      offset: Offset(0, 12.h),
+                    ),
+                  ],
                 ),
-              ],
+                child: Row(
+                  children: [
+                    // 🎯 Icon Container with Glow
+                    Container(
+                      width: 48.r,
+                      height: 48.r,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        gradient: LinearGradient(
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                          colors: [
+                            color.withOpacity(0.25),
+                            color.withOpacity(0.12),
+                          ],
+                        ),
+                        boxShadow: [
+                          BoxShadow(
+                            color: color.withOpacity(0.4),
+                            blurRadius: 12,
+                            offset: const Offset(0, 3),
+                          ),
+                        ],
+                      ),
+                      child: Icon(icon, color: color, size: 24.sp),
+                    ),
+                    SizedBox(width: 12.w),
+                    // 📱 Text Section
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            title,
+                            style: TextStyle(
+                              fontSize: 14.sp,
+                              fontWeight: FontWeight.w700,
+                              color: isDark ? Colors.white : AppTheme.textDark,
+                              letterSpacing: 0.2,
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                            maxLines: 1,
+                            textAlign: TextAlign.left,
+                          ),
+                          SizedBox(height: 2.h),
+                          Container(
+                            height: 2.h,
+                            width: 24.w,
+                            decoration: BoxDecoration(
+                              gradient: LinearGradient(
+                                colors: [color, color.withOpacity(0.3)],
+                              ),
+                              borderRadius: BorderRadius.circular(1.r),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    // ➜ Arrow indicator
+                    Icon(
+                      Icons.arrow_forward_rounded,
+                      color: color.withOpacity(0.6),
+                      size: 18.sp,
+                    ),
+                  ],
+                ),
+              ),
             ),
           ),
         );
