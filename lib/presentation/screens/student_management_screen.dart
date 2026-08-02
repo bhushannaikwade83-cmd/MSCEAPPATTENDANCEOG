@@ -667,12 +667,15 @@ class _StudentManagementScreenState extends State<StudentManagementScreen>
         // Fetch institute name
         String? instituteName;
         try {
+          if (kDebugMode) debugPrint('🔍 Fetching institute data for ID: $foundInstituteId');
           final instRow = await appDb
               .from('institutes')
-              .select('name')
+              .select('*')
               .eq('id', foundInstituteId)
               .maybeSingle();
+          if (kDebugMode) debugPrint('📋 Institute row: $instRow');
           instituteName = instRow?['name'] as String?;
+          if (kDebugMode) debugPrint('✅ Extracted name: $instituteName');
         } catch (e) {
           if (kDebugMode) debugPrint('⚠️ Could not fetch institute name: $e');
         }
@@ -680,7 +683,7 @@ class _StudentManagementScreenState extends State<StudentManagementScreen>
         if (kDebugMode) {
           debugPrint('✅ User found in institute: $foundInstituteId');
           debugPrint('   📊 Profile institute_id: $foundInstituteId');
-          debugPrint('   📛 Institute name: $instituteName');
+          debugPrint('   📛 Institute name final: $instituteName');
 
           // DIAGNOSTIC: Check if students table has entries for this institute
           try {
