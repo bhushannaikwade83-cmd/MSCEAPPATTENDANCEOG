@@ -29,8 +29,8 @@ class _QuickStatsWidgetState extends State<QuickStatsWidget>
   int _totalStudents = 0;
   bool _loading = true;
 
-  late AnimationController _statsAnimController;
-  late Animation<double> _statsScale;
+  AnimationController? _statsAnimController;
+  Animation<double>? _statsScale;
 
   @override
   void initState() {
@@ -51,7 +51,7 @@ class _QuickStatsWidgetState extends State<QuickStatsWidget>
   @override
   void dispose() {
     _timer?.cancel();
-    _statsAnimController.dispose();
+    _statsAnimController?.dispose();
     super.dispose();
   }
 
@@ -68,7 +68,7 @@ class _QuickStatsWidgetState extends State<QuickStatsWidget>
           _loading = false;
         });
         // Trigger animation when data loads
-        _statsAnimController.forward(from: 0);
+        _statsAnimController?.forward(from: 0);
       }
     } catch (_) {
       if (mounted) setState(() => _loading = false);
@@ -93,7 +93,7 @@ class _QuickStatsWidgetState extends State<QuickStatsWidget>
     final attendanceRate = totalStudents > 0 ? (presentCount / totalStudents * 100) : 0.0;
 
     return ScaleTransition(
-      scale: _statsScale,
+      scale: _statsScale ?? AlwaysStoppedAnimation(1.0),
       child: Container(
         padding: EdgeInsets.all(Responsive.pctWidth(context, 0.05).clamp(16.0, 28.0)),
         decoration: BoxDecoration(
@@ -315,9 +315,11 @@ class _QuickStatsWidgetState extends State<QuickStatsWidget>
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return ScaleTransition(
-      scale: Tween<double>(begin: 0.9, end: 1).animate(
-        CurvedAnimation(parent: _statsAnimController, curve: Curves.elasticOut),
-      ),
+      scale: _statsAnimController != null
+          ? Tween<double>(begin: 0.9, end: 1).animate(
+              CurvedAnimation(parent: _statsAnimController!, curve: Curves.elasticOut),
+            )
+          : AlwaysStoppedAnimation(1.0),
       child: Container(
         padding: EdgeInsets.symmetric(vertical: 16.h, horizontal: 12.w),
         decoration: BoxDecoration(
