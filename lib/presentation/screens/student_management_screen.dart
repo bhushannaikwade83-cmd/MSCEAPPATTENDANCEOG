@@ -1245,6 +1245,17 @@ class _StudentManagementScreenState extends State<StudentManagementScreen>
     // Modern gradient based on color
     final gradientColors = _getGradientForColor(color);
 
+    // Determine text color: dark for white card, white for colored cards
+    final isWhiteCard = color == Colors.grey;
+    final textColor = isWhiteCard ? const Color(0xFF333333) : Colors.white;
+    final textColorLight = isWhiteCard
+        ? const Color(0xFF666666)
+        : Colors.white.withValues(alpha: 0.85);
+    final iconColor = isWhiteCard ? const Color(0xFF555555) : Colors.white;
+    final iconBgColor = isWhiteCard
+        ? const Color(0xFFCCCCCC).withValues(alpha: 0.3)
+        : Colors.white.withValues(alpha: 0.25);
+
     return Container(
       padding: EdgeInsets.symmetric(vertical: 18.h, horizontal: 12.w),
       decoration: BoxDecoration(
@@ -1277,10 +1288,10 @@ class _StudentManagementScreenState extends State<StudentManagementScreen>
             width: 50.r,
             height: 50.r,
             decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.25),
+              color: iconBgColor,
               borderRadius: BorderRadius.circular(12.r),
             ),
-            child: Icon(icon, color: Colors.white, size: 28.sp),
+            child: Icon(icon, color: iconColor, size: 28.sp),
           ),
           SizedBox(height: 12.h),
           // 📊 Big number
@@ -1289,7 +1300,7 @@ class _StudentManagementScreenState extends State<StudentManagementScreen>
             style: TextStyle(
               fontSize: 28.sp,
               fontWeight: FontWeight.w900,
-              color: Colors.white,
+              color: textColor,
               letterSpacing: -0.5,
             ),
           ),
@@ -1299,7 +1310,7 @@ class _StudentManagementScreenState extends State<StudentManagementScreen>
             label,
             style: TextStyle(
               fontSize: 12.sp,
-              color: Colors.white.withValues(alpha: 0.85),
+              color: textColorLight,
               fontWeight: FontWeight.w600,
               letterSpacing: 0.3,
             ),
