@@ -398,7 +398,7 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> with TickerProviderSt
                   child: ResponsiveScrollBody(
                         padding: EdgeInsets.all(16.w),
                         child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
                             _buildProfileGovCard(isDark),
                             SizedBox(height: 16.h),
@@ -932,101 +932,28 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> with TickerProviderSt
     );
   }
 
-  Widget _buildProfileGovCard(bool isDark) {
-    final avatar = Responsive.pctShortestSide(context, 0.12).clamp(48.0, 64.0);
+  Widget _buildQuickIconsCard(bool isDark) {
     return Container(
+      width: double.infinity,
       decoration: BoxDecoration(
         gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
           colors: [
-            AppTheme.accentSaffron.withOpacity(isDark ? 0.15 : 0.08),
-            AppTheme.accentSaffron.withOpacity(isDark ? 0.08 : 0.02),
+            AppTheme.accentSaffron.withOpacity(isDark ? 0.1 : 0.04),
+            AppTheme.accentSaffron.withOpacity(isDark ? 0.05 : 0.01),
           ],
         ),
-        borderRadius: BorderRadius.circular(18.r),
+        borderRadius: BorderRadius.circular(16.r),
         border: Border.all(
-          color: AppTheme.accentSaffron.withOpacity(isDark ? 0.4 : 0.25),
-          width: 1.5,
+          color: AppTheme.accentSaffron.withOpacity(isDark ? 0.3 : 0.15),
+          width: 1,
         ),
-        boxShadow: [
-          BoxShadow(
-            color: AppTheme.accentSaffron.withOpacity(isDark ? 0.2 : 0.1),
-            blurRadius: 16.r,
-            offset: Offset(0, 6.h),
-            spreadRadius: 1,
-          ),
-        ],
       ),
-      padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 14.h),
+      padding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 8.h),
       child: Row(
+        mainAxisAlignment: MainAxisAlignment.end,
         children: [
-          // 👤 Avatar with gradient
-          Container(
-            width: avatar,
-            height: avatar,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              gradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [
-                  AppTheme.accentSaffron.withOpacity(0.3),
-                  AppTheme.accentSaffron.withOpacity(0.15),
-                ],
-              ),
-              border: Border.all(
-                color: AppTheme.accentSaffron.withOpacity(0.5),
-                width: 2,
-              ),
-              boxShadow: [
-                BoxShadow(
-                  color: AppTheme.accentSaffron.withOpacity(0.4),
-                  blurRadius: 12,
-                  offset: const Offset(0, 4),
-                ),
-              ],
-            ),
-            child: Icon(Icons.person_rounded,
-                color: AppTheme.primaryBlue, size: avatar * 0.5),
-          ),
-          SizedBox(width: 14.w),
-          // 👋 Welcome Text
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  (_profileName == null || _profileName == 'Admin')
-                      ? '👋 Welcome'
-                      : '👋 Welcome, Mr $_profileName',
-                  style: TextStyle(
-                    color: isDark ? Colors.white : AppTheme.textDark,
-                    fontSize: 16.sp,
-                    fontWeight: FontWeight.w800,
-                    letterSpacing: 0.3,
-                  ),
-                  maxLines: 2,
-                  softWrap: true,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                SizedBox(height: 4.h),
-                Text(
-                  'Best wishes for your day! 🌟',
-                  style: TextStyle(
-                    color: isDark
-                        ? Colors.white.withOpacity(0.75)
-                        : AppTheme.textGray,
-                    fontSize: 12.sp,
-                    fontWeight: FontWeight.w500,
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ],
-            ),
-          ),
           FutureBuilder<int>(
             future: OfflineService.getPendingCount(),
             builder: (context, snapshot) {
@@ -1110,6 +1037,114 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> with TickerProviderSt
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildWelcomeMessageCard(bool isDark) {
+    final avatar = Responsive.pctShortestSide(context, 0.12).clamp(48.0, 64.0);
+    return Container(
+      width: double.infinity,
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            AppTheme.accentSaffron.withOpacity(isDark ? 0.15 : 0.08),
+            AppTheme.accentSaffron.withOpacity(isDark ? 0.08 : 0.02),
+          ],
+        ),
+        borderRadius: BorderRadius.circular(18.r),
+        border: Border.all(
+          color: AppTheme.accentSaffron.withOpacity(isDark ? 0.4 : 0.25),
+          width: 1.5,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: AppTheme.accentSaffron.withOpacity(isDark ? 0.2 : 0.1),
+            blurRadius: 16.r,
+            offset: Offset(0, 6.h),
+            spreadRadius: 1,
+          ),
+        ],
+      ),
+      padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 14.h),
+      child: Row(
+        children: [
+          Container(
+            width: avatar,
+            height: avatar,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  AppTheme.accentSaffron.withOpacity(0.3),
+                  AppTheme.accentSaffron.withOpacity(0.15),
+                ],
+              ),
+              border: Border.all(
+                color: AppTheme.accentSaffron.withOpacity(0.5),
+                width: 2,
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: AppTheme.accentSaffron.withOpacity(0.4),
+                  blurRadius: 12,
+                  offset: const Offset(0, 4),
+                ),
+              ],
+            ),
+            child: Icon(Icons.person_rounded,
+                color: AppTheme.primaryBlue, size: avatar * 0.5),
+          ),
+          SizedBox(width: 14.w),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  (_profileName == null || _profileName == 'Admin')
+                      ? '👋 Welcome'
+                      : '👋 Welcome, Mr $_profileName',
+                  style: TextStyle(
+                    color: isDark ? Colors.white : AppTheme.textDark,
+                    fontSize: 16.sp,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 0.3,
+                  ),
+                  maxLines: 3,
+                  softWrap: true,
+                ),
+                SizedBox(height: 4.h),
+                Text(
+                  'Best wishes for your day! 🌟',
+                  style: TextStyle(
+                    color: isDark
+                        ? Colors.white.withOpacity(0.75)
+                        : AppTheme.textGray,
+                    fontSize: 12.sp,
+                    fontWeight: FontWeight.w500,
+                  ),
+                  maxLines: 2,
+                  softWrap: true,
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildProfileGovCard(bool isDark) {
+    return Column(
+      children: [
+        _buildQuickIconsCard(isDark),
+        SizedBox(height: 12.h),
+        _buildWelcomeMessageCard(isDark),
+      ],
     );
   }
 
@@ -2243,12 +2278,13 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> with TickerProviderSt
                 return Transform.scale(
                   scale: value,
                   child: Opacity(
-                    opacity: value,
+                    opacity: value.clamp(0.0, 1.0),
                     child: child,
                   ),
                 );
               },
               child: Container(
+                width: double.infinity,
                 padding: EdgeInsets.all(16.w),
                 decoration: BoxDecoration(
                   // 🌈 Modern gradient based on color
@@ -2323,8 +2359,8 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> with TickerProviderSt
                               color: isDark ? Colors.white : AppTheme.textDark,
                               letterSpacing: 0.2,
                             ),
-                            overflow: TextOverflow.ellipsis,
-                            maxLines: 1,
+                            maxLines: 2,
+                            softWrap: true,
                             textAlign: TextAlign.left,
                           ),
                           SizedBox(height: 2.h),
