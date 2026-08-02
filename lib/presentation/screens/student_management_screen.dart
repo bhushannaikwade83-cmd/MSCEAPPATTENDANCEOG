@@ -1494,7 +1494,7 @@ class _StudentManagementScreenState extends State<StudentManagementScreen>
       context,
       MaterialPageRoute(
         builder: (_) => AttendanceCameraScreen(
-          studentName: studentName,
+          studentName: studentName ?? 'Student',
           studentId: 'ATTENDANCE_MARK',
           appBarTitle: 'Mark Attendance',
           stepLabel: 'Attendance',
