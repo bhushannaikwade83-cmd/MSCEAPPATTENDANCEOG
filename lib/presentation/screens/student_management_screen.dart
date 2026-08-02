@@ -1114,16 +1114,58 @@ class _StudentManagementScreenState extends State<StudentManagementScreen>
   Widget _buildBlueStudentsHeader() {
     return Container(
       width: double.infinity,
-      padding: EdgeInsets.fromLTRB(14.w, 12.h, 10.w, 12.h),
+      padding: EdgeInsets.fromLTRB(16.w, 14.h, 16.w, 14.h),
       color: AppTheme.primaryBlue,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: [
-          // Top row with logout button
+          // Top branding row
           Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              if (widget.forAttendanceStaffPortal) ...[
+              // Logo
+              Container(
+                padding: EdgeInsets.all(8.w),
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(8.r),
+                ),
+                child: Icon(
+                  Icons.verified_user_rounded,
+                  color: Colors.white,
+                  size: 28.sp,
+                ),
+              ),
+              SizedBox(width: 12.w),
+              // App name and branding
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'MSCE Attendance',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 18.sp,
+                        fontWeight: FontWeight.w900,
+                        letterSpacing: 0.5,
+                      ),
+                    ),
+                    Text(
+                      'Official',
+                      style: TextStyle(
+                        color: Colors.white.withValues(alpha: 0.8),
+                        fontSize: 11.sp,
+                        fontWeight: FontWeight.w600,
+                        letterSpacing: 1.5,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              // Logout button
+              if (widget.forAttendanceStaffPortal)
                 IconButton(
                   icon: Icon(Icons.logout, color: Colors.white, size: 22.sp),
                   tooltip: 'Sign out',
@@ -1134,22 +1176,13 @@ class _StudentManagementScreenState extends State<StudentManagementScreen>
                     await StaffAttendancePortalScreen.signOutToLogin(context);
                   },
                 ),
-                SizedBox(width: 4.w),
-              ],
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    // Welcome message (animated marquee - right to left)
-                    _ScrollingWelcomeMessage(
-                      instituteId: _instituteId,
-                      instituteName: _instituteName,
-                    ),
-                  ],
-                ),
-              ),
             ],
+          ),
+          SizedBox(height: 12.h),
+          // Marquee welcome message
+          _ScrollingWelcomeMessage(
+            instituteId: _instituteId,
+            instituteName: _instituteName,
           ),
         ],
       ),
