@@ -933,44 +933,93 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> with TickerProviderSt
   }
 
   Widget _buildProfileGovCard(bool isDark) {
-    final avatar = Responsive.pctShortestSide(context, 0.12).clamp(44.0, 56.0);
-    return GovElevatedCard(
-      padding: EdgeInsets.symmetric(horizontal: 14.w, vertical: 12.h),
+    final avatar = Responsive.pctShortestSide(context, 0.12).clamp(48.0, 64.0);
+    return Container(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            AppTheme.accentSaffron.withOpacity(isDark ? 0.15 : 0.08),
+            AppTheme.accentSaffron.withOpacity(isDark ? 0.08 : 0.02),
+          ],
+        ),
+        borderRadius: BorderRadius.circular(18.r),
+        border: Border.all(
+          color: AppTheme.accentSaffron.withOpacity(isDark ? 0.4 : 0.25),
+          width: 1.5,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: AppTheme.accentSaffron.withOpacity(isDark ? 0.2 : 0.1),
+            blurRadius: 16.r,
+            offset: Offset(0, 6.h),
+            spreadRadius: 1,
+          ),
+        ],
+      ),
+      padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 14.h),
       child: Row(
         children: [
+          // 👤 Avatar with gradient
           Container(
             width: avatar,
             height: avatar,
             decoration: BoxDecoration(
-              color: AppTheme.accentSaffron.withValues(alpha: 0.25),
               shape: BoxShape.circle,
-              border: Border.all(color: AppTheme.accentSaffron.withValues(alpha: 0.5)),
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  AppTheme.accentSaffron.withOpacity(0.3),
+                  AppTheme.accentSaffron.withOpacity(0.15),
+                ],
+              ),
+              border: Border.all(
+                color: AppTheme.accentSaffron.withOpacity(0.5),
+                width: 2,
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: AppTheme.accentSaffron.withOpacity(0.4),
+                  blurRadius: 12,
+                  offset: const Offset(0, 4),
+                ),
+              ],
             ),
-            child: Icon(Icons.person, color: AppTheme.primaryBlue, size: avatar * 0.55),
+            child: Icon(Icons.person_rounded,
+                color: AppTheme.primaryBlue, size: avatar * 0.5),
           ),
-          SizedBox(width: 12.w),
+          SizedBox(width: 14.w),
+          // 👋 Welcome Text
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
               children: [
                 Text(
                   (_profileName == null || _profileName == 'Admin')
-                      ? 'Welcome'
-                      : 'Mr $_profileName',
+                      ? '👋 Welcome'
+                      : '👋 Welcome, Mr $_profileName',
                   style: TextStyle(
                     color: isDark ? Colors.white : AppTheme.textDark,
-                    fontSize: 17.sp,
-                    fontWeight: FontWeight.bold,
+                    fontSize: 16.sp,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 0.3,
                   ),
                   maxLines: 2,
                   softWrap: true,
                   overflow: TextOverflow.ellipsis,
                 ),
+                SizedBox(height: 4.h),
                 Text(
-                  'Best wishes for your day!',
+                  'Best wishes for your day! 🌟',
                   style: TextStyle(
-                    color: isDark ? Colors.white70 : AppTheme.textGray,
-                    fontSize: 13.sp,
+                    color: isDark
+                        ? Colors.white.withOpacity(0.75)
+                        : AppTheme.textGray,
+                    fontSize: 12.sp,
+                    fontWeight: FontWeight.w500,
                   ),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
