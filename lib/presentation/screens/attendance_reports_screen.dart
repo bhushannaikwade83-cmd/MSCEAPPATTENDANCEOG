@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show kDebugMode, debugPrint;
 import 'package:intl/intl.dart';
@@ -1221,140 +1222,311 @@ class _AttendanceReportsScreenState extends State<AttendanceReportsScreen>
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    
+
     return Scaffold(
-      backgroundColor: isDark ? const Color(0xFF0F172A) : AppTheme.backgroundGrey,
+      backgroundColor: isDark ? const Color(0xFF0A0A0A) : const Color(0xFFF5F5F5),
       body: SafeArea(
         top: false,
         child: LayoutBuilder(
           builder: (context, constraints) {
             return SingleChildScrollView(
               physics: const BouncingScrollPhysics(),
-              padding: const EdgeInsets.all(20),
+              padding: EdgeInsets.all(16.w),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-            _buildDateRangeSelector(),
-            const SizedBox(height: 20),
-
-
-            // Load All Students button (removed Load Defaulters button)
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton.icon(
-                onPressed: _isLoading
-                    ? null
-                    : () async {
-                        setState(() => _reportMode = 'all');
-                        await _generateReport();
-                      },
-                icon: _isLoading
-                    ? const SizedBox(
-                        width: 18,
-                        height: 18,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Icon(Icons.groups_rounded),
-                label: const Text('Load All Students'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppTheme.primaryBlue,
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                ),
-              ),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              onChanged: (v) => setState(() => _searchQuery = v.trim().toLowerCase()),
-              decoration: InputDecoration(
-                hintText: 'Search student by name or SR No',
-                prefixIcon: const Icon(Icons.search),
-                suffixIcon: _searchQuery.isEmpty
-                    ? null
-                    : IconButton(
-                        onPressed: () => setState(() => _searchQuery = ''),
-                        icon: const Icon(Icons.clear),
-                      ),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-              ),
-            ),
-            const SizedBox(height: 24),
-
-            // Show student list or "no students" message
-            if (_reportData.isNotEmpty) ...[
-              _buildStudentCardList(),
-            ],
-
-            // Show "no students" message when button clicked but no students exist
-            if (!_isLoading && _reportMode != null && _reportData.isEmpty)
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(40),
-                decoration: BoxDecoration(
-                  color: isDark ? Colors.white.withOpacity(0.05) : Colors.white,
-                  borderRadius: BorderRadius.circular(16),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.05),
-                      blurRadius: 10,
-                      offset: const Offset(0, 2),
-                    ),
+                  _buildReportHeaderCard(isDark),
+                  SizedBox(height: 16.h),
+                  _buildDateRangeSelector(),
+                  SizedBox(height: 16.h),
+                  _buildLoadButton(isDark),
+                  SizedBox(height: 12.h),
+                  _buildSearchField(isDark),
+                  SizedBox(height: 24.h),
+                  if (_reportData.isNotEmpty) ...[
+                    _buildStudentCardList(),
                   ],
-                ),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(
-                      Icons.group_off,
-                      size: 48,
-                      color: AppTheme.textGray.withOpacity(0.5),
-                    ),
-                    const SizedBox(height: 16),
-                    Text(
-                      '❌ No students in this institute',
-                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.bold,
-                        color: AppTheme.accentRed,
-                      ),
-                      textAlign: TextAlign.center,
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      'Add students to this institute first',
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: AppTheme.textGray,
-                      ),
-                      textAlign: TextAlign.center,
-                    ),
-                  ],
-                ),
-              ),
-
-            // Only show this message if no button was clicked yet
-            if (_reportData.isEmpty && !_isLoading && _reportMode == null)
-              Center(
-                child: Column(
-                  children: [
-                    Icon(Icons.analytics_outlined, size: 64, color: AppTheme.textGray),
-                    const SizedBox(height: 16),
-                    Text(
-                      'Select date range and load attendance',
-                      style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                        color: AppTheme.textGray,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
+                  if (!_isLoading && _reportMode != null && _reportData.isEmpty)
+                    _buildEmptyState(isDark),
+                  if (_reportData.isEmpty && !_isLoading && _reportMode == null)
+                    _buildInitialState(isDark),
                 ],
               ),
             );
           },
+        ),
+      ),
+    );
+  }
+
+  Widget _buildReportHeaderCard(bool isDark) {
+    return Container(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            AppTheme.primaryBlue.withOpacity(isDark ? 0.15 : 0.08),
+            AppTheme.primaryBlue.withOpacity(isDark ? 0.08 : 0.03),
+          ],
+        ),
+        borderRadius: BorderRadius.circular(16.r),
+        border: Border.all(
+          color: AppTheme.primaryBlue.withOpacity(isDark ? 0.3 : 0.15),
+          width: 1.5,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: AppTheme.primaryBlue.withOpacity(isDark ? 0.1 : 0.06),
+            blurRadius: 16.r,
+            offset: Offset(0, 4.h),
+          ),
+        ],
+      ),
+      padding: EdgeInsets.all(14.w),
+      child: Row(
+        children: [
+          Container(
+            padding: EdgeInsets.all(8.w),
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              gradient: LinearGradient(
+                colors: [
+                  AppTheme.primaryBlue.withOpacity(0.3),
+                  AppTheme.primaryBlue.withOpacity(0.15),
+                ],
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: AppTheme.primaryBlue.withOpacity(0.2),
+                  blurRadius: 8,
+                  offset: const Offset(0, 2),
+                ),
+              ],
+            ),
+            child: Icon(Icons.analytics_rounded, color: AppTheme.primaryBlue, size: 20.sp),
+          ),
+          SizedBox(width: 12.w),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Attendance Report',
+                  style: TextStyle(
+                    fontSize: 16.sp,
+                    fontWeight: FontWeight.w800,
+                    color: isDark ? Colors.white : AppTheme.textDark,
+                    letterSpacing: 0.3,
+                  ),
+                ),
+                SizedBox(height: 4.h),
+                Text(
+                  'Student attendance summary',
+                  style: TextStyle(
+                    fontSize: 11.sp,
+                    color: isDark ? Colors.white70 : AppTheme.textGray,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildLoadButton(bool isDark) {
+    return Container(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            AppTheme.primaryGreen,
+            AppTheme.primaryGreen.withValues(alpha: 0.8),
+          ],
+        ),
+        borderRadius: BorderRadius.circular(12.r),
+        boxShadow: [
+          BoxShadow(
+            color: AppTheme.primaryGreen.withOpacity(_isLoading ? 0 : 0.3),
+            blurRadius: 12,
+            offset: Offset(0, 4.h),
+          ),
+        ],
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: _isLoading
+              ? null
+              : () async {
+                  setState(() => _reportMode = 'all');
+                  await _generateReport();
+                },
+          borderRadius: BorderRadius.circular(12.r),
+          child: Padding(
+            padding: EdgeInsets.symmetric(vertical: 14.h, horizontal: 12.w),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                if (_isLoading)
+                  SizedBox(
+                    width: 18.w,
+                    height: 18.w,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: Colors.white,
+                    ),
+                  )
+                else
+                  Icon(Icons.groups_rounded, color: Colors.white, size: 20.sp),
+                SizedBox(width: 8.w),
+                Text(
+                  'Load All Students',
+                  style: TextStyle(
+                    fontSize: 14.sp,
+                    fontWeight: FontWeight.w700,
+                    color: Colors.white,
+                    letterSpacing: 0.3,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSearchField(bool isDark) {
+    return Container(
+      decoration: BoxDecoration(
+        color: isDark
+            ? Colors.white.withOpacity(0.05)
+            : AppTheme.primaryBlue.withOpacity(0.04),
+        borderRadius: BorderRadius.circular(12.r),
+        border: Border.all(
+          color: AppTheme.primaryBlue.withOpacity(isDark ? 0.2 : 0.1),
+          width: 1.5,
+        ),
+      ),
+      child: TextField(
+        onChanged: (v) => setState(() => _searchQuery = v.trim().toLowerCase()),
+        style: TextStyle(
+          fontSize: 13.sp,
+          color: isDark ? Colors.white : AppTheme.textDark,
+        ),
+        decoration: InputDecoration(
+          hintText: 'Search student by name or SR No',
+          hintStyle: TextStyle(
+            fontSize: 13.sp,
+            color: isDark ? Colors.white70 : AppTheme.textGray,
+          ),
+          prefixIcon: Icon(Icons.search_rounded, color: AppTheme.primaryBlue, size: 20.sp),
+          suffixIcon: _searchQuery.isEmpty
+              ? null
+              : IconButton(
+                  onPressed: () => setState(() => _searchQuery = ''),
+                  icon: Icon(Icons.clear_rounded, size: 20.sp),
+                ),
+          border: InputBorder.none,
+          contentPadding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 12.h),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildEmptyState(bool isDark) {
+    return Container(
+      width: double.infinity,
+      padding: EdgeInsets.symmetric(vertical: 40.h, horizontal: 20.w),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            AppTheme.accentRed.withOpacity(isDark ? 0.08 : 0.04),
+            AppTheme.accentRed.withOpacity(isDark ? 0.04 : 0.02),
+          ],
+        ),
+        borderRadius: BorderRadius.circular(16.r),
+        border: Border.all(
+          color: AppTheme.accentRed.withOpacity(isDark ? 0.2 : 0.1),
+          width: 1.5,
+        ),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            '👥',
+            style: TextStyle(fontSize: 48.sp),
+          ),
+          SizedBox(height: 16.h),
+          Text(
+            'No Students Found',
+            style: TextStyle(
+              fontSize: 16.sp,
+              fontWeight: FontWeight.w700,
+              color: isDark ? Colors.white : AppTheme.textDark,
+            ),
+            textAlign: TextAlign.center,
+          ),
+          SizedBox(height: 8.h),
+          Text(
+            'Add students to this institute first',
+            style: TextStyle(
+              fontSize: 12.sp,
+              color: isDark ? Colors.white70 : AppTheme.textGray,
+              height: 1.4,
+            ),
+            textAlign: TextAlign.center,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildInitialState(bool isDark) {
+    return Center(
+      child: Padding(
+        padding: EdgeInsets.symmetric(vertical: 32.h),
+        child: Column(
+          children: [
+            Container(
+              padding: EdgeInsets.all(12.w),
+              decoration: BoxDecoration(
+                color: AppTheme.primaryBlue.withOpacity(isDark ? 0.15 : 0.08),
+                borderRadius: BorderRadius.circular(12.r),
+              ),
+              child: Icon(
+                Icons.analytics_outlined,
+                size: 48.sp,
+                color: AppTheme.primaryBlue,
+              ),
+            ),
+            SizedBox(height: 16.h),
+            Text(
+              'Ready to Generate Report',
+              style: TextStyle(
+                fontSize: 15.sp,
+                fontWeight: FontWeight.w700,
+                color: isDark ? Colors.white : AppTheme.textDark,
+              ),
+            ),
+            SizedBox(height: 8.h),
+            Text(
+              'Select date range and click "Load All Students" to view attendance data',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 12.sp,
+                color: isDark ? Colors.white70 : AppTheme.textGray,
+                height: 1.4,
+              ),
+            ),
+          ],
         ),
       ),
     );

@@ -1,6 +1,8 @@
 import 'dart:typed_data';
+import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
+import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:intl/intl.dart';
 import 'package:printing/printing.dart';
 import '../../core/app_db.dart';
@@ -207,93 +209,320 @@ class _InstituteReportScreenState extends State<InstituteReportScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return Scaffold(
-      backgroundColor: AppTheme.backgroundGrey,
-      appBar: AppBar(
-        title: const Text('📊 Institute Tabular Report'),
-        backgroundColor: AppTheme.primaryBlue,
-        foregroundColor: Colors.white,
-        actions: [
+      backgroundColor: isDark ? const Color(0xFF0A0A0A) : const Color(0xFFF5F5F5),
+      body: SafeArea(
+        top: false,
+        child: _isLoading
+            ? Center(
+                child: CircularProgressIndicator(color: AppTheme.primaryBlue),
+              )
+            : SingleChildScrollView(
+                child: Column(
+                  children: [
+                    _buildHeaderBar(isDark),
+                    Padding(
+                      padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 16.h),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          _buildReportHeaderCard(isDark),
+                          SizedBox(height: 16.h),
+                          DateRangeSelector(
+                            initialRange: DateRangeFilter.custom(_startDate, _endDate),
+                            onDateRangeSelected: _onDateRangeChanged,
+                          ),
+                          SizedBox(height: 16.h),
+                          _buildActionButtons(isDark),
+                          SizedBox(height: 20.h),
+                          if (_reportData.isEmpty)
+                            _buildEmptyState(isDark)
+                          else
+                            _buildTable(),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+      ),
+    );
+  }
+
+  Widget _buildHeaderBar(bool isDark) {
+    return Container(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            AppTheme.primaryBlue.withOpacity(isDark ? 0.15 : 0.08),
+            AppTheme.primaryBlue.withOpacity(isDark ? 0.08 : 0.03),
+          ],
+        ),
+        border: Border(
+          bottom: BorderSide(
+            color: AppTheme.primaryBlue.withOpacity(isDark ? 0.2 : 0.1),
+            width: 1.5,
+          ),
+        ),
+      ),
+      padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 14.h),
+      child: Row(
+        children: [
           IconButton(
-            tooltip: 'Share report',
-            onPressed: (_isLoading || _reportData.isEmpty) ? null : _shareInstituteReportPdf,
-            icon: const Icon(Icons.share),
+            onPressed: () => Navigator.pop(context),
+            icon: Icon(Icons.arrow_back_rounded, size: 24.sp),
+          ),
+          SizedBox(width: 8.w),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '📊 Institute Report',
+                  style: TextStyle(
+                    fontSize: 17.sp,
+                    fontWeight: FontWeight.w800,
+                    color: isDark ? Colors.white : AppTheme.textDark,
+                    letterSpacing: 0.3,
+                  ),
+                ),
+                SizedBox(height: 2.h),
+                Text(
+                  'Attendance Summary',
+                  style: TextStyle(
+                    fontSize: 11.sp,
+                    color: isDark ? Colors.white70 : AppTheme.textGray,
+                  ),
+                ),
+              ],
+            ),
           ),
         ],
       ),
-      body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : SingleChildScrollView(
-              child: Column(
-                children: [
-                  Padding(
-                    padding: const EdgeInsets.all(16.0),
-                    child: Column(
-                      children: [
-                        DateRangeSelector(
-                          initialRange: DateRangeFilter.custom(_startDate, _endDate),
-                          onDateRangeSelected: _onDateRangeChanged,
-                        ),
-                        const SizedBox(height: 16),
-                        Row(
-                          children: [
-                            Expanded(
-                              child: ElevatedButton.icon(
-                                onPressed: (_isLoading || _reportData.isEmpty) ? null : _exportPDF,
-                                icon: const Icon(Icons.picture_as_pdf),
-                                label: const Text(
-                                  'EXPORT PDF',
-                                  style: TextStyle(fontWeight: FontWeight.bold, letterSpacing: 0.8),
-                                ),
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: AppTheme.primaryBlue,
-                                  foregroundColor: Colors.white,
-                                  padding: const EdgeInsets.symmetric(vertical: 16),
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(12),
-                                  ),
-                                  elevation: 2,
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: ElevatedButton.icon(
-                                onPressed: (_isLoading || _reportData.isEmpty) ? null : _shareInstituteReportPdf,
-                                icon: const Icon(Icons.share),
-                                label: const Text(
-                                  'SHARE',
-                                  style: TextStyle(fontWeight: FontWeight.bold, letterSpacing: 0.8),
-                                ),
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: AppTheme.primaryGreen,
-                                  foregroundColor: Colors.white,
-                                  padding: const EdgeInsets.symmetric(vertical: 16),
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(12),
-                                  ),
-                                  elevation: 2,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ),
-                  if (_reportData.isEmpty)
-                    const Padding(
-                      padding: EdgeInsets.symmetric(vertical: 60),
-                      child: Center(child: Text('No data found for selected range')),
-                    )
-                  else
-                    Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 8),
-                      child: _buildTable(),
-                    ),
+    );
+  }
+
+  Widget _buildReportHeaderCard(bool isDark) {
+    return Container(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            AppTheme.primaryBlue.withOpacity(isDark ? 0.12 : 0.06),
+            AppTheme.primaryBlue.withOpacity(isDark ? 0.06 : 0.02),
+          ],
+        ),
+        borderRadius: BorderRadius.circular(16.r),
+        border: Border.all(
+          color: AppTheme.primaryBlue.withOpacity(isDark ? 0.3 : 0.15),
+          width: 1.5,
+        ),
+      ),
+      padding: EdgeInsets.all(14.w),
+      child: Row(
+        children: [
+          Container(
+            padding: EdgeInsets.all(8.w),
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              gradient: LinearGradient(
+                colors: [
+                  AppTheme.primaryBlue.withOpacity(0.3),
+                  AppTheme.primaryBlue.withOpacity(0.15),
                 ],
               ),
+              boxShadow: [
+                BoxShadow(
+                  color: AppTheme.primaryBlue.withOpacity(0.2),
+                  blurRadius: 8,
+                  offset: const Offset(0, 2),
+                ),
+              ],
             ),
+            child: Icon(Icons.assessment_rounded, color: AppTheme.primaryBlue, size: 20.sp),
+          ),
+          SizedBox(width: 12.w),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  _instituteName ?? 'Institute Report',
+                  style: TextStyle(
+                    fontSize: 14.sp,
+                    fontWeight: FontWeight.w700,
+                    color: isDark ? Colors.white : AppTheme.textDark,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                SizedBox(height: 4.h),
+                Text(
+                  '${DateFormat('dd MMM').format(_startDate)} - ${DateFormat('dd MMM yyyy').format(_endDate)}',
+                  style: TextStyle(
+                    fontSize: 11.sp,
+                    color: isDark ? Colors.white70 : AppTheme.textGray,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildActionButtons(bool isDark) {
+    return Column(
+      children: [
+        Container(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [
+                AppTheme.primaryBlue,
+                AppTheme.primaryBlue.withValues(alpha: 0.8),
+              ],
+            ),
+            borderRadius: BorderRadius.circular(12.r),
+            boxShadow: [
+              BoxShadow(
+                color: AppTheme.primaryBlue.withOpacity(_reportData.isEmpty ? 0 : 0.3),
+                blurRadius: 12,
+                offset: Offset(0, 4.h),
+              ),
+            ],
+          ),
+          child: Material(
+            color: Colors.transparent,
+            child: InkWell(
+              onTap: (_isLoading || _reportData.isEmpty) ? null : _exportPDF,
+              borderRadius: BorderRadius.circular(12.r),
+              child: Padding(
+                padding: EdgeInsets.symmetric(vertical: 14.h, horizontal: 12.w),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.picture_as_pdf_rounded, color: Colors.white, size: 20.sp),
+                    SizedBox(width: 8.w),
+                    Text(
+                      'Export as PDF',
+                      style: TextStyle(
+                        fontSize: 14.sp,
+                        fontWeight: FontWeight.w700,
+                        color: Colors.white,
+                        letterSpacing: 0.3,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+        SizedBox(height: 10.h),
+        Container(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [
+                AppTheme.primaryGreen,
+                AppTheme.primaryGreen.withValues(alpha: 0.8),
+              ],
+            ),
+            borderRadius: BorderRadius.circular(12.r),
+            boxShadow: [
+              BoxShadow(
+                color: AppTheme.primaryGreen.withOpacity(_reportData.isEmpty ? 0 : 0.3),
+                blurRadius: 12,
+                offset: Offset(0, 4.h),
+              ),
+            ],
+          ),
+          child: Material(
+            color: Colors.transparent,
+            child: InkWell(
+              onTap: (_isLoading || _reportData.isEmpty) ? null : _shareInstituteReportPdf,
+              borderRadius: BorderRadius.circular(12.r),
+              child: Padding(
+                padding: EdgeInsets.symmetric(vertical: 14.h, horizontal: 12.w),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.share_rounded, color: Colors.white, size: 20.sp),
+                    SizedBox(width: 8.w),
+                    Text(
+                      'Share Report',
+                      style: TextStyle(
+                        fontSize: 14.sp,
+                        fontWeight: FontWeight.w700,
+                        color: Colors.white,
+                        letterSpacing: 0.3,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildEmptyState(bool isDark) {
+    return Container(
+      width: double.infinity,
+      padding: EdgeInsets.symmetric(vertical: 48.h, horizontal: 20.w),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            AppTheme.primaryBlue.withOpacity(isDark ? 0.08 : 0.04),
+            AppTheme.primaryBlue.withOpacity(isDark ? 0.04 : 0.02),
+          ],
+        ),
+        borderRadius: BorderRadius.circular(16.r),
+        border: Border.all(
+          color: AppTheme.primaryBlue.withOpacity(isDark ? 0.2 : 0.1),
+          width: 1.5,
+        ),
+      ),
+      child: Column(
+        children: [
+          Text(
+            '📋',
+            style: TextStyle(fontSize: 48.sp),
+          ),
+          SizedBox(height: 16.h),
+          Text(
+            'No Data Available',
+            style: TextStyle(
+              fontSize: 16.sp,
+              fontWeight: FontWeight.w700,
+              color: isDark ? Colors.white : AppTheme.textDark,
+            ),
+          ),
+          SizedBox(height: 8.h),
+          Text(
+            'No attendance records found for the selected date range',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontSize: 12.sp,
+              color: isDark ? Colors.white70 : AppTheme.textGray,
+              height: 1.4,
+            ),
+          ),
+        ],
+      ),
     );
   }
 
