@@ -22,6 +22,7 @@ import '../widgets/enhanced_animations.dart';
 import 'login_screen.dart';
 import 'staff_attendance_portal_screen.dart';
 import 'student_photos_screen.dart';
+import 'instructions_screen.dart';
 import '../../services/stale_attendance_reconciliation_service.dart';
 import '../../services/session_manager.dart';
 import '../../services/shared_stats_service.dart';
@@ -2791,238 +2792,36 @@ class _StudentManagementScreenState extends State<StudentManagementScreen>
 
   /// ✅ Permanent static photo instructions card
   Widget _buildPhotoInstructionsCard() {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    return Container(
-      margin: EdgeInsets.symmetric(horizontal: 16.w, vertical: 12.h),
-      padding: EdgeInsets.all(14.w),
-      decoration: BoxDecoration(
-        color: AppTheme.primaryBlue.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(12.r),
-        border: Border.all(
-          color: AppTheme.primaryBlue.withValues(alpha: 0.3),
-          width: 1.5,
+    return Padding(
+      padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 8.h),
+      child: ElevatedButton.icon(
+        onPressed: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => InstructionsScreen(),
+            ),
+          );
+        },
+        style: ElevatedButton.styleFrom(
+          backgroundColor: AppTheme.primaryBlue,
+          foregroundColor: Colors.white,
+          padding: EdgeInsets.symmetric(horizontal: 20.w, vertical: 12.h),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(10.r),
+          ),
+          elevation: 0,
         ),
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Title
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Icon(
-                Icons.camera_alt_rounded,
-                color: AppTheme.primaryBlue,
-                size: 20.sp,
-              ),
-              SizedBox(width: 8.w),
-              Expanded(
-                child: Text(
-                  'Photo Instructions for Face Recognition',
-                  style: TextStyle(
-                    fontSize: 13.sp,
-                    fontWeight: FontWeight.w700,
-                    color: isDark ? Colors.white : AppTheme.textDark,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          SizedBox(height: 12.h),
-
-          // Instructions grid
-          Column(
-            children: [
-              _buildInstructionRow(
-                icon: '✓',
-                title: '3 ft from phone',
-                description: DistanceCheckService.recommendedDistanceDetail,
-                isDark: isDark,
-              ),
-              SizedBox(height: 8.h),
-              _buildInstructionRow(
-                icon: '✓',
-                title: 'Good closeup',
-                description: 'Face clear in the circle — not the whole screen',
-                isDark: isDark,
-              ),
-              SizedBox(height: 8.h),
-              _buildInstructionRow(
-                icon: '✓',
-                title: 'Clear Light',
-                description: 'Ensure good lighting without harsh shadows',
-                isDark: isDark,
-              ),
-              SizedBox(height: 8.h),
-              _buildInstructionRow(
-                icon: '✓',
-                title: 'No Mask',
-                description: 'Face must be fully visible without mask',
-                isDark: isDark,
-              ),
-              SizedBox(height: 8.h),
-              _buildInstructionRow(
-                icon: '✓',
-                title: 'Face in Focus',
-                description: 'Entire face should be clear and in focus',
-                isDark: isDark,
-              ),
-              SizedBox(height: 8.h),
-              _buildInstructionRow(
-                icon: '🔄',
-                title: 'Change photo (once)',
-                description:
-                    'After face is registered, tap 🔄 next to the check mark to replace the photo one time. The app shows the latest photo; the old one stays on the MSCE website.',
-                isDark: isDark,
-              ),
-              SizedBox(height: 12.h),
-              Text(
-                'Student face registration',
-                style: TextStyle(
-                  fontSize: 12.sp,
-                  fontWeight: FontWeight.w700,
-                  color: isDark ? Colors.white : AppTheme.textDark,
-                ),
-              ),
-              SizedBox(height: 6.h),
-              _buildInstructionRow(
-                icon: '✓',
-                title: 'Liveness — two times',
-                description:
-                    'Close your eyes, then open them after about 1 second. Repeat that full close-and-open cycle two times (two times total).',
-                isDark: isDark,
-              ),
-              SizedBox(height: 8.h),
-              _buildInstructionRow(
-                icon: 'ℹ',
-                title: 'Note — background (registration)',
-                description:
-                    'For accurate attendance later, the registration capture should show a clear background with no other people or distracting objects in the frame; otherwise marking may be inaccurate.',
-                isDark: isDark,
-              ),
-              SizedBox(height: 12.h),
-              Text(
-                'Mark attendance (automatic)',
-                style: TextStyle(
-                  fontSize: 12.sp,
-                  fontWeight: FontWeight.w700,
-                  color: isDark ? Colors.white : AppTheme.textDark,
-                ),
-              ),
-              SizedBox(height: 6.h),
-              _buildInstructionRow(
-                icon: '✓',
-                title: 'Auto Face Attendance',
-                description:
-                    'Use the green Auto Face Attendance banner or bottom button. '
-                    '${DistanceCheckService.recommendedDistanceShort} — same as registration. '
-                    'No per-student tap; one scan marks whoever matches. Entry/exit photos update on cards.',
-                isDark: isDark,
-              ),
-              SizedBox(height: 8.h),
-              _buildInstructionRow(
-                icon: '✓',
-                title: 'Entry & Exit photos',
-                description:
-                    'After auto scan marks attendance, entry and exit thumbnails on each student card update automatically (display only).',
-                isDark: isDark,
-              ),
-              SizedBox(height: 8.h),
-              _buildInstructionRow(
-                icon: 'ℹ',
-                title: 'Note — background (attendance)',
-                description:
-                    'For accurate attendance, the capture should have a clear background with no other people in the frame.',
-                isDark: isDark,
-              ),
-            ],
-          ),
-
-          SizedBox(height: 12.h),
-
-          // Tip
-          Container(
-            padding: EdgeInsets.all(10.w),
-            decoration: BoxDecoration(
-              color: Colors.amber.withValues(alpha: 0.15),
-              borderRadius: BorderRadius.circular(8.r),
-              border: Border.all(
-                color: Colors.amber.withValues(alpha: 0.3),
-                width: 1,
-              ),
-            ),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  '💡',
-                  style: TextStyle(fontSize: 14.sp),
-                ),
-                SizedBox(width: 8.w),
-                Expanded(
-                  child: Text(
-                    'Position yourself with light from the front. Make sure your face fills most of the frame.',
-                    style: TextStyle(
-                      fontSize: 11.sp,
-                      color: isDark ? Colors.white70 : Colors.amber.shade900,
-                      height: 1.4,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  /// Helper widget for instruction rows
-  Widget _buildInstructionRow({
-    required String icon,
-    required String title,
-    required String description,
-    required bool isDark,
-  }) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          icon,
+        icon: const Icon(Icons.info_rounded, size: 18),
+        label: const Text(
+          '📸 View Photo Instructions',
           style: TextStyle(
-            fontSize: 14.sp,
-            fontWeight: FontWeight.bold,
-            color: Colors.green,
+            fontWeight: FontWeight.w600,
+            fontSize: 13,
+            letterSpacing: 0.3,
           ),
         ),
-        SizedBox(width: 10.w),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                title,
-                style: TextStyle(
-                  fontSize: 12.sp,
-                  fontWeight: FontWeight.w600,
-                  color: isDark ? Colors.white : AppTheme.textDark,
-                ),
-              ),
-              SizedBox(height: 2.h),
-              Text(
-                description,
-                style: TextStyle(
-                  fontSize: 10.sp,
-                  color: isDark ? Colors.white70 : AppTheme.textGray,
-                  height: 1.3,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ],
+      ),
     );
   }
 
