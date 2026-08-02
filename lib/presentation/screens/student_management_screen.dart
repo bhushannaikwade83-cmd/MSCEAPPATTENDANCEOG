@@ -2753,17 +2753,13 @@ class _ScrollingWelcomeMessageState extends State<_ScrollingWelcomeMessage>
   void initState() {
     super.initState();
     _animationController = AnimationController(
-      duration: const Duration(seconds: 10),
+      duration: const Duration(seconds: 15),
       vsync: this,
     );
 
-    // Add listener for continuous animation
     _animationController.addListener(_updateScroll);
-
-    // Start animation loop
     _animationController.repeat();
 
-    // Wait for first frame to calculate max scroll
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _updateScroll();
     });
@@ -2773,7 +2769,8 @@ class _ScrollingWelcomeMessageState extends State<_ScrollingWelcomeMessage>
     if (!_scrollController.hasClients) return;
     final maxScroll = _scrollController.position.maxScrollExtent;
     if (maxScroll > 0) {
-      _scrollController.jumpTo(_animationController.value * maxScroll);
+      final scrollPos = _animationController.value * maxScroll;
+      _scrollController.jumpTo(scrollPos);
     }
   }
 
@@ -2787,13 +2784,13 @@ class _ScrollingWelcomeMessageState extends State<_ScrollingWelcomeMessage>
 
   @override
   Widget build(BuildContext context) {
-    final baseMsg = '👋 Welcome Students - Mark your attendance here';
     final instId = widget.instituteId ?? '—';
     final instName = widget.instituteName ?? '—';
-    final message = '$baseMsg  •  Institute Code: $instId  •  Institute: $instName  •  $baseMsg  •  Institute Code: $instId  •  Institute: $instName  •  ';
+    final segment = '   👋 Welcome Students - Mark your attendance here  •  Institute: $instId - $instName  •  ';
+    final message = segment + segment + segment;
 
     return SizedBox(
-      height: 18.h,
+      height: 20.h,
       child: SingleChildScrollView(
         controller: _scrollController,
         scrollDirection: Axis.horizontal,
@@ -2802,9 +2799,9 @@ class _ScrollingWelcomeMessageState extends State<_ScrollingWelcomeMessage>
           message,
           style: TextStyle(
             color: Colors.white,
-            fontSize: 12.sp,
+            fontSize: 11.sp,
             fontWeight: FontWeight.w600,
-            letterSpacing: 0.2,
+            letterSpacing: 0.3,
           ),
           maxLines: 1,
           overflow: TextOverflow.visible,
