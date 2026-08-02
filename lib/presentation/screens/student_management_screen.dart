@@ -1,7 +1,5 @@
 import 'dart:convert';
 import 'dart:async';
-import 'dart:io';
-import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_cache_manager/flutter_cache_manager.dart';
 import 'package:flutter/foundation.dart' show kDebugMode, debugPrint;
@@ -31,10 +29,9 @@ import '../../services/pin_session_manager.dart';
 import '../../services/location_monitor_service.dart' show LocationVerificationService;
 import '../widgets/secure_network_image.dart';
 import '../../services/distance_check_service.dart';
-import '../../services/anti_spoof_api_service.dart';
 import 'auto_face_scan_screen.dart';
 import 'student_face_registration_wrapper.dart';
-import 'attendance_camera_screen.dart';
+import 'live_anti_spoof_camera_screen.dart';
 
 enum _StudentAttendanceFilter { all, present, absent }
 
@@ -1488,72 +1485,18 @@ class _StudentManagementScreenState extends State<StudentManagementScreen>
 
     if (!mounted) return;
 
-    // ✅ Use AttendanceCameraScreen (same optimized face detection as registration)
-    // Attendance mode: auto-capture on blink, single pose (front), fast detection
-    dynamic result = await Navigator.push(
+    // ✅ Use old LiveAntiSpoofCameraScreen (simple, manual capture)
+    await Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (_) => AttendanceCameraScreen(
-          studentName: studentName ?? 'Student',
+        builder: (_) => LiveAntiSpoofCameraScreen(
+          studentName: studentName,
           studentId: 'ATTENDANCE_MARK',
-          appBarTitle: 'Mark Attendance',
-          stepLabel: 'Attendance',
-          poseInstruction: null,
-          registrationPose: null, // Attendance, not registration
-          requireBlink: true, // Wait for 1 blink
-          autoCaptureWhenReady: true, // Auto-capture after blink
-          multiPoseRegistration: false, // Single pose only
+          isRegistration: false,
+          instituteId: _instituteId!,
         ),
       ),
     );
-
-    if (!mounted) return;
-
-    // Camera returned XFile for single pose attendance
-    if (result != null && result is XFile) {
-      try {
-        print('📸 [ATTENDANCE] Got photo from camera: ${result.path}');
-        final imageFile = File(result.path);
-
-        // Send to backend for attendance marking
-        print('🌐 [ATTENDANCE] Sending to backend for matching...');
-        final response = await AntiSpoofApiService.markAttendanceAuto(
-          imageFile,
-          instId: _instituteId!,
-        );
-
-        print('✅ [ATTENDANCE] Backend response: $response');
-
-        if (mounted) {
-          if (response.containsKey('error')) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text('❌ Error: ${response['error']}')),
-            );
-          } else {
-            // Success - attendance marked
-            final studentName = response['student_name'] ?? 'Unknown';
-            final similarity = response['similarity'] ?? 0.0;
-            final recordType = response['record_type'] ?? 'entry';
-
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text(
-                  '✅ $studentName marked ($recordType) - ${(similarity * 100).toStringAsFixed(1)}%',
-                ),
-                duration: const Duration(seconds: 3),
-              ),
-            );
-          }
-        }
-      } catch (e) {
-        print('❌ [ATTENDANCE] Error: $e');
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('❌ Error: $e')),
-          );
-        }
-      }
-    }
 
     if (mounted) {
       await _loadHeaderStats();
