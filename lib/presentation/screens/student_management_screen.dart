@@ -1153,68 +1153,91 @@ class _StudentManagementScreenState extends State<StudentManagementScreen>
 
   Widget _buildSummaryStatCards() {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    return Padding(
-      padding: EdgeInsets.fromLTRB(16.w, 12.h, 16.w, 0),
-      child: Row(
-        children: [
-          // 1️⃣ Absent (Orange)
-          Expanded(
-            child: GestureDetector(
-              onTap: () {
-                setState(() {
-                  _attendanceFilter = _StudentAttendanceFilter.absent;
-                });
-              },
-              child: _bigStatCard(
-                label: 'Absent',
-                value: _statsAbsentToday,
-                icon: Icons.cancel_rounded,
-                color: AppTheme.accentRed,
-                isDark: isDark,
-                isActive: _attendanceFilter == _StudentAttendanceFilter.absent,
+    return Column(
+      children: [
+        Padding(
+          padding: EdgeInsets.fromLTRB(16.w, 12.h, 16.w, 0),
+          child: Row(
+            children: [
+              // 1️⃣ Absent (Orange)
+              Expanded(
+                child: GestureDetector(
+                  onTap: () {
+                    setState(() {
+                      _attendanceFilter = _StudentAttendanceFilter.absent;
+                    });
+                  },
+                  child: _bigStatCard(
+                    label: 'Absent',
+                    value: _statsAbsentToday,
+                    icon: Icons.cancel_rounded,
+                    color: AppTheme.accentRed,
+                    isDark: isDark,
+                    isActive: _attendanceFilter == _StudentAttendanceFilter.absent,
+                  ),
+                ),
               ),
-            ),
-          ),
-          SizedBox(width: 10.w),
-          // 2️⃣ Total (White/Neutral)
-          Expanded(
-            child: GestureDetector(
-              onTap: () {
-                setState(() {
-                  _attendanceFilter = _StudentAttendanceFilter.all;
-                });
-              },
-              child: _bigStatCard(
-                label: 'Total',
-                value: _statsTotal,
-                icon: Icons.people_alt_rounded,
-                color: Colors.grey,
-                isDark: isDark,
-                isActive: _attendanceFilter == _StudentAttendanceFilter.all,
+              SizedBox(width: 10.w),
+              // 2️⃣ Total (White/Neutral)
+              Expanded(
+                child: GestureDetector(
+                  onTap: () {
+                    setState(() {
+                      _attendanceFilter = _StudentAttendanceFilter.all;
+                    });
+                  },
+                  child: _bigStatCard(
+                    label: 'Total',
+                    value: _statsTotal,
+                    icon: Icons.people_alt_rounded,
+                    color: Colors.grey,
+                    isDark: isDark,
+                    isActive: _attendanceFilter == _StudentAttendanceFilter.all,
+                  ),
+                ),
               ),
-            ),
-          ),
-          SizedBox(width: 10.w),
-          // 3️⃣ Present (Green)
-          Expanded(
-            child: GestureDetector(
-              onTap: () {
-                setState(() {
-                  _attendanceFilter = _StudentAttendanceFilter.present;
-                });
-              },
-              child: _bigStatCard(
-                label: 'Present',
-                value: _statsPresentToday,
-                icon: Icons.check_circle_rounded,
-                color: AppTheme.primaryGreen,
-                isDark: isDark,
-                isActive: _attendanceFilter == _StudentAttendanceFilter.present,
+              SizedBox(width: 10.w),
+              // 3️⃣ Present (Green)
+              Expanded(
+                child: GestureDetector(
+                  onTap: () {
+                    setState(() {
+                      _attendanceFilter = _StudentAttendanceFilter.present;
+                    });
+                  },
+                  child: _bigStatCard(
+                    label: 'Present',
+                    value: _statsPresentToday,
+                    icon: Icons.check_circle_rounded,
+                    color: AppTheme.primaryGreen,
+                    isDark: isDark,
+                    isActive: _attendanceFilter == _StudentAttendanceFilter.present,
+                  ),
+                ),
               ),
-            ),
+            ],
           ),
-        ],
-      ),
+        ),
+        SizedBox(height: 12.h),
+        // ✨ Bottom border/divider
+        Container(
+          height: 1.5.h,
+          margin: EdgeInsets.symmetric(horizontal: 16.w),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.centerLeft,
+              end: Alignment.centerRight,
+              colors: [
+                Colors.transparent,
+                AppTheme.primaryBlue.withValues(alpha: 0.3),
+                AppTheme.primaryBlue.withValues(alpha: 0.3),
+                Colors.transparent,
+              ],
+            ),
+            borderRadius: BorderRadius.circular(1.r),
+          ),
+        ),
+      ],
     );
   }
 
