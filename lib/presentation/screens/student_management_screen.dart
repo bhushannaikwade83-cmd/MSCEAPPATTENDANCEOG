@@ -2036,11 +2036,21 @@ class _StudentManagementScreenState extends State<StudentManagementScreen>
     final hasEntryPhoto = entryPhotoUrl != null && entryPhotoUrl.isNotEmpty;
     final hasExitPhoto = exitPhotoUrl != null && exitPhotoUrl.isNotEmpty;
 
-    // Determine attendance status
+    // Determine attendance status based on face registration
+    final isFaceRegistered = faceRegistrationStatus == 'registered';
     final isPresent = slice != null && slice.containsKey('record_type') && slice['record_type'] == 'entry';
-    final statusColor = isPresent ? const Color(0xFF138808) : const Color(0xFFFF9933);
-    final statusIcon = isPresent ? Icons.check_circle : Icons.cancel;
-    final statusLabel = isPresent ? 'PRESENT' : 'ABSENT';
+
+    final statusColor = isFaceRegistered
+        ? (isPresent ? const Color(0xFF138808) : const Color(0xFFFF9933))
+        : const Color(0xFFB0B0B0); // Grey for unregistered
+
+    final statusIcon = isFaceRegistered
+        ? (isPresent ? Icons.check_circle : Icons.cancel)
+        : Icons.person_add_outlined;
+
+    final statusLabel = isFaceRegistered
+        ? (isPresent ? 'PRESENT' : 'ABSENT')
+        : 'NOT REGISTERED';
 
     return Padding(
       padding: EdgeInsets.only(bottom: 14.h, left: 16.w, right: 16.w),
