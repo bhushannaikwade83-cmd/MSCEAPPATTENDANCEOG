@@ -1090,35 +1090,76 @@ class _StudentManagementScreenState extends State<StudentManagementScreen>
   Widget _buildBlueStudentsHeader() {
     return Container(
       width: double.infinity,
-      padding: EdgeInsets.fromLTRB(14.w, 10.h, 10.w, 12.h),
+      padding: EdgeInsets.fromLTRB(14.w, 12.h, 10.w, 12.h),
       color: AppTheme.primaryBlue,
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
         children: [
-          if (widget.forAttendanceStaffPortal) ...[
-            IconButton(
-              icon: Icon(Icons.logout, color: Colors.white, size: 22.sp),
-              tooltip: 'Sign out',
-              padding: EdgeInsets.zero,
-              constraints: BoxConstraints(minWidth: 36.w, minHeight: 36.h),
-              onPressed: () async {
-                if (!context.mounted) return;
-                await StaffAttendancePortalScreen.signOutToLogin(context);
-              },
-            ),
-            SizedBox(width: 4.w),
-          ],
-          Icon(Icons.school_rounded, color: Colors.white.withValues(alpha: 0.95), size: 22.sp),
-          SizedBox(width: 8.w),
-          Expanded(
-            child: Text(
-              'Students',
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: 17.sp,
-                fontWeight: FontWeight.w800,
+          // Top row with logout button
+          Row(
+            children: [
+              if (widget.forAttendanceStaffPortal) ...[
+                IconButton(
+                  icon: Icon(Icons.logout, color: Colors.white, size: 22.sp),
+                  tooltip: 'Sign out',
+                  padding: EdgeInsets.zero,
+                  constraints: BoxConstraints(minWidth: 36.w, minHeight: 36.h),
+                  onPressed: () async {
+                    if (!context.mounted) return;
+                    await StaffAttendancePortalScreen.signOutToLogin(context);
+                  },
+                ),
+                SizedBox(width: 4.w),
+              ],
+              Icon(Icons.school_rounded, color: Colors.white.withValues(alpha: 0.95), size: 22.sp),
+              SizedBox(width: 8.w),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // Welcome message
+                    Text(
+                      '👋 Welcome Students - Mark your attendance here',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 14.sp,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: 0.3,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    SizedBox(height: 6.h),
+                    // Institute info
+                    Row(
+                      children: [
+                        Text(
+                          '📍 Institute:',
+                          style: TextStyle(
+                            color: Colors.white.withValues(alpha: 0.85),
+                            fontSize: 11.sp,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        SizedBox(width: 4.w),
+                        Expanded(
+                          child: Text(
+                            _instituteId ?? '—',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 11.sp,
+                              fontWeight: FontWeight.w700,
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
               ),
-              overflow: TextOverflow.ellipsis,
-            ),
+            ],
           ),
         ],
       ),
