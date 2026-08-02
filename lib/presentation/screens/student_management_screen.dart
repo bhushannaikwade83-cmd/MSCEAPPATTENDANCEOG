@@ -2800,7 +2800,10 @@ class _StudentManagementScreenState extends State<StudentManagementScreen>
           ),
         ],
       ),
-      child: TextField(
+      child: Row(
+        children: [
+          Expanded(
+            child: TextField(
         controller: _searchController,
         onChanged: (_) {
           if (mounted) setState(() {});
@@ -2870,6 +2873,26 @@ class _StudentManagementScreenState extends State<StudentManagementScreen>
           color: isDark ? Colors.white : AppTheme.textDark,
           fontSize: 14.sp,
         ),
+      ),
+            ),
+          SizedBox(width: 8.w),
+          // #5: Photo gallery view toggle
+          Tooltip(
+            message: _photoGridViewEnabled ? 'List view' : 'Grid view',
+            child: IconButton(
+              icon: Icon(
+                _photoGridViewEnabled ? Icons.list_rounded : Icons.grid_3x3_rounded,
+                color: AppTheme.primaryBlue,
+                size: 22.sp,
+              ),
+              onPressed: () {
+                setState(() {
+                  _photoGridViewEnabled = !_photoGridViewEnabled;
+                });
+              },
+            ),
+          ),
+        ],
       ),
     );
   }
