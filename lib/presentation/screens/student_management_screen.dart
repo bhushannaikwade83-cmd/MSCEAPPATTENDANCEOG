@@ -2748,6 +2748,8 @@ class _ScrollingWelcomeMessageState extends State<_ScrollingWelcomeMessage>
     with SingleTickerProviderStateMixin {
   late AnimationController _animationController;
   final ScrollController _scrollController = ScrollController();
+  String? _instituteName;
+  bool _nameLoaded = false;
 
   @override
   void initState() {
@@ -2763,6 +2765,37 @@ class _ScrollingWelcomeMessageState extends State<_ScrollingWelcomeMessage>
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _updateScroll();
     });
+
+    // Fetch institute name if not provided
+    if (widget.instituteName != null) {
+      _instituteName = widget.instituteName;
+      _nameLoaded = true;
+    } else if (widget.instituteId != null && !_nameLoaded) {
+      _fetchInstituteName();
+    }
+  }
+
+  Future<void> _fetchInstituteName() async {
+    if (widget.instituteId == null) return;
+    try {
+      final result = await appDb
+          .from('institutes')
+          .select('name')
+          .eq('id', widget.instituteId!)
+          .maybeSingle();
+
+      if (mounted && result != null) {
+        setState(() {
+          _instituteName = result['name'] as String?;
+          _nameLoaded = true;
+        });
+        if (kDebugMode) {
+          debugPrint('✅ Fetched institute name: $_instituteName');
+        }
+      }
+    } catch (e) {
+      if (kDebugMode) debugPrint('❌ Error fetching institute name: $e');
+    }
   }
 
   void _updateScroll() {
@@ -2785,7 +2818,7 @@ class _ScrollingWelcomeMessageState extends State<_ScrollingWelcomeMessage>
   @override
   Widget build(BuildContext context) {
     final instId = widget.instituteId ?? '—';
-    final instName = widget.instituteName ?? '—';
+    final instName = _instituteName ?? widget.instituteName ?? '—';
     final segment = '   👋 Welcome Students - Mark your attendance here  •  Institute: $instId - $instName  •  ';
     final message = segment + segment + segment;
 
