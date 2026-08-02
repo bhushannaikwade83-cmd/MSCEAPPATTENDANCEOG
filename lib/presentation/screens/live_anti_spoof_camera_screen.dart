@@ -405,7 +405,7 @@ class _LiveAntiSpoofCameraScreenState extends State<LiveAntiSpoofCameraScreen> {
                 final existingRecords = await appDb
                     .from('attendance')
                     .select('record_type')
-                    .eq('institute_id', _instituteId!)
+                    .eq('institute_id', widget.instituteId)
                     .eq('sr_no', _srNo)
                     .eq('attendance_date', today);
 
