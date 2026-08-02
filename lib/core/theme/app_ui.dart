@@ -563,7 +563,7 @@ class GovTricolorStrip extends StatelessWidget {
   }
 }
 
-class GovPortalHeader extends StatelessWidget {
+class GovPortalHeader extends StatefulWidget {
   /// When null, uses [AppLocalizations] for the active locale (en / mr).
   final String? primaryLine;
   final String? secondaryLine;
@@ -575,18 +575,58 @@ class GovPortalHeader extends StatelessWidget {
   });
 
   @override
+  State<GovPortalHeader> createState() => _GovPortalHeaderState();
+}
+
+class _GovPortalHeaderState extends State<GovPortalHeader>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _logoAnimController;
+  late Animation<double> _logoScale;
+  late Animation<double> _logoPulse;
+
+  @override
+  void initState() {
+    super.initState();
+    _logoAnimController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1500),
+    );
+    _logoScale =
+        CurvedAnimation(parent: _logoAnimController, curve: Curves.elasticOut);
+    _logoPulse = Tween<double>(begin: 0.98, end: 1.02).animate(
+      CurvedAnimation(parent: _logoAnimController, curve: Curves.easeInOut),
+    );
+    _logoAnimController.repeat(reverse: true);
+  }
+
+  @override
+  void dispose() {
+    _logoAnimController.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
-    final p = primaryLine ?? l10n.portalPrimaryLine;
-    final s = secondaryLine ?? l10n.portalSecondaryLineDefault;
+    final p = widget.primaryLine ?? l10n.portalPrimaryLine;
+    final s = widget.secondaryLine ?? l10n.portalSecondaryLineDefault;
+
     return Container(
       decoration: BoxDecoration(
-        color: AppTheme.primaryBlueDark,
-        boxShadow: const [
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            AppTheme.primaryBlueDark,
+            AppTheme.primaryBlueDark.withOpacity(0.85),
+          ],
+        ),
+        boxShadow: [
           BoxShadow(
-            color: AppUI.headerShadowColor,
-            blurRadius: 10,
-            offset: Offset(0, 3),
+            color: AppTheme.primaryBlue.withValues(alpha: 0.25),
+            blurRadius: 20,
+            offset: const Offset(0, 8),
+            spreadRadius: 2,
           ),
         ],
       ),
@@ -597,35 +637,53 @@ class GovPortalHeader extends StatelessWidget {
           children: [
             const GovTricolorStrip(),
             Padding(
-              padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 12.h),
+              padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 14.h),
               child: Row(
                 children: [
-                  Container(
-                    width: 44.r,
-                    height: 44.r,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: Colors.white.withValues(alpha: 0.92),
-                      border: Border.all(
-                        color: Colors.white.withValues(alpha: 0.35),
-                        width: 1.5,
-                      ),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withValues(alpha: 0.2),
-                          blurRadius: 6,
-                          offset: const Offset(0, 2),
+                  // 🎯 Animated Logo with pulse effect
+                  ScaleTransition(
+                    scale: _logoPulse,
+                    child: Container(
+                      width: 52.r,
+                      height: 52.r,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        gradient: LinearGradient(
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                          colors: [
+                            Colors.white.withValues(alpha: 0.95),
+                            Colors.white.withValues(alpha: 0.85),
+                          ],
                         ),
-                      ],
-                    ),
-                    clipBehavior: Clip.antiAlias,
-                    padding: EdgeInsets.all(3.r),
-                    child: Image.asset(
-                      AppUI.appLogoAsset,
-                      fit: BoxFit.contain,
+                        border: Border.all(
+                          color: Colors.white.withValues(alpha: 0.5),
+                          width: 2,
+                        ),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.white.withValues(alpha: 0.4),
+                            blurRadius: 12,
+                            offset: const Offset(0, 4),
+                            spreadRadius: 2,
+                          ),
+                          BoxShadow(
+                            color: AppTheme.primaryBlue.withValues(alpha: 0.3),
+                            blurRadius: 16,
+                            offset: const Offset(0, 6),
+                          ),
+                        ],
+                      ),
+                      clipBehavior: Clip.antiAlias,
+                      padding: EdgeInsets.all(4.r),
+                      child: Image.asset(
+                        AppUI.appLogoAsset,
+                        fit: BoxFit.contain,
+                      ),
                     ),
                   ),
-                  SizedBox(width: 12.w),
+                  SizedBox(width: 14.w),
+                  // 📱 Name Section (English + Marathi)
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -636,47 +694,72 @@ class GovPortalHeader extends StatelessWidget {
                           overflow: TextOverflow.ellipsis,
                           style: TextStyle(
                             color: Colors.white,
-                            fontSize: 13.sp,
+                            fontSize: 13.5.sp,
                             fontWeight: FontWeight.w800,
-                            letterSpacing: 0.2,
+                            letterSpacing: 0.3,
+                            height: 1.2,
                           ),
                         ),
+                        SizedBox(height: 3.h),
                         Text(
                           s,
-                          maxLines: 2,
+                          maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: TextStyle(
-                            color: Colors.white.withValues(alpha: 0.75),
-                            fontSize: 9.5.sp,
-                            fontWeight: FontWeight.w400,
+                            color: Colors.white.withValues(alpha: 0.80),
+                            fontSize: 10.sp,
+                            fontWeight: FontWeight.w500,
+                            letterSpacing: 0.1,
                           ),
                         ),
                       ],
                     ),
                   ),
+                  SizedBox(width: 10.w),
+                  // 🏆 Modern Official Badge with Gradient
                   Container(
                     padding:
-                        EdgeInsets.symmetric(horizontal: 8.w, vertical: 4.h),
+                        EdgeInsets.symmetric(horizontal: 10.w, vertical: 6.h),
                     decoration: BoxDecoration(
-                      color: AppUI.officialBadgeColor,
-                      borderRadius:
-                          BorderRadius.circular(AppUI.officialBadgeCornerRadius),
+                      gradient: LinearGradient(
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                        colors: [
+                          Color.lerp(AppUI.officialBadgeColor,
+                              Colors.red.shade600, 0.3)!,
+                          AppUI.officialBadgeColor,
+                        ],
+                      ),
+                      borderRadius: BorderRadius.circular(8.r),
+                      border: Border.all(
+                        color: Colors.white.withValues(alpha: 0.3),
+                        width: 1.2,
+                      ),
                       boxShadow: [
                         BoxShadow(
-                          color: AppUI.officialBadgeColor.withValues(alpha: 0.4),
-                          blurRadius: 8,
-                          offset: const Offset(0, 3),
+                          color: AppUI.officialBadgeColor.withValues(alpha: 0.5),
+                          blurRadius: 12,
+                          offset: const Offset(0, 4),
+                          spreadRadius: 1,
                         ),
                       ],
                     ),
-                    child: Text(
-                      l10n.officialBadge,
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 9.sp,
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: 1.0,
-                      ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.verified_user_rounded,
+                            color: Colors.white, size: 10.sp),
+                        SizedBox(width: 4.w),
+                        Text(
+                          l10n.officialBadge,
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 9.sp,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: 0.8,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 ],
