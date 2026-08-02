@@ -2848,8 +2848,12 @@ class _ScrollingWelcomeMessageState extends State<_ScrollingWelcomeMessage>
   @override
   Widget build(BuildContext context) {
     final instId = widget.instituteId ?? '—';
-    final instName = _instituteName ?? widget.instituteName ?? '—';
-    final segment = '   👋 Welcome Students - Mark your attendance here  •  Institute: $instId - $instName  •  ';
+    final finalName = widget.instituteName?.isNotEmpty == true
+        ? widget.instituteName
+        : (_instituteName?.isNotEmpty == true ? _instituteName : null);
+
+    final nameDisplay = finalName != null && finalName.isNotEmpty ? ' ($finalName)' : '';
+    final segment = '   👋 Welcome Students - Mark your attendance here  •  Institute: $instId$nameDisplay  •  ';
     // Repeat 4x to ensure seamless loop (first half scrolls, second half mirrors for seamless wrap)
     final message = segment + segment + segment + segment;
 
