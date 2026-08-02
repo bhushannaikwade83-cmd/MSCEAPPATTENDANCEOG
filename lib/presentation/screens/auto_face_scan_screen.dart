@@ -676,7 +676,21 @@ class _AutoFaceScanScreenState extends State<AutoFaceScanScreen>
       final mname = studentRecord['mname'] ?? '';
       final fullName = '$fname ${mname.isNotEmpty ? '$mname ' : ''}$lname'.trim();
 
-      // Mark entry attendance
+      // 🔍 Check if student already has entry today
+      final today = DateFormat('yyyy-MM-dd').format(DateTime.now());
+      final existingRecords = await appDb
+          .from('attendance')
+          .select('record_type')
+          .eq('institute_id', _instituteId!)
+          .eq('sr_no', srNo)
+          .eq('attendance_date', today);
+
+      final hasEntry = existingRecords.any((r) => r['record_type'] == 'entry');
+      final recordType = hasEntry ? 'exit' : 'entry';
+
+      _addLog('📍 Record type: ${recordType.toUpperCase()} ${hasEntry ? "(entry exists)" : "(new entry)"}');
+
+      // Mark attendance (entry or exit)
       final markResult = await AttendanceMarkingService.markAttendance(
         studentId: studentId,
         instituteId: _instituteId!,
@@ -686,7 +700,7 @@ class _AutoFaceScanScreenState extends State<AutoFaceScanScreen>
         embedding: embedding,
         similarityScore: result.similarity ?? 0.0,
         timestamp: DateTime.now(),
-        recordType: 'entry',
+        recordType: recordType,
       );
 
       if (!markResult['success']) {
@@ -696,7 +710,7 @@ class _AutoFaceScanScreenState extends State<AutoFaceScanScreen>
       if (mounted) {
         final now = DateTime.now();
         setState(() {
-          _attendanceStatus = '✓ Entry marked';
+          _attendanceStatus = recordType == 'entry' ? '✓ Entry marked' : '✓ Exit marked';
           _statusMessage = 'Done — next student can scan';
           _lastAutoMarkedStudentId = studentId;
           _lastAutoMarkAt = now;
@@ -705,7 +719,7 @@ class _AutoFaceScanScreenState extends State<AutoFaceScanScreen>
           _markedSrNo = srNo;
           _markedInstituteId = _instituteId;
           _markedTimestamp = now;
-          _markedRecordType = 'entry';
+          _markedRecordType = recordType;
           _markedSimilarityScore = result.similarity ?? 0.0;
         });
 
