@@ -2366,14 +2366,15 @@ class _StudentManagementScreenState extends State<StudentManagementScreen>
                           children: [
                             Icon(Icons.tag, size: 14.sp, color: statusColor.withValues(alpha: 0.6)),
                             SizedBox(width: 4.w),
-                            Text(
-                              'SR NO: ${_formatSrDisplay(srNo)}',
-                              style: TextStyle(
-                                color: isDark ? Colors.white70 : AppTheme.textGray,
-                                fontSize: 13.sp,
-                                fontWeight: FontWeight.w600,
+                            Expanded(
+                              child: Text(
+                                'SR NO: ${_formatSrDisplay(srNo)}',
+                                style: TextStyle(
+                                  color: isDark ? Colors.white70 : AppTheme.textGray,
+                                  fontSize: 13.sp,
+                                  fontWeight: FontWeight.w600,
+                                ),
                               ),
-                            ),
                           ],
                         ),
                         if (formSerialNo.isNotEmpty) ...[
@@ -2388,6 +2389,28 @@ class _StudentManagementScreenState extends State<StudentManagementScreen>
                                   color: isDark ? Colors.white60 : AppTheme.textGray,
                                   fontSize: 12.sp,
                                   fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                        // 📖 Subjects Display
+                        if (subjectsList.isNotEmpty) ...[
+                          SizedBox(height: 8.h),
+                          Row(
+                            children: [
+                              Icon(Icons.school, size: 14.sp, color: AppTheme.primaryBlue.withValues(alpha: 0.7)),
+                              SizedBox(width: 6.w),
+                              Expanded(
+                                child: Text(
+                                  subjectsList.join(', '),
+                                  style: TextStyle(
+                                    color: isDark ? Colors.white70 : AppTheme.textGray,
+                                    fontSize: 12.sp,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
                                 ),
                               ),
                             ],
