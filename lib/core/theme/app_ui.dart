@@ -597,7 +597,8 @@ class _GovPortalHeaderState extends State<GovPortalHeader>
     _logoPulse = Tween<double>(begin: 0.98, end: 1.02).animate(
       CurvedAnimation(parent: _logoAnimController, curve: Curves.easeInOut),
     );
-    _logoAnimController.repeat(reverse: true);
+    // Run animation once only, not continuously (saves battery)
+    _logoAnimController.forward();
   }
 
   @override
@@ -691,9 +692,10 @@ class _GovPortalHeaderState extends State<GovPortalHeader>
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
+                          // English line
                           Text(
-                            p,
-                            maxLines: 2,
+                            p.split('|').first.trim(),
+                            maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: TextStyle(
                               color: Colors.white,
@@ -710,13 +712,14 @@ class _GovPortalHeaderState extends State<GovPortalHeader>
                               ],
                             ),
                           ),
-                          SizedBox(height: 4.h),
+                          SizedBox(height: 2.h),
+                          // Marathi line
                           Text(
-                            s,
+                            p.split('|').length > 1 ? p.split('|').last.trim() : '',
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: TextStyle(
-                              color: Colors.white.withValues(alpha: 0.85),
+                              color: Colors.white.withValues(alpha: 0.75),
                               fontSize: 10.sp,
                               fontWeight: FontWeight.w500,
                               letterSpacing: 0.2,
@@ -729,6 +732,46 @@ class _GovPortalHeaderState extends State<GovPortalHeader>
                               ],
                             ),
                           ),
+                          SizedBox(height: 2.h),
+                          // Secondary line English
+                          Text(
+                            s.split('|').first.trim(),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              color: Colors.white.withValues(alpha: 0.70),
+                              fontSize: 9.5.sp,
+                              fontWeight: FontWeight.w400,
+                              letterSpacing: 0.1,
+                              shadows: [
+                                Shadow(
+                                  color: Colors.black.withOpacity(0.2),
+                                  offset: const Offset(0, 1),
+                                  blurRadius: 2,
+                                ),
+                              ],
+                            ),
+                          ),
+                          // Secondary line Marathi (if exists)
+                          if (s.split('|').length > 1)
+                            Text(
+                              s.split('|').last.trim(),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                color: Colors.white.withValues(alpha: 0.60),
+                                fontSize: 9.sp,
+                                fontWeight: FontWeight.w400,
+                                letterSpacing: 0.1,
+                                shadows: [
+                                  Shadow(
+                                    color: Colors.black.withOpacity(0.2),
+                                    offset: const Offset(0, 1),
+                                    blurRadius: 2,
+                                  ),
+                                ],
+                              ),
+                            ),
                         ],
                       ),
                     ),

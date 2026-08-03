@@ -23,11 +23,12 @@ class QuickStatsWidget extends StatefulWidget {
 }
 
 class _QuickStatsWidgetState extends State<QuickStatsWidget>
-    with SingleTickerProviderStateMixin {
+    with SingleTickerProviderStateMixin, WidgetsBindingObserver {
   Timer? _timer;
   int _presentCount = 0;
   int _totalStudents = 0;
   bool _loading = true;
+  AppLifecycleState? _lastLifecycleState;
 
   AnimationController? _statsAnimController;
   Animation<double>? _statsScale;
@@ -35,6 +36,7 @@ class _QuickStatsWidgetState extends State<QuickStatsWidget>
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _statsAnimController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 1500),
@@ -44,15 +46,29 @@ class _QuickStatsWidgetState extends State<QuickStatsWidget>
       curve: Curves.elasticOut,
     );
     _load();
-    // Refresh stats on a sane interval — 500ms hammered Supabase + CPU + radio.
-    _timer = Timer.periodic(const Duration(seconds: 20), (_) => _load());
+    // Refresh stats every 60s during peak load — caching + pooling handles the rest
+    _timer = Timer.periodic(const Duration(seconds: 60), (_) => _load());
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _timer?.cancel();
     _statsAnimController?.dispose();
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    _lastLifecycleState = state;
+    // Pause stats polling when app goes to background (saves battery)
+    if (state == AppLifecycleState.paused) {
+      _timer?.cancel();
+    } else if (state == AppLifecycleState.resumed) {
+      // Resume stats polling when app comes to foreground
+      _load();
+      _timer = Timer.periodic(const Duration(seconds: 60), (_) => _load());
+    }
   }
 
   /// ✅ Load stats using shared service (unified logic)
