@@ -1219,7 +1219,7 @@ class _AttendanceReportsScreenState extends State<AttendanceReportsScreen>
     );
   }
 
-  /// ✅ Fetch attendance summary table data
+  /// ✅ Fetch attendance summary table data with subjects
   Future<List<Map<String, dynamic>>> _fetchAttendanceSummary() async {
     try {
       if (_instituteId == null) return [];
@@ -1236,6 +1236,27 @@ class _AttendanceReportsScreenState extends State<AttendanceReportsScreen>
           .lte('attendance_date', endDateStr)
           .order('sr_no');
 
+      // Get student subjects from students table
+      final studentsData = await appDb
+          .from('students')
+          .select('sr_no, sub1, sub2, sub3, sub4, sub5, sub6, sub7, sub8')
+          .eq('institute_id', _instituteId!);
+
+      final Map<String, Map<String, dynamic>> studentSubjectsMap = {};
+      for (final student in studentsData) {
+        final srNo = student['sr_no']?.toString() ?? '';
+        final subjects = <String>[];
+        for (int i = 1; i <= 8; i++) {
+          final sub = student['sub$i']?.toString();
+          if (sub != null && sub.isNotEmpty && sub != 'null') {
+            subjects.add(sub);
+          }
+        }
+        studentSubjectsMap[srNo] = {
+          'subjects': subjects.join(', '),
+        };
+      }
+
       // Aggregate data by student
       final Map<String, Map<String, dynamic>> studentMap = {};
 
@@ -1245,11 +1266,13 @@ class _AttendanceReportsScreenState extends State<AttendanceReportsScreen>
         final recordType = record['record_type']?.toString().toLowerCase() ?? '';
         final remark = record['remark']?.toString() ?? '';
         final creditedHours = record['allotted_target_hr'] ?? 0.0;
+        final subjects = studentSubjectsMap[srNo]?['subjects'] ?? '-';
 
         if (!studentMap.containsKey(srNo)) {
           studentMap[srNo] = {
             'sr_no': srNo,
             'student_name': studentName,
+            'subjects': subjects,
             'present': 0,
             'absent': 0,
             'total': 0,
@@ -1320,6 +1343,16 @@ class _AttendanceReportsScreenState extends State<AttendanceReportsScreen>
             ),
             DataColumn(
               label: Text(
+                'Subjects',
+                style: TextStyle(
+                  color: AppTheme.primaryBlue,
+                  fontWeight: FontWeight.w700,
+                  fontSize: 12.sp,
+                ),
+              ),
+            ),
+            DataColumn(
+              label: Text(
                 'Present',
                 style: TextStyle(
                   color: AppTheme.primaryGreen,
@@ -1378,7 +1411,19 @@ class _AttendanceReportsScreenState extends State<AttendanceReportsScreen>
                     style: TextStyle(
                       color: isDark ? Colors.white : AppTheme.textDark,
                       fontSize: 11.sp,
+                      fontWeight: FontWeight.w600,
                     ),
+                  ),
+                ),
+                DataCell(
+                  Text(
+                    student['subjects']?.toString() ?? '-',
+                    style: TextStyle(
+                      color: isDark ? Colors.white70 : AppTheme.textGray,
+                      fontSize: 10.sp,
+                    ),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ),
                 DataCell(
