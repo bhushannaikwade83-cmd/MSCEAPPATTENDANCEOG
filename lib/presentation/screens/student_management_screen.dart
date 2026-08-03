@@ -2398,21 +2398,48 @@ class _StudentManagementScreenState extends State<StudentManagementScreen>
                         // 📖 Subjects Display
                         if (subjectsList.isNotEmpty) ...[
                           SizedBox(height: 8.h),
-                          Row(
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Icon(Icons.school, size: 14.sp, color: AppTheme.primaryBlue.withValues(alpha: 0.7)),
-                              SizedBox(width: 6.w),
-                              Expanded(
-                                child: Text(
-                                  subjectsList.join(', '),
-                                  style: TextStyle(
-                                    color: isDark ? Colors.white70 : AppTheme.textGray,
-                                    fontSize: 12.sp,
-                                    fontWeight: FontWeight.w500,
+                              Row(
+                                children: [
+                                  Icon(Icons.school, size: 14.sp, color: AppTheme.primaryBlue.withValues(alpha: 0.7)),
+                                  SizedBox(width: 6.w),
+                                  Text(
+                                    'Subjects',
+                                    style: TextStyle(
+                                      color: isDark ? Colors.white60 : AppTheme.textGray,
+                                      fontSize: 11.sp,
+                                      fontWeight: FontWeight.w600,
+                                    ),
                                   ),
-                                  maxLines: 2,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
+                                ],
+                              ),
+                              SizedBox(height: 4.h),
+                              Wrap(
+                                spacing: 6.w,
+                                runSpacing: 4.h,
+                                children: subjectsList.map((subject) {
+                                  return Container(
+                                    padding: EdgeInsets.symmetric(horizontal: 8.w, vertical: 4.h),
+                                    decoration: BoxDecoration(
+                                      color: AppTheme.primaryBlue.withValues(alpha: isDark ? 0.15 : 0.08),
+                                      borderRadius: BorderRadius.circular(6.r),
+                                      border: Border.all(
+                                        color: AppTheme.primaryBlue.withValues(alpha: isDark ? 0.3 : 0.15),
+                                        width: 0.8,
+                                      ),
+                                    ),
+                                    child: Text(
+                                      subject,
+                                      style: TextStyle(
+                                        color: AppTheme.primaryBlue,
+                                        fontSize: 11.sp,
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                    ),
+                                  );
+                                }).toList(),
                               ),
                             ],
                           ),
