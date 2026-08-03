@@ -2375,6 +2375,7 @@ class _StudentManagementScreenState extends State<StudentManagementScreen>
                                   fontWeight: FontWeight.w600,
                                 ),
                               ),
+                            ),
                           ],
                         ),
                         if (formSerialNo.isNotEmpty) ...[
