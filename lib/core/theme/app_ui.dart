@@ -613,28 +613,21 @@ class _GovPortalHeaderState extends State<GovPortalHeader>
     final s = widget.secondaryLine ?? l10n.portalSecondaryLineDefault;
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
-    return Stack(
-      children: [
-        // Solid dark blue header - professional & authentic
-        Container(
-          decoration: BoxDecoration(
-            color: isDark ? AppTheme.primaryBlueDark : AppTheme.primaryBlueDark,
-            boxShadow: [
-              BoxShadow(
-                color: AppTheme.primaryBlue.withValues(alpha: 0.25),
-                blurRadius: 20,
-                offset: const Offset(0, 8),
-                spreadRadius: 2,
-              ),
-            ],
+    return Container(
+      decoration: BoxDecoration(
+        color: isDark ? AppTheme.primaryBlueDark : AppTheme.primaryBlueDark,
+        boxShadow: [
+          BoxShadow(
+            color: AppTheme.primaryBlue.withValues(alpha: 0.25),
+            blurRadius: 20,
+            offset: const Offset(0, 8),
+            spreadRadius: 2,
           ),
-        ),
-
-
-        // Content
-        SafeArea(
-          bottom: false,
-          child: Column(
+        ],
+      ),
+      child: SafeArea(
+        bottom: false,
+        child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
               const GovTricolorStrip(),
@@ -817,8 +810,7 @@ class _GovPortalHeaderState extends State<GovPortalHeader>
             ],
           ),
         ),
-      ],
-    );
+      );
   }
 }
 
