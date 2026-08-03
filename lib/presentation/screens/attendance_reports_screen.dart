@@ -1219,6 +1219,248 @@ class _AttendanceReportsScreenState extends State<AttendanceReportsScreen>
     );
   }
 
+  /// ✅ Fetch attendance summary table data
+  Future<List<Map<String, dynamic>>> _fetchAttendanceSummary() async {
+    try {
+      if (_instituteId == null) return [];
+
+      final startDateStr = DateFormat('yyyy-MM-dd').format(_selectedStartDate);
+      final endDateStr = DateFormat('yyyy-MM-dd').format(_selectedEndDate);
+
+      // Get all attendance records for date range
+      final records = await appDb
+          .from('attendance')
+          .select('sr_no, student_name, record_type, remark, allotted_target_hr')
+          .eq('institute_id', _instituteId!)
+          .gte('attendance_date', startDateStr)
+          .lte('attendance_date', endDateStr)
+          .order('sr_no');
+
+      // Aggregate data by student
+      final Map<String, Map<String, dynamic>> studentMap = {};
+
+      for (final record in records) {
+        final srNo = record['sr_no']?.toString() ?? '';
+        final studentName = record['student_name']?.toString() ?? 'Unknown';
+        final recordType = record['record_type']?.toString().toLowerCase() ?? '';
+        final remark = record['remark']?.toString() ?? '';
+        final creditedHours = record['allotted_target_hr'] ?? 0.0;
+
+        if (!studentMap.containsKey(srNo)) {
+          studentMap[srNo] = {
+            'sr_no': srNo,
+            'student_name': studentName,
+            'present': 0,
+            'absent': 0,
+            'total': 0,
+            'remark': remark,
+            'credited_hours': creditedHours,
+          };
+        }
+
+        // Count entry as present
+        if (recordType == 'entry') {
+          studentMap[srNo]!['present'] = (studentMap[srNo]!['present'] ?? 0) + 1;
+        }
+
+        studentMap[srNo]!['total'] = (studentMap[srNo]!['total'] ?? 0) + 1;
+      }
+
+      // Calculate absent
+      for (final student in studentMap.values) {
+        student['absent'] = student['total'] - student['present'];
+      }
+
+      return studentMap.values.toList();
+    } catch (e) {
+      if (kDebugMode) debugPrint('❌ Error fetching attendance summary: $e');
+      return [];
+    }
+  }
+
+  /// ✅ Build attendance table widget
+  Widget _buildAttendanceTable(bool isDark, List<Map<String, dynamic>> data) {
+    if (data.isEmpty) {
+      return Center(
+        child: Padding(
+          padding: EdgeInsets.all(24.h),
+          child: Text(
+            'No attendance data found',
+            style: TextStyle(
+              color: isDark ? Colors.white70 : AppTheme.textGray,
+              fontSize: 14.sp,
+            ),
+          ),
+        ),
+      );
+    }
+
+    return Container(
+      decoration: BoxDecoration(
+        color: isDark ? const Color(0xFF1A1A2E) : Colors.white,
+        borderRadius: BorderRadius.circular(12.r),
+        border: Border.all(
+          color: AppTheme.primaryBlue.withOpacity(isDark ? 0.3 : 0.15),
+          width: 1.5,
+        ),
+      ),
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: DataTable(
+          columns: [
+            DataColumn(
+              label: Text(
+                'Student Name',
+                style: TextStyle(
+                  color: AppTheme.primaryBlue,
+                  fontWeight: FontWeight.w700,
+                  fontSize: 12.sp,
+                ),
+              ),
+            ),
+            DataColumn(
+              label: Text(
+                'Present',
+                style: TextStyle(
+                  color: AppTheme.primaryGreen,
+                  fontWeight: FontWeight.w700,
+                  fontSize: 12.sp,
+                ),
+              ),
+            ),
+            DataColumn(
+              label: Text(
+                'Absent',
+                style: TextStyle(
+                  color: AppTheme.accentRed,
+                  fontWeight: FontWeight.w700,
+                  fontSize: 12.sp,
+                ),
+              ),
+            ),
+            DataColumn(
+              label: Text(
+                'Total',
+                style: TextStyle(
+                  color: AppTheme.primaryBlue,
+                  fontWeight: FontWeight.w700,
+                  fontSize: 12.sp,
+                ),
+              ),
+            ),
+            DataColumn(
+              label: Text(
+                'Remarks',
+                style: TextStyle(
+                  color: AppTheme.textGray,
+                  fontWeight: FontWeight.w700,
+                  fontSize: 12.sp,
+                ),
+              ),
+            ),
+            DataColumn(
+              label: Text(
+                'Credited Hours',
+                style: TextStyle(
+                  color: AppTheme.accentSaffron,
+                  fontWeight: FontWeight.w700,
+                  fontSize: 12.sp,
+                ),
+              ),
+            ),
+          ],
+          rows: data.map((student) {
+            return DataRow(
+              cells: [
+                DataCell(
+                  Text(
+                    student['student_name']?.toString() ?? '',
+                    style: TextStyle(
+                      color: isDark ? Colors.white : AppTheme.textDark,
+                      fontSize: 11.sp,
+                    ),
+                  ),
+                ),
+                DataCell(
+                  Container(
+                    padding: EdgeInsets.symmetric(horizontal: 8.w, vertical: 4.h),
+                    decoration: BoxDecoration(
+                      color: AppTheme.primaryGreen.withOpacity(0.2),
+                      borderRadius: BorderRadius.circular(6.r),
+                    ),
+                    child: Text(
+                      '${student['present']}',
+                      style: TextStyle(
+                        color: AppTheme.primaryGreen,
+                        fontWeight: FontWeight.w700,
+                        fontSize: 11.sp,
+                      ),
+                    ),
+                  ),
+                ),
+                DataCell(
+                  Container(
+                    padding: EdgeInsets.symmetric(horizontal: 8.w, vertical: 4.h),
+                    decoration: BoxDecoration(
+                      color: AppTheme.accentRed.withOpacity(0.2),
+                      borderRadius: BorderRadius.circular(6.r),
+                    ),
+                    child: Text(
+                      '${student['absent']}',
+                      style: TextStyle(
+                        color: AppTheme.accentRed,
+                        fontWeight: FontWeight.w700,
+                        fontSize: 11.sp,
+                      ),
+                    ),
+                  ),
+                ),
+                DataCell(
+                  Text(
+                    '${student['total']}',
+                    style: TextStyle(
+                      color: isDark ? Colors.white : AppTheme.textDark,
+                      fontWeight: FontWeight.w600,
+                      fontSize: 11.sp,
+                    ),
+                  ),
+                ),
+                DataCell(
+                  Text(
+                    student['remark']?.toString() ?? '-',
+                    style: TextStyle(
+                      color: isDark ? Colors.white70 : AppTheme.textGray,
+                      fontSize: 10.sp,
+                    ),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                DataCell(
+                  Container(
+                    padding: EdgeInsets.symmetric(horizontal: 8.w, vertical: 4.h),
+                    decoration: BoxDecoration(
+                      color: AppTheme.accentSaffron.withOpacity(0.2),
+                      borderRadius: BorderRadius.circular(6.r),
+                    ),
+                    child: Text(
+                      '${student['credited_hours']}h',
+                      style: TextStyle(
+                        color: AppTheme.accentSaffron,
+                        fontWeight: FontWeight.w600,
+                        fontSize: 11.sp,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            );
+          }).toList(),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
@@ -1242,6 +1484,41 @@ class _AttendanceReportsScreenState extends State<AttendanceReportsScreen>
                   _buildLoadButton(isDark),
                   SizedBox(height: 12.h),
                   _buildSearchField(isDark),
+                  SizedBox(height: 24.h),
+
+                  // 📊 Attendance Summary Table
+                  if (_instituteId != null && _selectedStartDate != null)
+                    FutureBuilder<List<Map<String, dynamic>>>(
+                      future: _fetchAttendanceSummary(),
+                      builder: (context, snapshot) {
+                        if (snapshot.connectionState == ConnectionState.waiting) {
+                          return Center(
+                            child: Padding(
+                              padding: EdgeInsets.all(24.h),
+                              child: CircularProgressIndicator(
+                                color: AppTheme.primaryBlue,
+                              ),
+                            ),
+                          );
+                        }
+
+                        if (snapshot.hasError) {
+                          return Center(
+                            child: Text(
+                              'Error loading attendance data',
+                              style: TextStyle(
+                                color: AppTheme.accentRed,
+                                fontSize: 12.sp,
+                              ),
+                            ),
+                          );
+                        }
+
+                        final attendanceData = snapshot.data ?? [];
+                        return _buildAttendanceTable(isDark, attendanceData);
+                      },
+                    ),
+
                   SizedBox(height: 24.h),
                   if (_reportData.isNotEmpty) ...[
                     _buildStudentCardList(),
