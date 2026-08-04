@@ -33,15 +33,20 @@ class _AttendanceReportsScreenState extends State<AttendanceReportsScreen> {
 
   /// Load all students from institute
   Future<void> _loadStudents() async {
-    if (_instituteId == null || _instituteId!.isEmpty) return;
+    if (_instituteId == null || _instituteId!.isEmpty) {
+      print('❌ No instituteId provided');
+      return;
+    }
 
     try {
+      print('🔄 Loading students for institute: $_instituteId');
       final response = await appDb
           .from('students')
           .select('id,sr_no,fname,lname,sub1,sub2,sub3,sub4,sub5,sub6,sub7,sub8')
           .eq('inst_id', _instituteId!)
           .order('sr_no');
 
+      print('✅ Loaded ${response.length} students');
       if (mounted) {
         setState(() {
           _students = List<Map<String, dynamic>>.from(response);
@@ -49,7 +54,7 @@ class _AttendanceReportsScreenState extends State<AttendanceReportsScreen> {
         });
       }
     } catch (e) {
-      print('Error loading students: $e');
+      print('❌ Error loading students: $e');
       if (mounted) setState(() => _loadingStudents = false);
     }
   }
@@ -66,9 +71,13 @@ class _AttendanceReportsScreenState extends State<AttendanceReportsScreen> {
 
   /// Fetch today's attendance for selected student
   Future<Map<String, dynamic>> _fetchTodayAttendance() async {
-    if (_selectedStudent == null) return {};
+    if (_selectedStudent == null) {
+      print('❌ No student selected for today attendance');
+      return {};
+    }
 
     try {
+      print('🔄 Fetching today attendance for: ${_selectedStudent!['sr_no']}');
       final today = DateTime.now().toIso8601String().split('T')[0];
       final srNo = _selectedStudent!['sr_no'] as String;
 
@@ -134,11 +143,15 @@ class _AttendanceReportsScreenState extends State<AttendanceReportsScreen> {
 
   /// Fetch attendance history for selected student
   Future<Map<String, dynamic>> _fetchAttendanceHistory() async {
-    if (_selectedStudent == null) return {};
+    if (_selectedStudent == null) {
+      print('❌ No student selected for history');
+      return {};
+    }
 
     try {
       final srNo = _selectedStudent!['sr_no'] as String;
       final subjects = _getStudentSubjects(_selectedStudent!);
+      print('🔄 Fetching history for: $srNo, subjects: ${subjects.length}');
 
       // Group records by date to count unique days
       final records = await appDb
@@ -146,6 +159,8 @@ class _AttendanceReportsScreenState extends State<AttendanceReportsScreen> {
           .select()
           .eq('sr_no', srNo)
           .order('timestamp');
+
+      print('✅ Got ${records.length} records for $srNo');
 
       Map<String, List<Map<String, dynamic>>> recordsByDate = {};
       for (final record in records) {
