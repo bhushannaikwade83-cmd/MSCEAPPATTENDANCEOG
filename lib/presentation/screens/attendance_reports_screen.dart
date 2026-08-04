@@ -1440,18 +1440,7 @@ class _AttendanceReportsScreenState extends State<AttendanceReportsScreen>
   /// ✅ Build daily attendance report table
   Widget _buildDailyReportTable(bool isDark, List<Map<String, dynamic>> data) {
     if (data.isEmpty) {
-      return Center(
-        child: Padding(
-          padding: EdgeInsets.all(24.h),
-          child: Text(
-            'No students found',
-            style: TextStyle(
-              color: isDark ? Colors.white70 : AppTheme.textGray,
-              fontSize: 14.sp,
-            ),
-          ),
-        ),
-      );
+      return SizedBox.shrink(); // Hide if no data
     }
 
     return Container(
