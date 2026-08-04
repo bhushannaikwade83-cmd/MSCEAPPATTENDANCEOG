@@ -140,43 +140,70 @@ class _AttendanceReportsScreenState extends State<AttendanceReportsScreen> {
       final srNo = _selectedStudent!['sr_no'] as String;
       final subjects = _getStudentSubjects(_selectedStudent!);
 
-      // Get all attendance records for this student
+      // Group records by date to count unique days
       final records = await appDb
           .from('attendance_records')
           .select()
           .eq('sr_no', srNo)
-          .order('date', ascending: false);
+          .order('timestamp');
+
+      Map<String, List<Map<String, dynamic>>> recordsByDate = {};
+      for (final record in records) {
+        final timestamp = record['timestamp'] as String?;
+        if (timestamp == null) continue;
+        final date = timestamp.split('T')[0];
+        recordsByDate.putIfAbsent(date, () => []);
+        recordsByDate[date]!.add(record as Map<String, dynamic>);
+      }
 
       int presentCount = 0;
       int absentCount = 0;
       double totalHours = 0.0;
 
-      for (final record in records) {
-        final status = record['status'] as String?;
+      // Count days and calculate hours
+      for (final dateRecords in recordsByDate.values) {
+        final firstRecord = dateRecords.first;
+        final lastRecord = dateRecords.last;
+
+        final status = firstRecord['status'] as String?;
+
         if (status == 'present' || status == 'entry') {
           presentCount++;
+
+          // Calculate hours for this day
+          final entryTime = DateTime.parse(firstRecord['timestamp'] as String);
+          final exitTime = lastRecord['timestamp'] != firstRecord['timestamp']
+              ? DateTime.parse(lastRecord['timestamp'] as String)
+              : entryTime;
+
+          final dayHours = exitTime.difference(entryTime).inMinutes / 60.0;
+          totalHours += dayHours;
         } else if (status == 'absent') {
           absentCount++;
         }
       }
 
-      final total = presentCount + absentCount;
+      final total = recordsByDate.length;
 
       // Calculate average hours per day
-      if (presentCount > 0) {
-        totalHours = totalHours / presentCount;
-      }
+      double avgHours = presentCount > 0 ? totalHours / presentCount : 0.0;
 
       return {
         'present': presentCount,
         'absent': absentCount,
         'total': total,
-        'hours': totalHours,
+        'hours': avgHours,
         'subjects': subjects.join(', '),
       };
     } catch (e) {
       print('Error fetching history: $e');
-      return {};
+      return {
+        'present': 0,
+        'absent': 0,
+        'total': 0,
+        'hours': 0.0,
+        'subjects': '-',
+      };
     }
   }
 
