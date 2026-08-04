@@ -51,24 +51,31 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
 
   Future<void> _loadInstituteId() async {
     try {
-      final user = Supabase.instance.client.auth.currentUser;
-      if (user == null) return;
+      final user = appDb.auth.currentUser;
+      if (user == null) {
+        print('❌ No authenticated user');
+        return;
+      }
 
-      final adminData = await appDb
-          .from('admin_users')
+      final row = await appDb
+          .from('profiles')
           .select('institute_id')
-          .eq('user_id', user.id)
-          .single();
+          .eq('id', user.id)
+          .maybeSingle();
 
       if (mounted) {
+        final instituteId = row?['institute_id'] as String?;
         setState(() {
-          _instituteId = adminData['institute_id']?.toString();
+          _instituteId = instituteId;
           print('📚 MainNav loaded instituteId: $_instituteId');
           _buildScreens();
         });
       }
     } catch (e) {
       print('❌ Error loading instituteId: $e');
+      if (mounted) {
+        setState(() => _buildScreens()); // Build screens even on error
+      }
     }
   }
 
