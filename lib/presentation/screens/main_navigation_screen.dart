@@ -38,9 +38,8 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
   @override
   void initState() {
     super.initState();
-    _buildScreens(); // Build with null instituteId first
-    _loadInstituteId();
     WidgetsBinding.instance.addObserver(this);
+    _loadInstituteId(); // Load FIRST, then build screens
 
     // Incremental credited-hours backfill (one small batch; skips when done).
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -176,6 +175,16 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
       'Student Reports',
       'Institute Report',
     ];
+    // Show loading until instituteId is loaded and screens are built
+    if (_screens.isEmpty) {
+      return Scaffold(
+        backgroundColor: AppTheme.backgroundGrey,
+        body: Center(
+          child: CircularProgressIndicator(color: AppTheme.primaryBlue),
+        ),
+      );
+    }
+
     return PopScope(
       canPop: Navigator.of(context).canPop(),
       onPopInvokedWithResult: (didPop, result) {
