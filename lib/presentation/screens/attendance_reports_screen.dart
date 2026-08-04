@@ -1842,37 +1842,61 @@ class _AttendanceReportsScreenState extends State<AttendanceReportsScreen>
 
                   SizedBox(height: 32.h),
 
-                  // 📊 Attendance Summary Table
+                  // 👥 STUDENT'S ATTENDANCE TABLE (Historical by Date Range)
                   if (_instituteId != null && _selectedStartDate != null)
-                    FutureBuilder<List<Map<String, dynamic>>>(
-                      future: _fetchAttendanceSummary(),
-                      builder: (context, snapshot) {
-                        if (snapshot.connectionState == ConnectionState.waiting) {
-                          return Center(
-                            child: Padding(
-                              padding: EdgeInsets.all(24.h),
-                              child: CircularProgressIndicator(
-                                color: AppTheme.primaryBlue,
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Padding(
+                          padding: EdgeInsets.symmetric(horizontal: 4.w, vertical: 8.h),
+                          child: Row(
+                            children: [
+                              Icon(Icons.person_2_rounded,
+                                  size: 16.sp, color: AppTheme.primaryBlue),
+                              SizedBox(width: 8.w),
+                              Text(
+                                "STUDENT'S ATTENDANCE",
+                                style: TextStyle(
+                                  color: isDark ? Colors.white : AppTheme.textDark,
+                                  fontWeight: FontWeight.w800,
+                                  fontSize: 14.sp,
+                                ),
                               ),
-                            ),
-                          );
-                        }
+                            ],
+                          ),
+                        ),
+                        SizedBox(height: 12.h),
+                        FutureBuilder<List<Map<String, dynamic>>>(
+                          future: _fetchAttendanceSummary(),
+                          builder: (context, snapshot) {
+                            if (snapshot.connectionState == ConnectionState.waiting) {
+                              return Center(
+                                child: Padding(
+                                  padding: EdgeInsets.all(24.h),
+                                  child: CircularProgressIndicator(
+                                    color: AppTheme.primaryBlue,
+                                  ),
+                                ),
+                              );
+                            }
 
-                        if (snapshot.hasError) {
-                          return Center(
-                            child: Text(
-                              'Error loading attendance data',
-                              style: TextStyle(
-                                color: AppTheme.accentRed,
-                                fontSize: 12.sp,
-                              ),
-                            ),
-                          );
-                        }
+                            if (snapshot.hasError) {
+                              return Center(
+                                child: Text(
+                                  'Error loading attendance data',
+                                  style: TextStyle(
+                                    color: AppTheme.accentRed,
+                                    fontSize: 12.sp,
+                                  ),
+                                ),
+                              );
+                            }
 
-                        final attendanceData = snapshot.data ?? [];
-                        return _buildAttendanceTable(isDark, attendanceData);
-                      },
+                            final attendanceData = snapshot.data ?? [];
+                            return _buildAttendanceTable(isDark, attendanceData);
+                          },
+                        ),
+                      ],
                     ),
 
                   SizedBox(height: 24.h),
