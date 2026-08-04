@@ -28,6 +28,7 @@ class _AttendanceReportsScreenState extends State<AttendanceReportsScreen> {
   void initState() {
     super.initState();
     _instituteId = widget.instituteId;
+    print('📚 Reports Screen Init - instituteId: $_instituteId');
     _loadStudents();
   }
 
