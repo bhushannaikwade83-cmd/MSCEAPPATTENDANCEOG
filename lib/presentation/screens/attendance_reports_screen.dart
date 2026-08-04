@@ -185,7 +185,7 @@ class _AttendanceReportsScreenState extends State<AttendanceReportsScreen> {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Scaffold(
-      backgroundColor: isDark ? AppTheme.bgDark : AppTheme.bgLight,
+      backgroundColor: isDark ? const Color(0xFF0D1B2E) : AppTheme.backgroundGrey,
       body: _loadingStudents
           ? Center(child: CircularProgressIndicator(color: AppTheme.primaryBlue))
           : SingleChildScrollView(
@@ -234,7 +234,7 @@ class _AttendanceReportsScreenState extends State<AttendanceReportsScreen> {
                         ),
                         isExpanded: true,
                         underline: SizedBox.shrink(),
-                        dropdownColor: isDark ? AppTheme.cardDark : Colors.white,
+                        dropdownColor: isDark ? const Color(0xFF1E293B) : Colors.white,
                         items: _students.map((student) {
                           final fname = student['fname'] as String? ?? '';
                           final lname = student['lname'] as String? ?? '';
