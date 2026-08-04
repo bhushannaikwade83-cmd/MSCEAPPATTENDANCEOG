@@ -1,7 +1,9 @@
 import 'dart:async' show unawaited;
 
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:smart_attendance_app/l10n/app_localizations.dart';
+import '../../core/app_db.dart';
 import '../../services/geofence_service.dart';
 import '../../services/attendance_hours_persistence_service.dart';
 import 'admin_home_screen.dart';
@@ -30,23 +32,14 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
     with WidgetsBindingObserver {
   int _currentIndex = 0;
   final PageController _pageController = PageController();
-  late final List<Widget> _screens = [
-    const AdminHomeScreen(key: PageStorageKey('main-admin-home')),
-    const AddInstituteAttendanceUserScreen(key: PageStorageKey('main-add-user')),
-    const StudentManagementScreen(key: PageStorageKey('main-students')),
-    const GpsSettingsScreen(key: PageStorageKey('main-gps')),
-    const AttendanceReportsScreen(key: PageStorageKey('main-student-reports')),
-    InstituteReportScreen(
-      key: const PageStorageKey('main-institute-report'),
-      instituteId: null,
-      startDate: DateTime.now().subtract(const Duration(days: 7)),
-      endDate: DateTime.now(),
-    ),
-  ];
+  String? _instituteId;
+  List<Widget> _screens = [];
 
   @override
   void initState() {
     super.initState();
+    _buildScreens(); // Build with null instituteId first
+    _loadInstituteId();
     WidgetsBinding.instance.addObserver(this);
 
     // Incremental credited-hours backfill (one small batch; skips when done).
@@ -55,6 +48,47 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
     });
 
     WidgetsBinding.instance.addPostFrameCallback((_) => _redirectIfAdminNeedsGps());
+  }
+
+  Future<void> _loadInstituteId() async {
+    try {
+      final user = Supabase.instance.client.auth.currentUser;
+      if (user == null) return;
+
+      final adminData = await appDb
+          .from('admin_users')
+          .select('institute_id')
+          .eq('user_id', user.id)
+          .single();
+
+      if (mounted) {
+        setState(() {
+          _instituteId = adminData['institute_id']?.toString();
+          print('📚 MainNav loaded instituteId: $_instituteId');
+          _buildScreens();
+        });
+      }
+    } catch (e) {
+      print('❌ Error loading instituteId: $e');
+    }
+  }
+
+  void _buildScreens() {
+    _screens = [
+      const AdminHomeScreen(key: PageStorageKey('main-admin-home')),
+      const AddInstituteAttendanceUserScreen(key: PageStorageKey('main-add-user')),
+      const StudentManagementScreen(key: PageStorageKey('main-students')),
+      const GpsSettingsScreen(key: PageStorageKey('main-gps')),
+      AttendanceReportsScreen(
+        key: const PageStorageKey('main-student-reports'),
+        instituteId: _instituteId,
+      ),
+      InstituteReportScreen(
+        key: const PageStorageKey('main-institute-report'),
+        instituteId: _instituteId,
+        startDate: DateTime.now().subtract(const Duration(days: 7)),
+        endDate: DateTime.now()),
+    ];
   }
 
   @override
