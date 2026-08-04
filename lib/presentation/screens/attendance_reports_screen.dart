@@ -269,7 +269,7 @@ class _AttendanceReportsScreenState extends State<AttendanceReportsScreen>
       // Load ALL students from THIS institute ONLY
       List<Map<String, dynamic>> allStudents = (await appDb
           .from('students')
-          .select('id,institute_id,user_id,sr_no,name')
+          .select('id,institute_id,sr_no,fname,lname')
           .eq('institute_id', _instituteId!))
           .cast<Map<String, dynamic>>();
 
@@ -360,16 +360,16 @@ class _AttendanceReportsScreenState extends State<AttendanceReportsScreen>
       for (final m in allStudents) {
         final id = m['id'] as String?;
         if (id == null) continue;
-        final u = m['user_id'] as String?;
         final sr = m['sr_no'] as String?;
         final iid = m['institute_id'] as String?;
-        final rk = (u != null && u.isNotEmpty) ? u : (sr ?? '');
-        final nm = m['name']?.toString().trim() ?? '';
-        if (rk.isNotEmpty) {
-          rollByStudentId[id] = rk;
-          if (nm.isNotEmpty) nameByRoll[rk] = nm;
-          if (sr != null && sr.trim().isNotEmpty) {
-            srNoByRoll[rk] = sr.trim();
+        final fname = m['fname']?.toString().trim() ?? '';
+        final lname = m['lname']?.toString().trim() ?? '';
+        final nm = '$fname $lname'.trim();
+        if (sr != null && sr.isNotEmpty) {
+          rollByStudentId[id] = sr;
+          if (nm.isNotEmpty) nameByRoll[sr] = nm;
+          if (sr.trim().isNotEmpty) {
+            srNoByRoll[sr] = sr.trim();
           }
           if (iid != null) {
             studentInstituteMap[rk] = iid;
@@ -446,13 +446,11 @@ class _AttendanceReportsScreenState extends State<AttendanceReportsScreen>
       final Map<String, int> studentSubjectCount = {};
       for (final student in allStudents) {
         final id = student['id'] as String?;
-        final userId = student['user_id'] as String?;
         final srNo = student['sr_no'] as String?;
-        final key = (userId != null && userId.isNotEmpty) ? userId : (srNo ?? '');
 
-        if (key.isNotEmpty && id != null) {
+        if (srNo != null && srNo.isNotEmpty && id != null) {
           final subjects = student['subjects'] as List?;
-          studentSubjectCount[key] = (subjects?.length ?? 1).clamp(1, 4);
+          studentSubjectCount[srNo] = (subjects?.length ?? 1).clamp(1, 4);
         }
       }
 
@@ -2477,7 +2475,7 @@ class _AttendanceReportsScreenState extends State<AttendanceReportsScreen>
   Future<void> _showStudentSelectionDialog() async {
     if (_instituteId == null) return;
 
-    final studentRows = await appDb.from('students').select('user_id,name,sr_no').eq('institute_id', _instituteId!);
+    final studentRows = await appDb.from('students').select('sr_no,fname,lname').eq('institute_id', _instituteId!);
 
     if (studentRows.isEmpty) {
       if (mounted) {
@@ -2493,9 +2491,11 @@ class _AttendanceReportsScreenState extends State<AttendanceReportsScreen>
 
     final students = studentRows.map((raw) {
       final data = raw as Map<String, dynamic>;
+      final fname = data['fname'] as String? ?? '';
+      final lname = data['lname'] as String? ?? '';
       return {
-        'rollNumber': data['user_id'] as String? ?? data['sr_no'] as String? ?? '',
-        'name': data['name'] as String? ?? 'Unknown',
+        'rollNumber': data['sr_no'] as String? ?? '',
+        'name': '$fname $lname'.trim().isEmpty ? 'Unknown' : '$fname $lname'.trim(),
       };
     }).toList();
 
