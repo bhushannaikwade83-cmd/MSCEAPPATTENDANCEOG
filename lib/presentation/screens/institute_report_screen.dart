@@ -95,7 +95,7 @@ class _InstituteReportScreenState extends State<InstituteReportScreen> {
     // 1. Fetch all students
     final allStudents = await appDb
         .from('students')
-        .select('id, user_id, sr_no, fname, mname, lname, sub1, sub2, sub3, sub4, sub5, sub6, sub7, sub8')
+        .select('id, sr_no, fname, mname, lname, sub1, sub2, sub3, sub4, sub5, sub6, sub7, sub8')
         .eq('institute_id', _instituteId!);
 
     final studentIds = allStudents.map((s) => s['id'] as String).toList();
@@ -106,9 +106,7 @@ class _InstituteReportScreenState extends State<InstituteReportScreen> {
 
     for (final s in allStudents) {
       final sid = s['id'] as String;
-      final roll = (s['user_id'] as String?)?.isNotEmpty == true
-          ? s['user_id'] as String
-          : (s['sr_no'] as String? ?? '');
+      final roll = s['sr_no'] as String? ?? '';
 
       if (roll.isNotEmpty) {
         rollByStudentId[sid] = roll;
