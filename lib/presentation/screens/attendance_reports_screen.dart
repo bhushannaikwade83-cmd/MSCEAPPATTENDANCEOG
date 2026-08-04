@@ -1879,8 +1879,6 @@ class _AttendanceReportsScreenState extends State<AttendanceReportsScreen>
                   if (_reportData.isNotEmpty) ...[
                     _buildStudentCardList(),
                   ],
-                  if (!_isLoading && _reportMode != null && _reportData.isEmpty)
-                    _buildEmptyState(isDark),
                   if (_reportData.isEmpty && !_isLoading && _reportMode == null)
                     _buildInitialState(isDark),
                 ],
