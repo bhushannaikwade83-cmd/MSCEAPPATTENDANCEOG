@@ -1219,6 +1219,142 @@ class _AttendanceReportsScreenState extends State<AttendanceReportsScreen>
     );
   }
 
+  /// ✅ Fetch DAILY attendance report with auto-present/absent and real-time hours
+  Future<List<Map<String, dynamic>>> _fetchDailyAttendanceReport() async {
+    try {
+      if (_instituteId == null) return [];
+
+      final today = DateTime.now();
+      final todayStr = DateFormat('yyyy-MM-dd').format(today);
+      final dayOfWeek = today.weekday; // 1=Monday, 7=Sunday
+
+      // Check if today is Sunday (skip absence count)
+      final isSunday = dayOfWeek == 7;
+
+      // Get all students in institute
+      final students = await appDb
+          .from('students')
+          .select('sr_no, student_name, sub1, sub2, sub3, sub4, sub5, sub6, sub7, sub8, allotted_hours')
+          .eq('institute_id', _instituteId!);
+
+      // Get today's attendance records
+      final attendanceRecords = await appDb
+          .from('attendance')
+          .select('sr_no, record_type, marked_time, allotted_target_hr')
+          .eq('institute_id', _instituteId!)
+          .eq('attendance_date', todayStr)
+          .order('sr_no');
+
+      // Map attendance by sr_no
+      final Map<String, List<Map<String, dynamic>>> attendanceByStudent = {};
+      for (final record in attendanceRecords) {
+        final srNo = record['sr_no']?.toString() ?? '';
+        if (!attendanceByStudent.containsKey(srNo)) {
+          attendanceByStudent[srNo] = [];
+        }
+        attendanceByStudent[srNo]!.add(record);
+      }
+
+      final result = <Map<String, dynamic>>[];
+
+      for (final student in students) {
+        final srNo = student['sr_no']?.toString() ?? '';
+        final studentName = student['student_name']?.toString() ?? 'Unknown';
+
+        // Get subjects
+        final subjects = <String>[];
+        for (int i = 1; i <= 8; i++) {
+          final sub = student['sub$i']?.toString();
+          if (sub != null && sub.isNotEmpty && sub != 'null') {
+            subjects.add(sub);
+          }
+        }
+        final subjectCount = subjects.length;
+
+        // Get allocated hours (target)
+        final allocatedHours = (student['allotted_hours'] as num?)?.toDouble() ?? 0.0;
+
+        // Get attendance records for this student today
+        final records = attendanceByStudent[srNo] ?? [];
+
+        // Check for entry/exit
+        final hasEntry = records.any((r) => r['record_type']?.toString().toLowerCase() == 'entry');
+        final hasExit = records.any((r) => r['record_type']?.toString().toLowerCase() == 'exit');
+
+        // Determine status
+        late String status;
+        late double creditedHours;
+
+        if (!hasEntry) {
+          // No entry = Absent (or Holiday if Sunday)
+          status = isSunday ? 'HOLIDAY' : 'ABSENT';
+          creditedHours = 0.0;
+        } else if (hasEntry && !hasExit) {
+          // Entry but no exit = Calculate real-time hours
+          final entryRecord = records.firstWhere(
+            (r) => r['record_type']?.toString().toLowerCase() == 'entry',
+            orElse: () => {},
+          );
+          final markedTime = entryRecord['marked_time'];
+
+          if (markedTime != null) {
+            final entryTime = DateTime.parse(markedTime.toString());
+            final now = DateTime.now();
+            creditedHours = now.difference(entryTime).inMinutes / 60.0;
+          } else {
+            creditedHours = 0.0;
+          }
+
+          // Compare with allocated
+          status = creditedHours >= allocatedHours ? 'SEATED' : 'SHORT';
+        } else if (hasEntry && hasExit) {
+          // Both entry and exit = Calculate actual hours
+          final entryRecord = records.firstWhere(
+            (r) => r['record_type']?.toString().toLowerCase() == 'entry',
+            orElse: () => {},
+          );
+          final exitRecord = records.firstWhere(
+            (r) => r['record_type']?.toString().toLowerCase() == 'exit',
+            orElse: () => {},
+          );
+
+          final entryTime = entryRecord['marked_time'] != null
+              ? DateTime.parse(entryRecord['marked_time'].toString())
+              : null;
+          final exitTime = exitRecord['marked_time'] != null
+              ? DateTime.parse(exitRecord['marked_time'].toString())
+              : null;
+
+          if (entryTime != null && exitTime != null) {
+            creditedHours = exitTime.difference(entryTime).inMinutes / 60.0;
+          } else {
+            creditedHours = 0.0;
+          }
+
+          // Compare with allocated
+          status = creditedHours >= allocatedHours ? 'SEATED' : 'SHORT';
+        } else {
+          status = 'ABSENT';
+          creditedHours = 0.0;
+        }
+
+        result.add({
+          'sr_no': srNo,
+          'student_name': studentName,
+          'subjects': subjects.join(', '),
+          'status': status,
+          'credited_hours': creditedHours,
+          'allocated_hours': allocatedHours,
+        });
+      }
+
+      return result;
+    } catch (e) {
+      if (kDebugMode) debugPrint('❌ Error fetching daily attendance: $e');
+      return [];
+    }
+  }
+
   /// ✅ Fetch attendance summary table data with subjects
   Future<List<Map<String, dynamic>>> _fetchAttendanceSummary() async {
     try {
@@ -1299,6 +1435,139 @@ class _AttendanceReportsScreenState extends State<AttendanceReportsScreen>
       if (kDebugMode) debugPrint('❌ Error fetching attendance summary: $e');
       return [];
     }
+  }
+
+  /// ✅ Build daily attendance report table
+  Widget _buildDailyReportTable(bool isDark, List<Map<String, dynamic>> data) {
+    if (data.isEmpty) {
+      return Center(
+        child: Padding(
+          padding: EdgeInsets.all(24.h),
+          child: Text(
+            'No students found',
+            style: TextStyle(
+              color: isDark ? Colors.white70 : AppTheme.textGray,
+              fontSize: 14.sp,
+            ),
+          ),
+        ),
+      );
+    }
+
+    return Container(
+      decoration: BoxDecoration(
+        color: isDark ? const Color(0xFF1A1A2E) : Colors.white,
+        borderRadius: BorderRadius.circular(12.r),
+        border: Border.all(
+          color: AppTheme.primaryBlue.withOpacity(isDark ? 0.3 : 0.15),
+          width: 1.5,
+        ),
+      ),
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: DataTable(
+          columns: [
+            DataColumn(label: Text('Name', style: _tableHeaderStyle(isDark))),
+            DataColumn(label: Text('Subjects', style: _tableHeaderStyle(isDark))),
+            DataColumn(label: Text('Status', style: _tableHeaderStyle(isDark))),
+            DataColumn(label: Text('Credited Hours', style: _tableHeaderStyle(isDark))),
+            DataColumn(label: Text('Allotted', style: _tableHeaderStyle(isDark))),
+          ],
+          rows: data.map((student) {
+            final status = student['status']?.toString() ?? '';
+            final creditedHours = student['credited_hours'] ?? 0.0;
+            final allocatedHours = student['allocated_hours'] ?? 0.0;
+
+            late Color statusColor;
+            late IconData statusIcon;
+
+            if (status == 'PRESENT') {
+              statusColor = AppTheme.primaryGreen;
+              statusIcon = Icons.check_circle;
+            } else if (status == 'ABSENT') {
+              statusColor = AppTheme.accentRed;
+              statusIcon = Icons.cancel;
+            } else if (status == 'SEATED') {
+              statusColor = AppTheme.primaryGreen;
+              statusIcon = Icons.verified;
+            } else if (status == 'SHORT') {
+              statusColor = AppTheme.accentOrange;
+              statusIcon = Icons.schedule;
+            } else {
+              statusColor = AppTheme.textGray;
+              statusIcon = Icons.event;
+            }
+
+            return DataRow(cells: [
+              DataCell(Text(
+                student['student_name']?.toString() ?? '',
+                style: TextStyle(
+                  color: isDark ? Colors.white : AppTheme.textDark,
+                  fontSize: 11.sp,
+                  fontWeight: FontWeight.w600,
+                ),
+              )),
+              DataCell(Text(
+                student['subjects']?.toString() ?? '-',
+                style: TextStyle(
+                  color: isDark ? Colors.white70 : AppTheme.textGray,
+                  fontSize: 10.sp,
+                ),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              )),
+              DataCell(
+                Container(
+                  padding: EdgeInsets.symmetric(horizontal: 8.w, vertical: 4.h),
+                  decoration: BoxDecoration(
+                    color: statusColor.withOpacity(0.2),
+                    borderRadius: BorderRadius.circular(6.r),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(statusIcon, size: 12.sp, color: statusColor),
+                      SizedBox(width: 4.w),
+                      Text(
+                        status,
+                        style: TextStyle(
+                          color: statusColor,
+                          fontWeight: FontWeight.w700,
+                          fontSize: 10.sp,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              DataCell(Text(
+                '${creditedHours.toStringAsFixed(1)}h',
+                style: TextStyle(
+                  color: isDark ? Colors.white : AppTheme.textDark,
+                  fontWeight: FontWeight.w600,
+                  fontSize: 11.sp,
+                ),
+              )),
+              DataCell(Text(
+                '${allocatedHours.toStringAsFixed(1)}h',
+                style: TextStyle(
+                  color: isDark ? Colors.white70 : AppTheme.textGray,
+                  fontSize: 11.sp,
+                ),
+              )),
+            ]);
+          }).toList(),
+        ),
+      ),
+    );
+  }
+
+  TextStyle _tableHeaderStyle(bool isDark) {
+    return TextStyle(
+      color: AppTheme.primaryBlue,
+      fontWeight: FontWeight.w700,
+      fontSize: 12.sp,
+    );
   }
 
   /// ✅ Build attendance table widget
@@ -1530,6 +1799,59 @@ class _AttendanceReportsScreenState extends State<AttendanceReportsScreen>
                   SizedBox(height: 12.h),
                   _buildSearchField(isDark),
                   SizedBox(height: 24.h),
+
+                  // 📅 TODAY'S ATTENDANCE REPORT (Auto-Present/Absent + Real-time Hours)
+                  if (_instituteId != null)
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Padding(
+                          padding: EdgeInsets.symmetric(horizontal: 4.w, vertical: 8.h),
+                          child: Row(
+                            children: [
+                              Icon(Icons.calendar_today, size: 16.sp, color: AppTheme.primaryBlue),
+                              SizedBox(width: 8.w),
+                              Text(
+                                "TODAY'S ATTENDANCE",
+                                style: TextStyle(
+                                  color: isDark ? Colors.white : AppTheme.textDark,
+                                  fontWeight: FontWeight.w800,
+                                  fontSize: 14.sp,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        SizedBox(height: 12.h),
+                        FutureBuilder<List<Map<String, dynamic>>>(
+                          future: _fetchDailyAttendanceReport(),
+                          builder: (context, snapshot) {
+                            if (snapshot.connectionState == ConnectionState.waiting) {
+                              return Center(
+                                child: Padding(
+                                  padding: EdgeInsets.all(24.h),
+                                  child: CircularProgressIndicator(color: AppTheme.primaryBlue),
+                                ),
+                              );
+                            }
+
+                            if (snapshot.hasError) {
+                              return Center(
+                                child: Text(
+                                  'Error loading daily report',
+                                  style: TextStyle(color: AppTheme.accentRed, fontSize: 12.sp),
+                                ),
+                              );
+                            }
+
+                            final dailyData = snapshot.data ?? [];
+                            return _buildDailyReportTable(isDark, dailyData);
+                          },
+                        ),
+                      ],
+                    ),
+
+                  SizedBox(height: 32.h),
 
                   // 📊 Attendance Summary Table
                   if (_instituteId != null && _selectedStartDate != null)
