@@ -372,7 +372,7 @@ class _AttendanceReportsScreenState extends State<AttendanceReportsScreen>
             srNoByRoll[sr] = sr.trim();
           }
           if (iid != null) {
-            studentInstituteMap[rk] = iid;
+            studentInstituteMap[sr] = iid;
           }
         }
       }
