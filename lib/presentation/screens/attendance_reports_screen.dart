@@ -44,7 +44,7 @@ class _AttendanceReportsScreenState extends State<AttendanceReportsScreen> {
       final response = await appDb
           .from('students')
           .select('id,sr_no,fname,lname,sub1,sub2,sub3,sub4,sub5,sub6,sub7,sub8')
-          .eq('inst_id', _instituteId!)
+          .eq('institute_id', _instituteId!)
           .order('sr_no');
 
       print('✅ Loaded ${response.length} students');
