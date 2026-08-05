@@ -809,14 +809,11 @@ class _LoginScreenState extends State<LoginScreen>
 
       if (!locationResult.isWithinRadius) {
         if (mounted) {
-          final errorMsg = locationResult.error ??
-              'You appear outside the institute zone for PIN login. Move closer to the locked GPS point or improve GPS signal, then try again.';
           final distanceStr = locationResult.distanceMeters != null
-              ? '\n\nYour distance: ${PinSessionManager.formatDistance(locationResult.distanceMeters!)}'
+              ? ' (${PinSessionManager.formatDistance(locationResult.distanceMeters!)})'
               : '';
-
           _showModernSnackbar(
-            '$errorMsg$distanceStr',
+            '❌ Out of Radius - Try Again$distanceStr',
             isSuccess: false,
           );
         }
@@ -1002,6 +999,30 @@ class _LoginScreenState extends State<LoginScreen>
     bool isBiometric = false,
   }) async {
     try {
+      // ✅ Check GPS geofence before full login
+      final instId = instituteId ?? _instituteIdController.text.trim();
+      if (instId.isNotEmpty) {
+        final locationResult = await PinSessionManager.verifyLocationRadius(
+          instituteId: instId,
+          cachedLatitude: null,
+          cachedLongitude: null,
+        );
+
+        if (!locationResult.isWithinRadius) {
+          if (mounted) {
+            final distanceStr = locationResult.distanceMeters != null
+                ? ' (${PinSessionManager.formatDistance(locationResult.distanceMeters!)})'
+                : '';
+            _showModernSnackbar(
+              '❌ Out of Radius - Try Again$distanceStr',
+              isSuccess: false,
+            );
+          }
+          if (mounted) setState(() => _isLoading = false);
+          return;
+        }
+      }
+
       final result = await _authService.signInWithEmail(
           email: email, password: password);
 
@@ -3404,7 +3425,7 @@ class _LoginScreenState extends State<LoginScreen>
                 fontWeight: FontWeight.w400),
             textAlign: TextAlign.center),
         SizedBox(height: 8.h),
-        const Center(child: SupportEmailFooter()),
+        Center(child: SupportEmailFooter()),
         SizedBox(height: 10.h),
         Row(children: [
           Expanded(child: Container(height: 3, decoration: const BoxDecoration(
