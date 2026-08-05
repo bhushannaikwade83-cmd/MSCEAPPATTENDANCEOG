@@ -143,6 +143,10 @@ class _AttendanceReportsScreenState extends State<AttendanceReportsScreen> {
   }
 
   /// Fetch attendance history for selected student
+  /// Logic:
+  /// 1. Entry + Exit both marked → Use hours from EXIT
+  /// 2. Entry marked but NO Exit (after 12 AM) → "NOT EXITED BUT ENTRY" + Add allotted hours
+  /// 3. No Entry + No Exit → ABSENT
   Future<Map<String, dynamic>> _fetchAttendanceHistory() async {
     if (_selectedStudent == null) {
       print('❌ No student selected for history');
@@ -154,20 +158,25 @@ class _AttendanceReportsScreenState extends State<AttendanceReportsScreen> {
       final subjects = _getStudentSubjects(_selectedStudent!);
       print('🔄 Fetching history for: $srNo, subjects: ${subjects.length}');
 
-      // Group records by date to count unique days
+      // Get allocated hours for this student based on subject count
+      double allocatedHours = 8.0;
+      if (subjects.length <= 2) allocatedHours = 8.0;
+      else if (subjects.length <= 4) allocatedHours = 6.0;
+      else allocatedHours = 5.0;
+
+      // Group records by date
       final records = await appDb
           .from('attendance_records')
           .select()
           .eq('sr_no', srNo)
-          .order('timestamp');
+          .order('attendance_date, marked_time');
 
       print('✅ Got ${records.length} records for $srNo');
 
       Map<String, List<Map<String, dynamic>>> recordsByDate = {};
       for (final record in records) {
-        final timestamp = record['timestamp'] as String?;
-        if (timestamp == null) continue;
-        final date = timestamp.split('T')[0];
+        final date = record['attendance_date'] as String?;
+        if (date == null) continue;
         recordsByDate.putIfAbsent(date, () => []);
         recordsByDate[date]!.add(record as Map<String, dynamic>);
       }
@@ -176,32 +185,43 @@ class _AttendanceReportsScreenState extends State<AttendanceReportsScreen> {
       int absentCount = 0;
       double totalHours = 0.0;
 
-      // Count days and calculate hours
-      for (final dateRecords in recordsByDate.values) {
-        final firstRecord = dateRecords.first;
-        final lastRecord = dateRecords.last;
+      // Analyze each day's attendance
+      for (final MapEntry(key: date, value: dayRecords) in recordsByDate.entries) {
+        print('📅 Processing date: $date with ${dayRecords.length} records');
 
-        final status = firstRecord['status'] as String?;
+        // Find entry and exit records
+        final entryRecord = dayRecords.firstWhere(
+          (r) => (r['record_type'] as String?) == 'entry',
+          orElse: () => <String, dynamic>{},
+        );
+        final exitRecord = dayRecords.firstWhere(
+          (r) => (r['record_type'] as String?) == 'exit',
+          orElse: () => <String, dynamic>{},
+        );
 
-        if (status == 'present' || status == 'entry') {
+        if (entryRecord.isNotEmpty && exitRecord.isNotEmpty) {
+          // ✅ Case 1: BOTH Entry and Exit marked - Use hours from exit record
+          print('✅ Entry + Exit found for $date');
           presentCount++;
 
-          // Calculate hours for this day
-          final entryTime = DateTime.parse(firstRecord['timestamp'] as String);
-          final exitTime = lastRecord['timestamp'] != firstRecord['timestamp']
-              ? DateTime.parse(lastRecord['timestamp'] as String)
-              : entryTime;
+          final entryTime = DateTime.parse(entryRecord['marked_time'] as String);
+          final exitTime = DateTime.parse(exitRecord['marked_time'] as String);
 
           final dayHours = exitTime.difference(entryTime).inMinutes / 60.0;
           totalHours += dayHours;
-        } else if (status == 'absent') {
+        } else if (entryRecord.isNotEmpty && exitRecord.isEmpty) {
+          // ⏱️ Case 2: Entry marked but NO Exit - "NOT EXITED BUT ENTRY" + Add allotted hours
+          print('⏱️ Entry only (no exit) for $date - marking as NOT EXITED');
+          presentCount++;
+          totalHours += allocatedHours; // Add allotted hours
+        } else if (entryRecord.isEmpty && exitRecord.isEmpty) {
+          // ❌ Case 3: No entry and no exit - ABSENT
+          print('❌ No entry/exit for $date - marking as ABSENT');
           absentCount++;
         }
       }
 
       final total = recordsByDate.length;
-
-      // Calculate average hours per day
       double avgHours = presentCount > 0 ? totalHours / presentCount : 0.0;
 
       return {
