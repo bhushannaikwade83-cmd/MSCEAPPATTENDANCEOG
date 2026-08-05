@@ -368,62 +368,67 @@ class _SplashScreenState extends State<SplashScreen>
     required String title,
     required String subtitle,
   }) {
-    return Container(
-      padding: EdgeInsets.all(14.w),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(14.r),
-        color: Colors.white.withOpacity(0.08),
-        border: Border.all(
-          color: Colors.white.withOpacity(0.15),
-          width: 1.5,
-        ),
-        backdropFilter: ui.ImageFilter.blur(sigmaX: 8, sigmaY: 8),
-      ),
-      child: Row(
-        children: [
-          Container(
-            padding: EdgeInsets.all(10.w),
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              gradient: LinearGradient(
-                colors: [
-                  Colors.white.withOpacity(0.2),
-                  Colors.white.withOpacity(0.08),
-                ],
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(14.r),
+      child: BackdropFilter(
+        filter: ui.ImageFilter.blur(sigmaX: 8, sigmaY: 8),
+        child: Container(
+          padding: EdgeInsets.all(14.w),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(14.r),
+            color: Colors.white.withOpacity(0.08),
+            border: Border.all(
+              color: Colors.white.withOpacity(0.15),
+              width: 1.5,
+            ),
+          ),
+          child: Row(
+            children: [
+              Container(
+                padding: EdgeInsets.all(10.w),
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: LinearGradient(
+                    colors: [
+                      Colors.white.withOpacity(0.2),
+                      Colors.white.withOpacity(0.08),
+                    ],
+                  ),
+                ),
+                child: Icon(
+                  icon,
+                  color: Colors.white,
+                  size: 24.sp,
+                ),
               ),
-            ),
-            child: Icon(
-              icon,
-              color: Colors.white,
-              size: 24.sp,
-            ),
-          ),
-          SizedBox(width: 14.w),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  title,
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w700,
-                    fontSize: 13.sp,
-                  ),
+              SizedBox(width: 14.w),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w700,
+                        fontSize: 13.sp,
+                      ),
+                    ),
+                    SizedBox(height: 3.h),
+                    Text(
+                      subtitle,
+                      style: TextStyle(
+                        color: Colors.white.withOpacity(0.6),
+                        fontWeight: FontWeight.w400,
+                        fontSize: 11.sp,
+                      ),
+                    ),
+                  ],
                 ),
-                SizedBox(height: 3.h),
-                Text(
-                  subtitle,
-                  style: TextStyle(
-                    color: Colors.white.withOpacity(0.6),
-                    fontWeight: FontWeight.w400,
-                    fontSize: 11.sp,
-                  ),
-                ),
-              ],
-            ),
+              ),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }
