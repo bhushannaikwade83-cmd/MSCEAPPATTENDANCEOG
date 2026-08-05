@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'dart:math' as math;
+import 'dart:ui' as ui;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -25,111 +26,90 @@ class SplashScreen extends StatefulWidget {
 class _SplashScreenState extends State<SplashScreen>
     with TickerProviderStateMixin {
   late AnimationController _intro;
+  late AnimationController _featureSlide;
   late Animation<double> _logoScale;
-  late Animation<double> _logoTurn;
   late Animation<double> _logoOpacity;
   late Animation<double> _titleOpacity;
-  late Animation<double> _titleSlide;
   late Animation<double> _subtitleOpacity;
-  late Animation<double> _badgeOpacity;
+  late Animation<double> _featureOpacity;
   late Animation<double> _loaderOpacity;
-  late Animation<double> _glowPulse;
-
-  late AnimationController _pulse;
 
   @override
   void initState() {
     super.initState();
     _intro = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 2400),
+      duration: const Duration(milliseconds: 2200),
     );
 
-    _logoScale = Tween<double>(begin: 0.12, end: 1.0).animate(
+    _featureSlide = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1600),
+    );
+
+    // Logo animation
+    _logoScale = Tween<double>(begin: 0.3, end: 1.0).animate(
       CurvedAnimation(
         parent: _intro,
-        curve: const Interval(0.0, 0.42, curve: Curves.elasticOut),
+        curve: const Interval(0.0, 0.35, curve: Curves.elasticOut),
       ),
     );
-    _logoTurn = Tween<double>(begin: -0.12, end: 0.0).animate(
-      CurvedAnimation(
-        parent: _intro,
-        curve: const Interval(0.0, 0.45, curve: Curves.easeOutCubic),
-      ),
-    );
+
     _logoOpacity = Tween<double>(begin: 0.0, end: 1.0).animate(
       CurvedAnimation(
         parent: _intro,
-        curve: const Interval(0.0, 0.32, curve: Curves.easeOut),
+        curve: const Interval(0.0, 0.3, curve: Curves.easeOut),
       ),
     );
+
+    // Title animation
     _titleOpacity = Tween<double>(begin: 0.0, end: 1.0).animate(
       CurvedAnimation(
         parent: _intro,
-        curve: const Interval(0.26, 0.58, curve: Curves.easeOut),
+        curve: const Interval(0.2, 0.5, curve: Curves.easeOut),
       ),
     );
-    _titleSlide = Tween<double>(begin: 32.0, end: 0.0).animate(
-      CurvedAnimation(
-        parent: _intro,
-        curve: const Interval(0.26, 0.58, curve: Curves.easeOutCubic),
-      ),
-    );
+
+    // Subtitle animation
     _subtitleOpacity = Tween<double>(begin: 0.0, end: 1.0).animate(
       CurvedAnimation(
         parent: _intro,
-        curve: const Interval(0.4, 0.7, curve: Curves.easeOut),
+        curve: const Interval(0.35, 0.65, curve: Curves.easeOut),
       ),
     );
-    _badgeOpacity = Tween<double>(begin: 0.0, end: 1.0).animate(
+
+    // Feature animation
+    _featureOpacity = Tween<double>(begin: 0.0, end: 1.0).animate(
       CurvedAnimation(
-        parent: _intro,
-        curve: const Interval(0.5, 0.78, curve: Curves.easeOut),
+        parent: _featureSlide,
+        curve: Curves.easeOut,
       ),
     );
+
+    // Loader animation
     _loaderOpacity = Tween<double>(begin: 0.0, end: 1.0).animate(
       CurvedAnimation(
         parent: _intro,
-        curve: const Interval(0.55, 0.88, curve: Curves.easeOut),
+        curve: const Interval(0.5, 0.8, curve: Curves.easeOut),
       ),
     );
-    _glowPulse = Tween<double>(begin: 0.65, end: 1.0).animate(
-      CurvedAnimation(
-        parent: _intro,
-        curve: const Interval(0.35, 0.75, curve: Curves.easeInOut),
-      ),
-    );
-
-    _pulse = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 1600),
-    )..addStatusListener((status) {
-        if (status == AnimationStatus.completed) {
-          _pulse.reverse();
-        } else if (status == AnimationStatus.dismissed) {
-          _pulse.forward();
-        }
-      });
-
-    _intro.addStatusListener((status) {
-      if (status == AnimationStatus.completed && mounted) {
-        _pulse.forward();
-      }
-    });
 
     _intro.forward();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _featureSlide.forward();
+    });
     _goNext();
   }
 
   @override
   void dispose() {
     _intro.dispose();
-    _pulse.dispose();
+    _featureSlide.dispose();
     super.dispose();
   }
 
   Future<void> _goNext() async {
-    await Future.delayed(const Duration(milliseconds: 3200));
+    await Future.delayed(const Duration(milliseconds: 3500));
     if (!mounted) return;
 
     final prefs = await SharedPreferences.getInstance();
@@ -148,242 +128,299 @@ class _SplashScreenState extends State<SplashScreen>
       }
     }
 
-    if (SupabaseEnv.isReady) {
-      final user = Supabase.instance.client.auth.currentUser;
-      if (user != null) {
-        // Every cold start: require PIN (and offer biometric if enabled on device)
-        if (!mounted) return;
-        Navigator.pushReplacementNamed(context, BiometricLockScreen.routeName);
-        return;
-      }
-    }
-
     if (!mounted) return;
-    final onboardingCompleted = prefs.getBool('onboarding_completed') ?? false;
 
-    if (onboardingCompleted) {
+    final session = Supabase.instance.client.auth.currentSession;
+    if (session == null) {
       Navigator.pushReplacementNamed(context, LoginScreen.routeName);
     } else {
-      Navigator.pushReplacementNamed(context, OnboardingScreen.routeName);
+      final hasCompletedOnboarding =
+          prefs.getBool('onboarding_completed') ?? false;
+      if (!hasCompletedOnboarding) {
+        Navigator.pushReplacementNamed(context, OnboardingScreen.routeName);
+      } else {
+        final biometricEnabled = prefs.getBool('biometric_enabled') ?? false;
+        if (biometricEnabled) {
+          Navigator.pushReplacementNamed(context, BiometricLockScreen.routeName);
+        } else {
+          Navigator.pushReplacementNamed(context, '/main-navigation');
+        }
+      }
     }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppTheme.backgroundGrey,
-      body: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          const GovTricolorStrip(),
-          Expanded(
-            child: AnimatedBuilder(
-              animation: Listenable.merge([_intro, _pulse]),
-              builder: (context, _) {
-                final l10n = AppLocalizations.of(context);
-                final pulseScale = _intro.isCompleted
-                    ? 1.0 + (_pulse.value * 0.028)
-                    : 1.0;
-                return Stack(
-                  alignment: Alignment.center,
-                  children: [
-                    Positioned(
-                      top: 0,
-                      left: 0,
-                      right: 0,
-                      child: IgnorePointer(
-                        child: Opacity(
-                          opacity: 0.12 * _logoOpacity.value,
+      body: Container(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              AppTheme.primaryBlue.withOpacity(0.95),
+              AppTheme.primaryBlueDark.withOpacity(0.98),
+            ],
+          ),
+        ),
+        child: Stack(
+          children: [
+            // Animated gradient overlay
+            Positioned.fill(
+              child: AnimatedBuilder(
+                animation: _intro,
+                builder: (context, _) {
+                  return Opacity(
+                    opacity: 0.15 * (1 - (_intro.value - 0.5).abs() * 2).clamp(0.0, 1.0),
+                    child: Container(
+                      decoration: BoxDecoration(
+                        gradient: RadialGradient(
+                          center: Alignment(_intro.value * 0.4 - 0.2, -0.5),
+                          radius: 1.5,
+                          colors: [
+                            AppTheme.primaryBlueLight,
+                            Colors.transparent,
+                          ],
+                        ),
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
+
+            // Main content
+            SafeArea(
+              child: SingleChildScrollView(
+                physics: const NeverScrollableScrollPhysics(),
+                child: SizedBox(
+                  height: MediaQuery.of(context).size.height - MediaQuery.of(context).padding.top - MediaQuery.of(context).padding.bottom,
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      // Logo section
+                      Opacity(
+                        opacity: _logoOpacity.value,
+                        child: ScaleTransition(
+                          scale: _logoScale,
                           child: Container(
-                            height: 220.h,
+                            width: 120.w,
+                            height: 120.w,
                             decoration: BoxDecoration(
-                              gradient: RadialGradient(
-                                center: Alignment.topCenter,
-                                radius: 1.1,
+                              shape: BoxShape.circle,
+                              gradient: LinearGradient(
+                                begin: Alignment.topLeft,
+                                end: Alignment.bottomRight,
                                 colors: [
-                                  AppTheme.primaryBlue.withValues(alpha: 0.45),
-                                  Colors.transparent,
+                                  Colors.white,
+                                  Colors.white.withOpacity(0.95),
                                 ],
+                              ),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: AppTheme.primaryBlue.withOpacity(0.4),
+                                  blurRadius: 30,
+                                  spreadRadius: 5,
+                                ),
+                              ],
+                            ),
+                            child: ClipOval(
+                              child: Padding(
+                                padding: EdgeInsets.all(12.w),
+                                child: Image.asset(
+                                  AppUI.appLogoAsset,
+                                  fit: BoxFit.contain,
+                                ),
                               ),
                             ),
                           ),
                         ),
                       ),
-                    ),
-                    Positioned.fill(
-                      child: LayoutBuilder(
-                        builder: (context, constraints) {
-                          final padX = constraints.maxWidth * 0.08;
-                          // Drive by height so the logo is never a squashed banner.
-                          // Logo height = 22% of viewport; width follows the aspect ratio.
-                          final logoH = constraints.maxHeight * 0.22;
-                          final logoW = (logoH * AppUI.appLogoAspectRatio)
-                              .clamp(0.0, constraints.maxWidth - 2 * padX);
-                          return SingleChildScrollView(
-                            physics: const BouncingScrollPhysics(),
-                            child: Center(
-                              child: ConstrainedBox(
-                                constraints: BoxConstraints(
-                                  minHeight: constraints.maxHeight,
-                                  maxWidth: Responsive.contentMaxWidth(
-                                    context,
-                                    mobile: 560,
-                                    tablet: 760,
-                                  ),
-                                ),
-                                child: Padding(
-                                  padding: EdgeInsets.symmetric(horizontal: padX),
-                                  child: Column(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                          Transform.scale(
-                            scale: _logoScale.value * pulseScale,
-                            child: Transform.rotate(
-                              angle: _logoTurn.value * math.pi,
-                              child: Opacity(
-                                opacity: _logoOpacity.value,
-                                child: Container(
-                                  width: logoW,
-                                  height: logoH,
-                                  decoration: BoxDecoration(
-                                    borderRadius: BorderRadius.circular(16.r),
-                                    color: Colors.white,
-                                    boxShadow: [
-                                      BoxShadow(
-                                        color: AppTheme.primaryBlue.withValues(
-                                          alpha: 0.22 * _glowPulse.value,
-                                        ),
-                                        blurRadius: 28,
-                                        spreadRadius: 2,
-                                        offset: const Offset(0, 10),
-                                      ),
-                                      BoxShadow(
-                                        color: Colors.black.withValues(
-                                          alpha: 0.08,
-                                        ),
-                                        blurRadius: 16,
-                                        offset: const Offset(0, 6),
-                                      ),
-                                    ],
-                                  ),
-                                  child: ClipRRect(
-                                    borderRadius: BorderRadius.circular(16.r),
-                                    child: Padding(
-                                      padding: EdgeInsets.all(logoH * 0.06),
-                                      child: AppUI.dualBrandLogos(
-                                        mainHeight: logoH * 0.72,
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ),
-                          SizedBox(height: 28.h),
-                          Transform.translate(
-                            offset: Offset(0, _titleSlide.value),
-                            child: Opacity(
-                              opacity: _titleOpacity.value,
-                              child: Text(
-                                l10n.splashTitle,
-                                textAlign: TextAlign.center,
-                                maxLines: 3,
-                                overflow: TextOverflow.ellipsis,
-                                style: TextStyle(
-                                  color: AppTheme.primaryBlue,
-                                  fontWeight: FontWeight.w900,
-                                  fontSize: 26.sp,
-                                  letterSpacing: 0.6,
-                                ),
-                              ),
-                            ),
-                          ),
-                          SizedBox(height: 8.h),
-                          Opacity(
-                            opacity: _subtitleOpacity.value,
-                            child: Text(
-                              l10n.splashSubtitle,
+
+                      SizedBox(height: 40.h),
+
+                      // Title
+                      Opacity(
+                        opacity: _titleOpacity.value,
+                        child: Column(
+                          children: [
+                            Text(
+                              'MSCE Attendance',
                               textAlign: TextAlign.center,
-                              maxLines: 4,
-                              overflow: TextOverflow.ellipsis,
                               style: TextStyle(
-                                color: AppTheme.textGray,
+                                color: Colors.white,
+                                fontWeight: FontWeight.w900,
+                                fontSize: 32.sp,
+                                letterSpacing: 0.8,
+                              ),
+                            ),
+                            SizedBox(height: 8.h),
+                            Text(
+                              'एमएससीई उपस्थिती अॅप',
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                color: Colors.white.withOpacity(0.8),
                                 fontWeight: FontWeight.w600,
-                                fontSize: 12.sp,
-                                height: 1.35,
+                                fontSize: 16.sp,
+                                letterSpacing: 0.4,
                               ),
                             ),
-                          ),
-                          SizedBox(height: 18.h),
-                          Opacity(
-                            opacity: _badgeOpacity.value,
-                            child: Container(
-                              padding: EdgeInsets.symmetric(
-                                horizontal: 16.w,
-                                vertical: 8.h,
-                              ),
-                              decoration: BoxDecoration(
-                                color: AppTheme.primaryBlue.withValues(alpha: 0.06),
-                                borderRadius: BorderRadius.circular(20.r),
-                                border: Border.all(
-                                  color: AppTheme.primaryBlue.withValues(
-                                    alpha: 0.15,
-                                  ),
-                                ),
-                              ),
-                              child: Text(
-                                l10n.splashCredit,
-                                style: TextStyle(
-                                  color: AppTheme.primaryBlue.withValues(
-                                    alpha: 0.85,
-                                  ),
-                                  fontWeight: FontWeight.w600,
-                                  fontSize: 11.sp,
-                                  letterSpacing: 0.3,
-                                ),
-                              ),
-                            ),
-                          ),
-                          SizedBox(height: 48.h),
-                          Opacity(
-                            opacity: _loaderOpacity.value,
-                            child: Column(
-                              children: [
-                                SizedBox(
-                                  width: 36.w,
-                                  height: 36.w,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 3,
-                                    valueColor: AlwaysStoppedAnimation<Color>(
-                                      AppTheme.primaryBlue,
-                                    ),
-                                  ),
-                                ),
-                                SizedBox(height: 14.h),
-                                Text(
-                                  l10n.splashLoading,
-                                  style: TextStyle(
-                                    color: AppTheme.textGray,
-                                    fontSize: 13.sp,
-                                    fontWeight: FontWeight.w500,
-                                    letterSpacing: 0.4,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                                  ],
-                                  ),
-                                ),
-                              ),
-                            ),
-                          );
-                        },
+                          ],
+                        ),
                       ),
-                    ),
-                  ],
-                );
-              },
+
+                      SizedBox(height: 24.h),
+
+                      // Subtitle
+                      Opacity(
+                        opacity: _subtitleOpacity.value,
+                        child: Padding(
+                          padding: EdgeInsets.symmetric(horizontal: 24.w),
+                          child: Text(
+                            'Smart Face Recognition Attendance System',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              color: Colors.white.withOpacity(0.75),
+                              fontWeight: FontWeight.w500,
+                              fontSize: 13.sp,
+                              height: 1.5,
+                            ),
+                          ),
+                        ),
+                      ),
+
+                      SizedBox(height: 48.h),
+
+                      // Feature showcase
+                      Opacity(
+                        opacity: _featureOpacity.value,
+                        child: Padding(
+                          padding: EdgeInsets.symmetric(horizontal: 20.w),
+                          child: Column(
+                            children: [
+                              _buildFeatureRow(
+                                icon: Icons.face_rounded,
+                                title: 'Face Recognition',
+                                subtitle: 'Multi-angle enrollment',
+                              ),
+                              SizedBox(height: 16.h),
+                              _buildFeatureRow(
+                                icon: Icons.check_circle_rounded,
+                                title: 'Smart Reports',
+                                subtitle: 'Real-time attendance tracking',
+                              ),
+                              SizedBox(height: 16.h),
+                              _buildFeatureRow(
+                                icon: Icons.location_on_rounded,
+                                title: 'GPS Geofence',
+                                subtitle: 'Location-based verification',
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+
+                      const Spacer(),
+
+                      // Loading indicator
+                      Opacity(
+                        opacity: _loaderOpacity.value,
+                        child: Column(
+                          children: [
+                            SizedBox(
+                              width: 40.w,
+                              height: 40.w,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 3.5,
+                                valueColor: AlwaysStoppedAnimation<Color>(
+                                  Colors.white.withOpacity(0.9),
+                                ),
+                              ),
+                            ),
+                            SizedBox(height: 16.h),
+                            Text(
+                              'Initializing...',
+                              style: TextStyle(
+                                color: Colors.white.withOpacity(0.8),
+                                fontSize: 12.sp,
+                                fontWeight: FontWeight.w500,
+                                letterSpacing: 0.3,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+
+                      SizedBox(height: 60.h),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildFeatureRow({
+    required IconData icon,
+    required String title,
+    required String subtitle,
+  }) {
+    return Container(
+      padding: EdgeInsets.all(14.w),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(14.r),
+        color: Colors.white.withOpacity(0.08),
+        border: Border.all(
+          color: Colors.white.withOpacity(0.15),
+          width: 1.5,
+        ),
+        backdropFilter: ui.ImageFilter.blur(sigmaX: 8, sigmaY: 8),
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: EdgeInsets.all(10.w),
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              gradient: LinearGradient(
+                colors: [
+                  Colors.white.withOpacity(0.2),
+                  Colors.white.withOpacity(0.08),
+                ],
+              ),
+            ),
+            child: Icon(
+              icon,
+              color: Colors.white,
+              size: 24.sp,
+            ),
+          ),
+          SizedBox(width: 14.w),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w700,
+                    fontSize: 13.sp,
+                  ),
+                ),
+                SizedBox(height: 3.h),
+                Text(
+                  subtitle,
+                  style: TextStyle(
+                    color: Colors.white.withOpacity(0.6),
+                    fontWeight: FontWeight.w400,
+                    fontSize: 11.sp,
+                  ),
+                ),
+              ],
             ),
           ),
         ],
