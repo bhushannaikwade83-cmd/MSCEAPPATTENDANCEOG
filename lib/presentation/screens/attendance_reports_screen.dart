@@ -87,7 +87,7 @@ class _AttendanceReportsScreenState extends State<AttendanceReportsScreen> {
           .select()
           .eq('sr_no', srNo)
           .eq('attendance_date', today)
-          .order('timestamp');
+          .order('marked_time');
 
       if (records.isEmpty) {
         return {
@@ -103,8 +103,8 @@ class _AttendanceReportsScreenState extends State<AttendanceReportsScreen> {
       final entry = records.first;
       final exit = records.length > 1 ? records.last : null;
 
-      final entryTime = DateTime.parse(entry['timestamp'] as String);
-      final exitTime = exit != null ? DateTime.parse(exit['timestamp'] as String) : null;
+      final entryTime = DateTime.parse(entry['marked_time'] as String);
+      final exitTime = exit != null ? DateTime.parse(exit['marked_time'] as String) : null;
 
       // Calculate hours
       double creditedHours = 0.0;
