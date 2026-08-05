@@ -42,6 +42,7 @@ class _MultiAngleFaceRegistrationScreenState
   bool _faceDetected = false;
   String _instruction = 'Initializing camera...';
   Timer? _captureTimer;
+  bool _isRegistered = false; // Track if registration is complete
 
   // Blink detection with StreamingBlinkDetector
   late final StreamingBlinkDetector _blinkDetector = StreamingBlinkDetector(
@@ -266,11 +267,13 @@ Future<void> _initializeCamera() async {
             child: const Text('Retake'),
           ),
           ElevatedButton(
-            onPressed: () {
-              Navigator.pop(context);
-              _submitRegistration();
-            },
-            child: const Text('Register'),
+            onPressed: _isRegistered
+                ? null // Disable if already registered
+                : () {
+                    Navigator.pop(context);
+                    _submitRegistration();
+                  },
+            child: Text(_isRegistered ? '✅ Registered' : 'Register'),
           ),
         ],
       ),
@@ -329,6 +332,25 @@ Future<void> _initializeCamera() async {
       _updateInstructions();
     });
     _startPeriodicCapture();
+  }
+
+  /// Clear registration from database and re-enable button
+  Future<void> _clearRegistration() async {
+    try {
+      print('🔓 Clearing registration for ${widget.studentId}...');
+
+      // Delete embeddings from database (set to null/empty)
+      // You can implement this based on your DB schema
+      // For now, just reset the flag
+      if (mounted) {
+        setState(() {
+          _isRegistered = false;
+          print('✅ Registration cleared - button re-enabled');
+        });
+      }
+    } catch (e) {
+      print('❌ Error clearing registration: $e');
+    }
   }
 
   Future<void> _switchCamera() async {
@@ -443,6 +465,11 @@ Future<void> _initializeCamera() async {
             );
 
             print('✅ Embeddings saved to database');
+
+            // 🔒 Mark as registered - disable button
+            if (mounted) {
+              setState(() => _isRegistered = true);
+            }
           } catch (e) {
             print('⚠️ Error saving embeddings: $e');
           }
