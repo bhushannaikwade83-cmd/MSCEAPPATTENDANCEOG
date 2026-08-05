@@ -800,7 +800,7 @@ class _LoginScreenState extends State<LoginScreen>
       // ✅ Try to get cached GPS coordinates from previous login
       final cachedGps = await PinSessionManager.getCachedGpsCoordinates();
 
-      // ✅ Verify user is within PIN-login geofence (15m nominal + accuracy slack)
+      // ✅ Verify user is within PIN-login geofence (25m nominal + accuracy slack)
       final locationResult = await PinSessionManager.verifyLocationRadius(
         instituteId: instituteId,
         cachedLatitude: cachedGps.latitude,

@@ -1,5 +1,5 @@
 /// Nominal attendance geofence (meters) from the locked GPS point — all directions.
-const double kAttendanceFenceRadiusMeters = 15.0;
+const double kAttendanceFenceRadiusMeters = 25.0;
 
 /// Hard cap on how far from the locked point attendance may pass (includes GPS slack).
 /// Indoor phones often report 30–80 m accuracy; 25 m was too tight vs PIN login.
