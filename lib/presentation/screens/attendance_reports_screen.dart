@@ -83,7 +83,7 @@ class _AttendanceReportsScreenState extends State<AttendanceReportsScreen> {
       final srNo = _selectedStudent!['sr_no'] as String;
 
       final records = await appDb
-          .from('attendance_records')
+          .from('attendance')
           .select()
           .eq('sr_no', srNo)
           .eq('date', today)
@@ -166,7 +166,7 @@ class _AttendanceReportsScreenState extends State<AttendanceReportsScreen> {
 
       // Group records by date
       final records = await appDb
-          .from('attendance_records')
+          .from('attendance')
           .select()
           .eq('sr_no', srNo)
           .order('attendance_date, marked_time');
