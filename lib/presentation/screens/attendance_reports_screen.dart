@@ -86,7 +86,7 @@ class _AttendanceReportsScreenState extends State<AttendanceReportsScreen> {
           .from('attendance')
           .select()
           .eq('sr_no', srNo)
-          .eq('date', today)
+          .eq('attendance_date', today)
           .order('timestamp');
 
       if (records.isEmpty) {
