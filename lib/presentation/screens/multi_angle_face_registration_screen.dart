@@ -268,12 +268,23 @@ Future<void> _initializeCamera() async {
           ),
           ElevatedButton(
             onPressed: _isRegistered
-                ? null // Disable if already registered
+                ? () {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('✅ Already Registered'),
+                        backgroundColor: Colors.green,
+                        duration: Duration(seconds: 2),
+                      ),
+                    );
+                  }
                 : () {
                     Navigator.pop(context);
                     _submitRegistration();
                   },
-            child: Text(_isRegistered ? '✅ Registered' : 'Register'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: _isRegistered ? Colors.grey : null,
+            ),
+            child: Text(_isRegistered ? '✅ Already Registered' : 'Register'),
           ),
         ],
       ),
