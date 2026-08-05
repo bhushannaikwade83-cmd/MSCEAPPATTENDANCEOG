@@ -2767,26 +2767,36 @@ class _StudentManagementScreenState extends State<StudentManagementScreen>
                     child: Material(
                       color: Colors.transparent,
                       child: InkWell(
-                        onTap: () {
-                          // Navigate to face registration camera
-                          if (!context.mounted || _instituteId == null) return;
-                          Navigator.of(context).push(
-                            MaterialPageRoute(
-                              builder: (_) => StudentFaceRegistrationWrapper(
-                                studentId: studentId,
-                                studentName: name,
-                                srNo: _formatSrDisplay(srNo),
-                                instituteId: _instituteId!,
-                                onRegistrationSuccess: () {
-                                  // Refresh student list after registration
-                                  if (mounted) {
-                                    _bootstrapStudentList();
-                                  }
-                                },
-                              ),
-                            ),
-                          );
-                        },
+                        onTap: isFaceRegistered
+                            ? () {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content: Text('✅ Already Registered'),
+                                    backgroundColor: Colors.green,
+                                    duration: Duration(seconds: 2),
+                                  ),
+                                );
+                              }
+                            : () {
+                                // Navigate to face registration camera
+                                if (!context.mounted || _instituteId == null) return;
+                                Navigator.of(context).push(
+                                  MaterialPageRoute(
+                                    builder: (_) => StudentFaceRegistrationWrapper(
+                                      studentId: studentId,
+                                      studentName: name,
+                                      srNo: _formatSrDisplay(srNo),
+                                      instituteId: _instituteId!,
+                                      onRegistrationSuccess: () {
+                                        // Refresh student list after registration
+                                        if (mounted) {
+                                          _bootstrapStudentList();
+                                        }
+                                      },
+                                    ),
+                                  ),
+                                );
+                              },
                         borderRadius: BorderRadius.circular(12.r),
                         child: Container(
                           padding: EdgeInsets.symmetric(vertical: 10.h, horizontal: 8.w),
@@ -2801,14 +2811,18 @@ class _StudentManagementScreenState extends State<StudentManagementScreen>
                           child: Column(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              Icon(Icons.person_add, color: statusColor, size: 20.sp),
+                              Icon(
+                                isFaceRegistered ? Icons.check_circle : Icons.person_add,
+                                color: statusColor,
+                                size: 20.sp,
+                              ),
                               SizedBox(height: 4.h),
                               Text(
-                                'Register',
+                                isFaceRegistered ? 'Registered' : 'Register',
                                 style: TextStyle(
                                   fontSize: 11.sp,
                                   fontWeight: FontWeight.w700,
-                                  color: statusColor,
+                                  color: statusColor.withValues(alpha: isFaceRegistered ? 0.6 : 1.0),
                                   letterSpacing: 0.3,
                                 ),
                               ),
