@@ -241,6 +241,7 @@ class _AttendanceReportsScreenState extends State<AttendanceReportsScreen> {
       ];
 
       // Process each day
+      int totalSeconds = 0;
       byDate.forEach((dateStr, dayRecs) {
         final entryRec = dayRecs.firstWhere((r) => (r['record_type'] as String?) == 'entry', orElse: () => <String, dynamic>{});
         final exitRec = dayRecs.firstWhere((r) => (r['record_type'] as String?) == 'exit', orElse: () => <String, dynamic>{});
@@ -250,21 +251,26 @@ class _AttendanceReportsScreenState extends State<AttendanceReportsScreen> {
         if (entryRec.isNotEmpty) {
           status = 'PRESENT';
           try {
-            final dt = DateTime.parse(entryRec['marked_time'] as String).toLocal();
+            final dt = DateTime.parse((entryRec['marked_time'] as String) + 'Z').toLocal();
             entryTime = '${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
           } catch (e) {}
 
           if (exitRec.isNotEmpty) {
             try {
-              final dt = DateTime.parse(exitRec['marked_time'] as String).toLocal();
+              final dt = DateTime.parse((exitRec['marked_time'] as String) + 'Z').toLocal();
               exitTime = '${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
             } catch (e) {}
             reason = '-';
+            // Use EXIT record's hours when both exist
+            hours = exitRec['attendance_alloted_hr'] as String? ?? '00:00:00';
           } else {
             reason = entryRec['remark'] as String? ?? '-';
+            // Use ENTRY record's hours when only entry exists
+            hours = entryRec['attendance_alloted_hr'] as String? ?? '00:00:00';
           }
 
-          hours = entryRec['attendance_alloted_hr'] as String? ?? '00:00:00';
+          // Add to total for summary
+          totalSeconds += _timeStringToSeconds(hours);
         }
 
         rows.add(pw.TableRow(children: [
@@ -276,6 +282,20 @@ class _AttendanceReportsScreenState extends State<AttendanceReportsScreen> {
           pw.Padding(padding: const pw.EdgeInsets.all(4), child: pw.Text(reason, style: pw.TextStyle(fontSize: 9))),
         ]));
       });
+
+      // Add total row
+      final totalHours = _secondsToTimeString(totalSeconds);
+      rows.add(pw.TableRow(
+        decoration: pw.BoxDecoration(color: PdfColors.grey300),
+        children: [
+          pw.Padding(padding: const pw.EdgeInsets.all(4), child: pw.Text('TOTAL', style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold))),
+          pw.Padding(padding: const pw.EdgeInsets.all(4), child: pw.Text('', style: pw.TextStyle(fontSize: 9))),
+          pw.Padding(padding: const pw.EdgeInsets.all(4), child: pw.Text('', style: pw.TextStyle(fontSize: 9))),
+          pw.Padding(padding: const pw.EdgeInsets.all(4), child: pw.Text('', style: pw.TextStyle(fontSize: 9))),
+          pw.Padding(padding: const pw.EdgeInsets.all(4), child: pw.Text(totalHours, style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold))),
+          pw.Padding(padding: const pw.EdgeInsets.all(4), child: pw.Text('', style: pw.TextStyle(fontSize: 9))),
+        ],
+      ));
 
       // Add page
       pdf.addPage(
