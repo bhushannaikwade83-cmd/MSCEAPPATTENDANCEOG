@@ -70,6 +70,29 @@ class _AttendanceReportsScreenState extends State<AttendanceReportsScreen> {
     return subjects;
   }
 
+  /// Parse HH:MM:SS string to total seconds
+  int _timeStringToSeconds(String? timeStr) {
+    if (timeStr == null || timeStr.isEmpty) return 0;
+    try {
+      final parts = timeStr.split(':');
+      if (parts.length != 3) return 0;
+      final hours = int.tryParse(parts[0]) ?? 0;
+      final minutes = int.tryParse(parts[1]) ?? 0;
+      final seconds = int.tryParse(parts[2]) ?? 0;
+      return (hours * 3600) + (minutes * 60) + seconds;
+    } catch (e) {
+      return 0;
+    }
+  }
+
+  /// Convert total seconds to HH:MM:SS string
+  String _secondsToTimeString(int totalSeconds) {
+    final hours = totalSeconds ~/ 3600;
+    final minutes = (totalSeconds % 3600) ~/ 60;
+    final seconds = totalSeconds % 60;
+    return '${hours.toString().padLeft(2, '0')}:${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}';
+  }
+
   /// Fetch today's attendance for selected student
   /// TODAY'S ATTENDANCE
   /// Logic:
@@ -205,7 +228,7 @@ class _AttendanceReportsScreenState extends State<AttendanceReportsScreen> {
       }
 
       int present = 0, absent = 0;
-      double totalHours = 0.0;
+      int totalSeconds = 0;
 
       // Process each day
       for (final MapEntry(key: dateStr, value: dayRecs) in byDate.entries) {
@@ -245,6 +268,7 @@ class _AttendanceReportsScreenState extends State<AttendanceReportsScreen> {
             if (hrsStr != null && hrsStr.isNotEmpty) {
               print('✅ PRESENT (Entry+Exit): $dateStr → $hrsStr${isSunday ? ' [Sunday]' : ''}');
               present++;
+              totalSeconds += _timeStringToSeconds(hrsStr);
             }
           } else {
             // Entry only (no exit) → check ENTRY record's attendance_alloted_hr
@@ -252,6 +276,7 @@ class _AttendanceReportsScreenState extends State<AttendanceReportsScreen> {
             if (hrsStr != null && hrsStr.isNotEmpty) {
               print('✅ PRESENT (Entry only): $dateStr → $hrsStr${isSunday ? ' [Sunday]' : ''}');
               present++;
+              totalSeconds += _timeStringToSeconds(hrsStr);
             }
           }
         } catch (e) {
@@ -260,15 +285,15 @@ class _AttendanceReportsScreenState extends State<AttendanceReportsScreen> {
       }
 
       final total = present + absent;
-      final avgHrs = present > 0 ? totalHours / present : 0.0;
+      final totalTimeStr = _secondsToTimeString(totalSeconds);
 
-      print('📊 Summary - Present: $present, Absent: $absent, Total: $total, Avg: ${avgHrs.toStringAsFixed(2)} hrs');
+      print('📊 Summary - Present: $present, Absent: $absent, Total: $total, Total Hours: $totalTimeStr');
 
       return {
         'present': present,
         'absent': absent,
         'total': total,
-        'hours': avgHrs,
+        'hours': totalTimeStr,
       };
     } catch (e) {
       print('❌ Error: $e');
