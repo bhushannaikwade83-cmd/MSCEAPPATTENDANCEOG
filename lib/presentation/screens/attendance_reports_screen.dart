@@ -24,6 +24,11 @@ class _AttendanceReportsScreenState extends State<AttendanceReportsScreen> {
   Map<String, dynamic>? _selectedStudent;
   bool _loadingStudents = true;
 
+  // Date filters
+  DateTime? _filterStartDate;
+  DateTime? _filterEndDate;
+  String _selectedFilter = '1month'; // 1month, 3month, 6month, custom
+
   @override
   void initState() {
     super.initState();
@@ -91,6 +96,83 @@ class _AttendanceReportsScreenState extends State<AttendanceReportsScreen> {
     final minutes = (totalSeconds % 3600) ~/ 60;
     final seconds = totalSeconds % 60;
     return '${hours.toString().padLeft(2, '0')}:${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}';
+  }
+
+  /// Set date range based on filter
+  void _setDateFilter(String filter) {
+    final now = DateTime.now();
+    setState(() {
+      _selectedFilter = filter;
+      if (filter == '1month') {
+        _filterStartDate = now.subtract(const Duration(days: 30));
+        _filterEndDate = now;
+      } else if (filter == '3month') {
+        _filterStartDate = now.subtract(const Duration(days: 90));
+        _filterEndDate = now;
+      } else if (filter == '6month') {
+        _filterStartDate = now.subtract(const Duration(days: 180));
+        _filterEndDate = now;
+      }
+    });
+  }
+
+  /// Show custom date range picker
+  Future<void> _showCustomDatePicker() async {
+    final startDate = await showDatePicker(
+      context: context,
+      initialDate: _filterStartDate ?? DateTime.now().subtract(const Duration(days: 30)),
+      firstDate: DateTime.now().subtract(const Duration(days: 365)),
+      lastDate: DateTime.now(),
+    );
+
+    if (startDate != null) {
+      final endDate = await showDatePicker(
+        context: context,
+        initialDate: _filterEndDate ?? DateTime.now(),
+        firstDate: startDate,
+        lastDate: DateTime.now(),
+      );
+
+      if (endDate != null) {
+        setState(() {
+          _selectedFilter = 'custom';
+          _filterStartDate = startDate;
+          _filterEndDate = endDate;
+        });
+      }
+    }
+  }
+
+  /// Build filter button
+  Widget _buildFilterButton(String label, String filter, bool isDark) {
+    final isSelected = _selectedFilter == filter;
+    return GestureDetector(
+      onTap: () {
+        if (filter == 'custom') {
+          _showCustomDatePicker();
+        } else {
+          _setDateFilter(filter);
+        }
+      },
+      child: Container(
+        padding: EdgeInsets.symmetric(horizontal: 14.w, vertical: 8.h),
+        decoration: BoxDecoration(
+          color: isSelected ? AppTheme.primaryBlue : (isDark ? const Color(0xFF1E293B) : const Color(0xFFF0F2F7)),
+          borderRadius: BorderRadius.circular(8.r),
+          border: Border.all(
+            color: isSelected ? AppTheme.primaryBlue : (isDark ? Colors.white.withOpacity(0.1) : Colors.black.withOpacity(0.1)),
+          ),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 12.sp,
+            fontWeight: FontWeight.w600,
+            color: isSelected ? Colors.white : (isDark ? Colors.white70 : AppTheme.textGray),
+          ),
+        ),
+      ),
+    );
   }
 
   /// Fetch today's attendance for selected student
@@ -234,6 +316,14 @@ class _AttendanceReportsScreenState extends State<AttendanceReportsScreen> {
       for (final MapEntry(key: dateStr, value: dayRecs) in byDate.entries) {
         try {
           final dateObj = DateTime.parse(dateStr);
+
+          // Apply date filter
+          if (_filterStartDate != null && _filterEndDate != null) {
+            if (dateObj.isBefore(_filterStartDate!) || dateObj.isAfter(_filterEndDate!)) {
+              continue; // Skip records outside date range
+            }
+          }
+
           final isSunday = dateObj.weekday == DateTime.sunday;
 
           // Check if entry and exit exist
@@ -508,6 +598,32 @@ class _AttendanceReportsScreenState extends State<AttendanceReportsScreen> {
                       ),
 
                       SizedBox(height: 32.h),
+
+                      // 📅 DATE FILTERS
+                      Text(
+                        "FILTER BY DATE",
+                        style: TextStyle(
+                          fontSize: 12.sp,
+                          fontWeight: FontWeight.w600,
+                          color: isDark ? Colors.white70 : AppTheme.textGray,
+                        ),
+                      ),
+                      SizedBox(height: 10.h),
+                      SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        child: Row(
+                          children: [
+                            _buildFilterButton('1 Month', '1month', isDark),
+                            SizedBox(width: 10.w),
+                            _buildFilterButton('3 Months', '3month', isDark),
+                            SizedBox(width: 10.w),
+                            _buildFilterButton('6 Months', '6month', isDark),
+                            SizedBox(width: 10.w),
+                            _buildFilterButton('Custom', 'custom', isDark),
+                          ],
+                        ),
+                      ),
+                      SizedBox(height: 20.h),
 
                       // 📊 ATTENDANCE HISTORY
                       Text(
