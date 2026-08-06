@@ -124,14 +124,30 @@ class _AttendanceReportsScreenState extends State<AttendanceReportsScreen> {
       if (exitRec.isNotEmpty) {
         // Entry + Exit both → check EXIT record's attendance_alloted_hr
         final hrsStr = exitRec['attendance_alloted_hr'] as String?;
-        hrs = hrsStr != null ? double.tryParse(hrsStr) : null;
-        exitTime = DateTime.parse(exitRec['marked_time'] as String);
-        print('✅ PRESENT (Entry+Exit) - Hours: $hrs');
+        if (hrsStr != null && hrsStr.isNotEmpty) {
+          exitTime = DateTime.parse(exitRec['marked_time'] as String);
+          print('✅ PRESENT (Entry+Exit) - Hours: $hrsStr');
+          return {
+            'status': 'PRESENT',
+            'entry_time': entryTime.toIso8601String(),
+            'exit_time': exitTime.toIso8601String(),
+            'credited_hours': hrsStr,
+            'allocated_hours': hrsStr,
+          };
+        }
       } else {
         // Entry only (no exit) → check ENTRY record's attendance_alloted_hr
         final hrsStr = entryRec['attendance_alloted_hr'] as String?;
-        hrs = hrsStr != null ? double.tryParse(hrsStr) : null;
-        print('✅ PRESENT (Entry only) - Hours: $hrs');
+        if (hrsStr != null && hrsStr.isNotEmpty) {
+          print('✅ PRESENT (Entry only) - Hours: $hrsStr');
+          return {
+            'status': 'PRESENT',
+            'entry_time': entryTime.toIso8601String(),
+            'exit_time': null,
+            'credited_hours': hrsStr,
+            'allocated_hours': hrsStr,
+          };
+        }
       }
 
       final allocatedHours = hrs ?? 0.0;
@@ -226,20 +242,16 @@ class _AttendanceReportsScreenState extends State<AttendanceReportsScreen> {
           if (exitRec.isNotEmpty) {
             // Entry + Exit both → check EXIT record's attendance_alloted_hr
             final hrsStr = exitRec['attendance_alloted_hr'] as String?;
-            hrs = hrsStr != null ? double.tryParse(hrsStr) : null;
-            if (hrs != null) {
-              print('✅ PRESENT (Entry+Exit): $dateStr → $hrs hrs${isSunday ? ' [Sunday]' : ''}');
+            if (hrsStr != null && hrsStr.isNotEmpty) {
+              print('✅ PRESENT (Entry+Exit): $dateStr → $hrsStr${isSunday ? ' [Sunday]' : ''}');
               present++;
-              totalHours += hrs;
             }
           } else {
             // Entry only (no exit) → check ENTRY record's attendance_alloted_hr
             final hrsStr = entryRec['attendance_alloted_hr'] as String?;
-            hrs = hrsStr != null ? double.tryParse(hrsStr) : null;
-            if (hrs != null) {
-              print('✅ PRESENT (Entry only): $dateStr → $hrs hrs${isSunday ? ' [Sunday]' : ''}');
+            if (hrsStr != null && hrsStr.isNotEmpty) {
+              print('✅ PRESENT (Entry only): $dateStr → $hrsStr${isSunday ? ' [Sunday]' : ''}');
               present++;
-              totalHours += hrs;
             }
           }
         } catch (e) {
