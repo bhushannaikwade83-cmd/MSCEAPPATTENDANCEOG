@@ -532,11 +532,10 @@ class _AttendanceReportsScreenState extends State<AttendanceReportsScreen> {
                           }
 
                           final data = snapshot.data ?? {};
-                          final subjects = data['subjects'] as String? ?? '-';
                           final present = data['present'] as int? ?? 0;
                           final absent = data['absent'] as int? ?? 0;
                           final total = data['total'] as int? ?? 0;
-                          final hours = data['hours'] as double? ?? 0.0;
+                          final hours = data['hours'] as String? ?? '00:00:00';
 
                           return Container(
                             decoration: BoxDecoration(
@@ -617,7 +616,7 @@ class _AttendanceReportsScreenState extends State<AttendanceReportsScreen> {
                                     cells: [
                                       DataCell(
                                         Text(
-                                          subjects,
+                                          '-',
                                           style: TextStyle(
                                             fontSize: 12.sp,
                                             color: isDark ? Colors.white : AppTheme.textDark,
@@ -670,7 +669,7 @@ class _AttendanceReportsScreenState extends State<AttendanceReportsScreen> {
                                       ),
                                       DataCell(
                                         Text(
-                                          '${hours.toStringAsFixed(1)}h',
+                                          hours,
                                           style: TextStyle(
                                             fontSize: 12.sp,
                                             fontWeight: FontWeight.w700,
