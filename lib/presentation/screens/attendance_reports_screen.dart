@@ -217,12 +217,11 @@ class _AttendanceReportsScreenState extends State<AttendanceReportsScreen> {
           'status': 'ABSENT',
           'entry_time': null,
           'exit_time': null,
-          'credited_hours': 0.0,
-          'allocated_hours': 0.0,
+          'credited_hours': '00:00:00',
+          'allocated_hours': '00:00:00',
         };
       }
 
-      double? hrs;
       DateTime? entryTime = DateTime.parse(entryRec['marked_time'] as String);
       DateTime? exitTime;
 
@@ -255,21 +254,20 @@ class _AttendanceReportsScreenState extends State<AttendanceReportsScreen> {
         }
       }
 
-      final allocatedHours = hrs ?? 0.0;
-
+      // Fallback if no allocated hours found
       return {
         'status': 'PRESENT',
         'entry_time': entryTime.toIso8601String(),
         'exit_time': exitTime?.toIso8601String(),
-        'credited_hours': allocatedHours,
-        'allocated_hours': allocatedHours,
+        'credited_hours': '00:00:00',
+        'allocated_hours': '00:00:00',
       };
     } catch (e) {
       print('❌ Error: $e');
       return {
         'status': 'ERROR',
-        'credited_hours': 0.0,
-        'allocated_hours': 0.0,
+        'credited_hours': '00:00:00',
+        'allocated_hours': '00:00:00',
       };
     }
   }
