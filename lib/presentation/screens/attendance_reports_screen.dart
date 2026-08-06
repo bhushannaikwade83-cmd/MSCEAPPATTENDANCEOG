@@ -71,10 +71,11 @@ class _AttendanceReportsScreenState extends State<AttendanceReportsScreen> {
   }
 
   /// Fetch today's attendance for selected student
-  /// TODAY'S ATTENDANCE - SIMPLE
-  /// Check if entry exists in DB
-  /// - Entry exists → PRESENT + use attendance_alloted_hr
-  /// - No entry → ABSENT
+  /// TODAY'S ATTENDANCE
+  /// Logic:
+  /// 1. Entry + Exit both → Check EXIT record's attendance_alloted_hr NOT NULL → PRESENT
+  /// 2. Entry only (no exit) → Check ENTRY record's attendance_alloted_hr NOT NULL → PRESENT
+  /// 3. No Entry → ABSENT
   Future<Map<String, dynamic>> _fetchTodayAttendance() async {
     if (_selectedStudent == null) {
       print('❌ No student selected');
@@ -89,14 +90,23 @@ class _AttendanceReportsScreenState extends State<AttendanceReportsScreen> {
           .from('attendance')
           .select()
           .eq('sr_no', srNo)
-          .eq('attendance_date', today);
+          .eq('attendance_date', today)
+          .order('marked_time');
 
       print('✅ Got ${records.length} records for today');
 
-      // Check if entry exists
-      final hasEntry = records.any((r) => (r['record_type'] as String?) == 'entry');
+      // Check if entry and exit exist
+      final entryRec = records.firstWhere(
+        (r) => (r['record_type'] as String?) == 'entry',
+        orElse: () => <String, dynamic>{},
+      );
+      final exitRec = records.firstWhere(
+        (r) => (r['record_type'] as String?) == 'exit',
+        orElse: () => <String, dynamic>{},
+      );
 
-      if (!hasEntry) {
+      // No entry = ABSENT
+      if (entryRec.isEmpty) {
         print('❌ ABSENT - No entry');
         return {
           'status': 'ABSENT',
@@ -107,21 +117,27 @@ class _AttendanceReportsScreenState extends State<AttendanceReportsScreen> {
         };
       }
 
-      // Entry exists = PRESENT
-      final entryRecord = records.firstWhere(
-        (r) => (r['record_type'] as String?) == 'entry',
-        orElse: () => <String, dynamic>{},
-      );
+      double? hrs;
+      DateTime? entryTime = DateTime.parse(entryRec['marked_time'] as String);
+      DateTime? exitTime;
 
-      final allocatedHours = (entryRecord['attendance_alloted_hr'] as double?) ?? 0.0;
-      final entryTime = DateTime.parse(entryRecord['marked_time'] as String);
+      if (exitRec.isNotEmpty) {
+        // Entry + Exit both → check EXIT record's attendance_alloted_hr
+        hrs = exitRec['attendance_alloted_hr'] as double?;
+        exitTime = DateTime.parse(exitRec['marked_time'] as String);
+        print('✅ PRESENT (Entry+Exit) - Hours: $hrs');
+      } else {
+        // Entry only (no exit) → check ENTRY record's attendance_alloted_hr
+        hrs = entryRec['attendance_alloted_hr'] as double?;
+        print('✅ PRESENT (Entry only) - Hours: $hrs');
+      }
 
-      print('✅ PRESENT - Allocated: $allocatedHours hrs');
+      final allocatedHours = hrs ?? 0.0;
 
       return {
         'status': 'PRESENT',
         'entry_time': entryTime.toIso8601String(),
-        'exit_time': null,
+        'exit_time': exitTime?.toIso8601String(),
         'credited_hours': allocatedHours,
         'allocated_hours': allocatedHours,
       };
@@ -135,11 +151,13 @@ class _AttendanceReportsScreenState extends State<AttendanceReportsScreen> {
     }
   }
 
-  /// Fetch attendance history - SIMPLE
-  /// Check entry/exit in DB, use allocated_hours column
-  /// - Entry exists → PRESENT + use attendance_alloted_hr
-  /// - No entry → ABSENT (except Sunday: skip if no entry)
-  /// - If Sunday has entry → count as PRESENT
+  /// Fetch attendance history
+  /// Logic:
+  /// 1. Entry + Exit both → Check EXIT record's attendance_alloted_hr NOT NULL → PRESENT
+  /// 2. Entry only (no exit) → Check ENTRY record's attendance_alloted_hr NOT NULL → PRESENT
+  /// 3. No Entry on weekday → ABSENT
+  /// 4. No Entry on Sunday → SKIP (don't count)
+  /// 5. If Sunday has entry → apply same logic as step 1-2 → PRESENT
   Future<Map<String, dynamic>> _fetchAttendanceHistory() async {
     if (_selectedStudent == null) {
       print('❌ No student selected for history');
@@ -150,12 +168,12 @@ class _AttendanceReportsScreenState extends State<AttendanceReportsScreen> {
       final srNo = _selectedStudent!['sr_no'] as String;
       print('🔄 Fetching history for: $srNo');
 
-      // Get all records
+      // Get all records ordered by date and time
       final records = await appDb
           .from('attendance')
           .select()
           .eq('sr_no', srNo)
-          .order('attendance_date');
+          .order('attendance_date, marked_time');
 
       print('✅ Got ${records.length} records');
 
@@ -171,33 +189,53 @@ class _AttendanceReportsScreenState extends State<AttendanceReportsScreen> {
       int present = 0, absent = 0;
       double totalHours = 0.0;
 
+      // Process each day
       for (final MapEntry(key: dateStr, value: dayRecs) in byDate.entries) {
         try {
           final dateObj = DateTime.parse(dateStr);
           final isSunday = dateObj.weekday == DateTime.sunday;
 
-          // Check if entry exists
-          final hasEntry = dayRecs.any((r) => (r['record_type'] as String?) == 'entry');
+          // Check if entry and exit exist
+          final entryRec = dayRecs.firstWhere(
+            (r) => (r['record_type'] as String?) == 'entry',
+            orElse: () => <String, dynamic>{},
+          );
+          final exitRec = dayRecs.firstWhere(
+            (r) => (r['record_type'] as String?) == 'exit',
+            orElse: () => <String, dynamic>{},
+          );
 
-          if (hasEntry) {
-            // Has entry = PRESENT, get allocated hours
-            final entryRec = dayRecs.firstWhere(
-              (r) => (r['record_type'] as String?) == 'entry',
-              orElse: () => <String, dynamic>{},
-            );
-            final hrs = (entryRec['attendance_alloted_hr'] as double?) ?? 0.0;
-            print('✅ PRESENT: $dateStr ($hrs hrs)${isSunday ? ' [Sunday]' : ''}');
-            present++;
-            totalHours += hrs;
-          } else {
-            // No entry
+          // CASE 1: No entry at all
+          if (entryRec.isEmpty) {
             if (isSunday) {
-              // Sunday with no entry = SKIP (don't count)
+              // Sunday with no entry = SKIP
               print('⏸️ SKIP: $dateStr [Sunday, no entry]');
             } else {
               // Weekday with no entry = ABSENT
               print('❌ ABSENT: $dateStr');
               absent++;
+            }
+            continue;
+          }
+
+          // CASE 2: Entry exists
+          double? hrs;
+
+          if (exitRec.isNotEmpty) {
+            // Entry + Exit both → check EXIT record's attendance_alloted_hr
+            hrs = exitRec['attendance_alloted_hr'] as double?;
+            if (hrs != null) {
+              print('✅ PRESENT (Entry+Exit): $dateStr → $hrs hrs${isSunday ? ' [Sunday]' : ''}');
+              present++;
+              totalHours += hrs;
+            }
+          } else {
+            // Entry only (no exit) → check ENTRY record's attendance_alloted_hr
+            hrs = entryRec['attendance_alloted_hr'] as double?;
+            if (hrs != null) {
+              print('✅ PRESENT (Entry only): $dateStr → $hrs hrs${isSunday ? ' [Sunday]' : ''}');
+              present++;
+              totalHours += hrs;
             }
           }
         } catch (e) {
@@ -208,7 +246,7 @@ class _AttendanceReportsScreenState extends State<AttendanceReportsScreen> {
       final total = present + absent;
       final avgHrs = present > 0 ? totalHours / present : 0.0;
 
-      print('📊 Summary - Present: $present, Absent: $absent, Avg: ${avgHrs.toStringAsFixed(2)} hrs');
+      print('📊 Summary - Present: $present, Absent: $absent, Total: $total, Avg: ${avgHrs.toStringAsFixed(2)} hrs');
 
       return {
         'present': present,
