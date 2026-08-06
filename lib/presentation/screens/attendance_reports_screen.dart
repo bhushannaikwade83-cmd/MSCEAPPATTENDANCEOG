@@ -731,13 +731,40 @@ class _AttendanceReportsScreenState extends State<AttendanceReportsScreen> {
                                   DataRow(
                                     cells: [
                                       DataCell(
-                                        Text(
-                                          '-',
-                                          style: TextStyle(
-                                            fontSize: 12.sp,
-                                            color: isDark ? Colors.white : AppTheme.textDark,
-                                          ),
-                                        ),
+                                        _selectedStudent != null
+                                            ? Wrap(
+                                                spacing: 4.w,
+                                                runSpacing: 4.h,
+                                                children: _getStudentSubjects(_selectedStudent!).isNotEmpty
+                                                    ? _getStudentSubjects(_selectedStudent!)
+                                                        .map(
+                                                          (sub) => Container(
+                                                            padding: EdgeInsets.symmetric(horizontal: 6.w, vertical: 2.h),
+                                                            decoration: BoxDecoration(
+                                                              color: AppTheme.primaryBlue.withOpacity(0.1),
+                                                              borderRadius: BorderRadius.circular(4.r),
+                                                            ),
+                                                            child: Text(
+                                                              sub,
+                                                              style: TextStyle(
+                                                                fontSize: 10.sp,
+                                                                color: AppTheme.primaryBlue,
+                                                              ),
+                                                            ),
+                                                          ),
+                                                        )
+                                                        .toList()
+                                                    : [
+                                                        Text(
+                                                          '-',
+                                                          style: TextStyle(fontSize: 12.sp, color: isDark ? Colors.white70 : AppTheme.textGray),
+                                                        ),
+                                                      ],
+                                              )
+                                            : Text(
+                                                '-',
+                                                style: TextStyle(fontSize: 12.sp, color: isDark ? Colors.white70 : AppTheme.textGray),
+                                              ),
                                       ),
                                       DataCell(
                                         Container(
