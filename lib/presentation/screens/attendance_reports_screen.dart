@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:intl/intl.dart';
+import 'package:pdf/pdf.dart';
+import 'package:pdf/widgets.dart' as pw;
+import 'package:printing/printing.dart';
 import '../../core/app_db.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/utils/responsive.dart';
@@ -173,6 +176,133 @@ class _AttendanceReportsScreenState extends State<AttendanceReportsScreen> {
         ),
       ),
     );
+  }
+
+  /// Generate PDF Report
+  Future<void> _generatePDFReport() async {
+    if (_selectedStudent == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please select a student first')),
+      );
+      return;
+    }
+
+    try {
+      final pdf = pw.Document();
+      final student = _selectedStudent!;
+      final studentName = '${student['fname']} ${student['lname']}';
+      final srNo = student['sr_no'] as String;
+      final subjects = _getStudentSubjects(student);
+
+      // Fetch attendance data
+      final records = await appDb
+          .from('attendance')
+          .select()
+          .eq('sr_no', srNo)
+          .order('attendance_date, marked_time');
+
+      print('📄 Generating PDF with ${records.length} records');
+
+      // Filter by date range
+      List<Map<String, dynamic>> filteredRecords = records.cast<Map<String, dynamic>>();
+      if (_filterStartDate != null && _filterEndDate != null) {
+        filteredRecords = filteredRecords.where((r) {
+          try {
+            final date = DateTime.parse(r['attendance_date'] as String);
+            return !date.isBefore(_filterStartDate!) && !date.isAfter(_filterEndDate!);
+          } catch (e) {
+            return false;
+          }
+        }).toList();
+      }
+
+      // Group by date
+      Map<String, List<Map<String, dynamic>>> byDate = {};
+      for (final rec in filteredRecords) {
+        final date = rec['attendance_date'] as String?;
+        if (date == null) continue;
+        byDate.putIfAbsent(date, () => []);
+        byDate[date]!.add(rec);
+      }
+
+      // Build table rows
+      List<pw.TableRow> rows = [
+        pw.TableRow(
+          decoration: pw.BoxDecoration(color: PdfColors.blue300),
+          children: [
+            pw.Padding(padding: const pw.EdgeInsets.all(6), child: pw.Text('Date', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 10))),
+            pw.Padding(padding: const pw.EdgeInsets.all(6), child: pw.Text('Entry', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 10))),
+            pw.Padding(padding: const pw.EdgeInsets.all(6), child: pw.Text('Exit', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 10))),
+            pw.Padding(padding: const pw.EdgeInsets.all(6), child: pw.Text('Status', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 10))),
+            pw.Padding(padding: const pw.EdgeInsets.all(6), child: pw.Text('Hours', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 10))),
+            pw.Padding(padding: const pw.EdgeInsets.all(6), child: pw.Text('Reason', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 10))),
+          ],
+        ),
+      ];
+
+      // Process each day
+      byDate.forEach((dateStr, dayRecs) {
+        final entryRec = dayRecs.firstWhere((r) => (r['record_type'] as String?) == 'entry', orElse: () => <String, dynamic>{});
+        final exitRec = dayRecs.firstWhere((r) => (r['record_type'] as String?) == 'exit', orElse: () => <String, dynamic>{});
+
+        String entryTime = '--', exitTime = '--', status = 'ABSENT', hours = '00:00:00', reason = 'ABSENT';
+
+        if (entryRec.isNotEmpty) {
+          status = 'PRESENT';
+          try {
+            final dt = DateTime.parse(entryRec['marked_time'] as String).toLocal();
+            entryTime = '${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
+          } catch (e) {}
+
+          if (exitRec.isNotEmpty) {
+            try {
+              final dt = DateTime.parse(exitRec['marked_time'] as String).toLocal();
+              exitTime = '${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
+            } catch (e) {}
+            reason = '-';
+          } else {
+            reason = entryRec['remark'] as String? ?? '-';
+          }
+
+          hours = entryRec['attendance_alloted_hr'] as String? ?? '00:00:00';
+        }
+
+        rows.add(pw.TableRow(children: [
+          pw.Padding(padding: const pw.EdgeInsets.all(4), child: pw.Text(dateStr, style: pw.TextStyle(fontSize: 9))),
+          pw.Padding(padding: const pw.EdgeInsets.all(4), child: pw.Text(entryTime, style: pw.TextStyle(fontSize: 9))),
+          pw.Padding(padding: const pw.EdgeInsets.all(4), child: pw.Text(exitTime, style: pw.TextStyle(fontSize: 9))),
+          pw.Padding(padding: const pw.EdgeInsets.all(4), child: pw.Text(status, style: pw.TextStyle(fontSize: 9))),
+          pw.Padding(padding: const pw.EdgeInsets.all(4), child: pw.Text(hours, style: pw.TextStyle(fontSize: 9))),
+          pw.Padding(padding: const pw.EdgeInsets.all(4), child: pw.Text(reason, style: pw.TextStyle(fontSize: 9))),
+        ]));
+      });
+
+      // Add page
+      pdf.addPage(
+        pw.Page(
+          build: (pw.Context context) => pw.Column(
+            crossAxisAlignment: pw.CrossAxisAlignment.start,
+            children: [
+              pw.Text('ATTENDANCE REPORT', style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold)),
+              pw.Divider(),
+              pw.Text('Institute ID: $_instituteId', style: pw.TextStyle(fontSize: 10)),
+              pw.Text('Student: $studentName', style: pw.TextStyle(fontSize: 10)),
+              pw.Text('SR NO: $srNo', style: pw.TextStyle(fontSize: 10)),
+              pw.Text('Subjects: ${subjects.join(", ")}', style: pw.TextStyle(fontSize: 10)),
+              pw.SizedBox(height: 12),
+              pw.Table(border: pw.TableBorder.all(), children: rows),
+            ],
+          ),
+        ),
+      );
+
+      // Print/Download
+      await Printing.layoutPdf(onLayout: (PdfPageFormat format) async => pdf.save());
+      print('✅ PDF generated successfully');
+    } catch (e) {
+      print('❌ PDF Error: $e');
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
+    }
   }
 
   /// Fetch today's attendance for selected student
@@ -871,6 +1001,53 @@ class _AttendanceReportsScreenState extends State<AttendanceReportsScreen> {
                           );
                         },
                       ),
+
+                      SizedBox(height: 20.h),
+
+                      // 📄 PDF DOWNLOAD BUTTON
+                      if (_selectedStudent != null)
+                        Container(
+                          width: double.infinity,
+                          height: 48.h,
+                          decoration: BoxDecoration(
+                            gradient: LinearGradient(
+                              colors: [
+                                AppTheme.primaryBlue,
+                                AppTheme.primaryBlue.withOpacity(0.8),
+                              ],
+                            ),
+                            borderRadius: BorderRadius.circular(12.r),
+                            boxShadow: [
+                              BoxShadow(
+                                color: AppTheme.primaryBlue.withOpacity(0.3),
+                                blurRadius: 12,
+                                offset: const Offset(0, 4),
+                              ),
+                            ],
+                          ),
+                          child: Material(
+                            color: Colors.transparent,
+                            child: InkWell(
+                              onTap: _generatePDFReport,
+                              borderRadius: BorderRadius.circular(12.r),
+                              child: Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Icon(Icons.download_rounded, color: Colors.white, size: 20.sp),
+                                  SizedBox(width: 8.w),
+                                  Text(
+                                    'Download Attendance Report',
+                                    style: TextStyle(
+                                      fontSize: 14.sp,
+                                      fontWeight: FontWeight.w700,
+                                      color: Colors.white,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
 
                       SizedBox(height: 32.h),
                     ],
