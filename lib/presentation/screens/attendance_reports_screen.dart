@@ -222,7 +222,9 @@ class _AttendanceReportsScreenState extends State<AttendanceReportsScreen> {
         };
       }
 
-      DateTime? entryTime = DateTime.parse(entryRec['marked_time'] as String);
+      final markedTimeStr = entryRec['marked_time'] as String?;
+      print('🔍 Entry marked_time from DB: $markedTimeStr');
+      DateTime? entryTime = markedTimeStr != null ? DateTime.parse(markedTimeStr) : null;
       DateTime? exitTime;
 
       if (exitRec.isNotEmpty) {
@@ -233,7 +235,7 @@ class _AttendanceReportsScreenState extends State<AttendanceReportsScreen> {
           print('✅ PRESENT (Entry+Exit) - Hours: $hrsStr');
           return {
             'status': 'PRESENT',
-            'entry_time': entryTime.toIso8601String(),
+            'entry_time': entryTime?.toIso8601String(),
             'exit_time': exitTime.toIso8601String(),
             'credited_hours': hrsStr,
             'allocated_hours': hrsStr,
@@ -246,7 +248,7 @@ class _AttendanceReportsScreenState extends State<AttendanceReportsScreen> {
           print('✅ PRESENT (Entry only) - Hours: $hrsStr');
           return {
             'status': 'PRESENT',
-            'entry_time': entryTime.toIso8601String(),
+            'entry_time': entryTime?.toIso8601String(),
             'exit_time': null,
             'credited_hours': hrsStr,
             'allocated_hours': hrsStr,
@@ -257,7 +259,7 @@ class _AttendanceReportsScreenState extends State<AttendanceReportsScreen> {
       // Fallback if no allocated hours found
       return {
         'status': 'PRESENT',
-        'entry_time': entryTime.toIso8601String(),
+        'entry_time': entryTime?.toIso8601String(),
         'exit_time': exitTime?.toIso8601String(),
         'credited_hours': '00:00:00',
         'allocated_hours': '00:00:00',
