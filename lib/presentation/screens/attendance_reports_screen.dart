@@ -499,18 +499,30 @@ class _AttendanceReportsScreenState extends State<AttendanceReportsScreen> {
 
                           final data = snapshot.data ?? {};
                           final status = data['status'] as String? ?? 'ERROR';
-                          final creditedHours = data['credited_hours'] as double? ?? 0.0;
-                          final allocatedHours = data['allocated_hours'] as double? ?? 0.0;
+                          final entryTime = data['entry_time'] as String?;
+                          final exitTime = data['exit_time'] as String?;
+                          final allocatedHours = data['allocated_hours'] as String? ?? '00:00:00';
 
                           Color statusColor = AppTheme.accentRed;
                           IconData statusIcon = Icons.cancel;
 
-                          if (status == 'SEATED') {
+                          if (status == 'PRESENT') {
                             statusColor = AppTheme.primaryGreen;
                             statusIcon = Icons.check_circle;
-                          } else if (status == 'SHORT') {
+                          } else if (status == 'NOT EXITED') {
                             statusColor = AppTheme.accentOrange;
                             statusIcon = Icons.schedule;
+                          }
+
+                          // Format time from ISO8601 to HH:MM:SS
+                          String formatTime(String? isoTime) {
+                            if (isoTime == null) return '--:--:--';
+                            try {
+                              final dt = DateTime.parse(isoTime);
+                              return '${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}:${dt.second.toString().padLeft(2, '0')}';
+                            } catch (e) {
+                              return '--:--:--';
+                            }
                           }
 
                           return Container(
@@ -546,6 +558,7 @@ class _AttendanceReportsScreenState extends State<AttendanceReportsScreen> {
                                   ],
                                 ),
                                 SizedBox(height: 16.h),
+                                // Entry Time
                                 Row(
                                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                   children: [
@@ -553,38 +566,66 @@ class _AttendanceReportsScreenState extends State<AttendanceReportsScreen> {
                                       crossAxisAlignment: CrossAxisAlignment.start,
                                       children: [
                                         Text(
-                                          'Credited Hours',
+                                          'Entry Time',
                                           style: TextStyle(
                                             fontSize: 12.sp,
                                             color: isDark ? Colors.white70 : AppTheme.textGray,
                                           ),
                                         ),
                                         Text(
-                                          '${creditedHours.toStringAsFixed(1)}h',
+                                          formatTime(entryTime),
                                           style: TextStyle(
-                                            fontSize: 18.sp,
-                                            fontWeight: FontWeight.w800,
-                                            color: statusColor,
+                                            fontSize: 14.sp,
+                                            fontWeight: FontWeight.w700,
+                                            color: isDark ? Colors.white : AppTheme.textDark,
                                           ),
                                         ),
                                       ],
                                     ),
+                                    // Exit Time
                                     Column(
                                       crossAxisAlignment: CrossAxisAlignment.end,
                                       children: [
                                         Text(
-                                          'Allocated Hours',
+                                          'Exit Time',
                                           style: TextStyle(
                                             fontSize: 12.sp,
                                             color: isDark ? Colors.white70 : AppTheme.textGray,
                                           ),
                                         ),
                                         Text(
-                                          '${allocatedHours.toStringAsFixed(1)}h',
+                                          formatTime(exitTime),
+                                          style: TextStyle(
+                                            fontSize: 14.sp,
+                                            fontWeight: FontWeight.w700,
+                                            color: isDark ? Colors.white : AppTheme.textDark,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ],
+                                ),
+                                SizedBox(height: 16.h),
+                                // Allocated Hours
+                                Row(
+                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          'Seated Hours',
+                                          style: TextStyle(
+                                            fontSize: 12.sp,
+                                            color: isDark ? Colors.white70 : AppTheme.textGray,
+                                          ),
+                                        ),
+                                        Text(
+                                          allocatedHours,
                                           style: TextStyle(
                                             fontSize: 18.sp,
                                             fontWeight: FontWeight.w800,
-                                            color: isDark ? Colors.white : AppTheme.textDark,
+                                            color: statusColor,
                                           ),
                                         ),
                                       ],
