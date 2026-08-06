@@ -512,11 +512,11 @@ class _AttendanceReportsScreenState extends State<AttendanceReportsScreen> {
                             statusIcon = Icons.schedule;
                           }
 
-                          // Format time from ISO8601 to HH:MM:SS
+                          // Format time from ISO8601 to HH:MM:SS (convert to local timezone)
                           String formatTime(String? isoTime) {
                             if (isoTime == null) return '--:--:--';
                             try {
-                              final dt = DateTime.parse(isoTime);
+                              final dt = DateTime.parse(isoTime).toLocal();
                               return '${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}:${dt.second.toString().padLeft(2, '0')}';
                             } catch (e) {
                               return '--:--:--';
