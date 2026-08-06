@@ -297,20 +297,93 @@ class _AttendanceReportsScreenState extends State<AttendanceReportsScreen> {
         ],
       ));
 
+      // Calculate summary stats
+      int presentDays = 0, absentDays = 0, lateDays = 0;
+      byDate.forEach((dateStr, dayRecs) {
+        final entryRec = dayRecs.firstWhere((r) => (r['record_type'] as String?) == 'entry', orElse: () => <String, dynamic>{});
+        if (entryRec.isNotEmpty) {
+          presentDays++;
+        } else {
+          absentDays++;
+        }
+      });
+      int totalDays = presentDays + absentDays;
+      double attendancePercentage = totalDays > 0 ? (presentDays / totalDays) * 100 : 0.0;
+
       // Add page
       pdf.addPage(
         pw.Page(
           build: (pw.Context context) => pw.Column(
             crossAxisAlignment: pw.CrossAxisAlignment.start,
             children: [
-              pw.Text('ATTENDANCE REPORT', style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold)),
-              pw.Divider(),
-              pw.Text('Institute ID: $_instituteId', style: pw.TextStyle(fontSize: 10)),
-              pw.Text('Student: $studentName', style: pw.TextStyle(fontSize: 10)),
-              pw.Text('SR NO: $srNo', style: pw.TextStyle(fontSize: 10)),
-              pw.Text('Subjects: ${subjects.join(", ")}', style: pw.TextStyle(fontSize: 10)),
-              pw.SizedBox(height: 12),
-              pw.Table(border: pw.TableBorder.all(), children: rows),
+              // Header
+              pw.Container(
+                padding: const pw.EdgeInsets.all(12),
+                decoration: pw.BoxDecoration(
+                  border: pw.Border.all(color: PdfColors.blue800, width: 2),
+                  borderRadius: const pw.BorderRadius.all(pw.Radius.circular(4)),
+                ),
+                child: pw.Row(
+                  mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                  children: [
+                    pw.Column(
+                      crossAxisAlignment: pw.CrossAxisAlignment.start,
+                      children: [
+                        pw.Text('MAHARASHTRA STATE COUNCIL', style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold, color: PdfColors.blue800)),
+                        pw.Text('OF EXAMINATION', style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold, color: PdfColors.blue800)),
+                      ],
+                    ),
+                    pw.Text('ATTENDANCE REPORT', style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold, color: PdfColors.blue800)),
+                  ],
+                ),
+              ),
+              pw.SizedBox(height: 16),
+
+              // Student Details
+              pw.Row(
+                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                children: [
+                  pw.Column(
+                    crossAxisAlignment: pw.CrossAxisAlignment.start,
+                    children: [
+                      pw.Row(children: [pw.Text('Institute ID', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)), pw.Text(': $_instituteId')]),
+                      pw.Row(children: [pw.Text('Institute Name', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)), pw.Text(': ____________')]),
+                      pw.Row(children: [pw.Text('Student Name', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)), pw.Text(': $studentName')]),
+                      pw.Row(children: [pw.Text('SR No', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)), pw.Text(': $srNo')]),
+                      pw.Row(children: [pw.Text('Subjects', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)), pw.Text(': ${subjects.join(", ")}')]),
+                    ],
+                  ),
+                  pw.Container(
+                    width: 80,
+                    height: 100,
+                    decoration: pw.BoxDecoration(border: pw.Border.all(color: PdfColors.black, width: 1)),
+                    child: pw.Center(child: pw.Text('Student\nPhoto', textAlign: pw.TextAlign.center, style: pw.TextStyle(fontSize: 10, color: PdfColors.grey))),
+                  ),
+                ],
+              ),
+              pw.SizedBox(height: 16),
+
+              // Attendance Table
+              pw.Table(border: pw.TableBorder.all(color: PdfColors.blue800, width: 1.5), children: rows),
+              pw.SizedBox(height: 16),
+
+              // Summary Section
+              pw.Text('Summary', style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold)),
+              pw.SizedBox(height: 8),
+              pw.Row(
+                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                children: [
+                  pw.Row(children: [pw.Text('Total Present Days', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)), pw.Text(': $presentDays')]),
+                  pw.Row(children: [pw.Text('Total Absent Days', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)), pw.Text(': $absentDays')]),
+                ],
+              ),
+              pw.Row(
+                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                children: [
+                  pw.Row(children: [pw.Text('Total Late Days', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)), pw.Text(': $lateDays')]),
+                  pw.Row(children: [pw.Text('Attendance Percentage', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)), pw.Text(': ${attendancePercentage.toStringAsFixed(2)}%')]),
+                ],
+              ),
             ],
           ),
         ),
