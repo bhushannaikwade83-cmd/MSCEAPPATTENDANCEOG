@@ -225,11 +225,11 @@ class StudentApiService {
       final today = DateTime.now().toIso8601String().split('T')[0];
 
       final response = await _supabase
-          .from('attendance_records')
+          .from('attendance')
           .select()
           .eq('sr_no', srNo)
-          .eq('date', today)
-          .order('timestamp', ascending: false);
+          .eq('attendance_date', today)
+          .order('marked_time', ascending: false);
 
       return List<Map<String, dynamic>>.from(response);
     } catch (e) {
