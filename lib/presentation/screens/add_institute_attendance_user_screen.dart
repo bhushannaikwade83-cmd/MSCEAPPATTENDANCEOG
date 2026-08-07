@@ -1000,26 +1000,55 @@ class _AddInstituteAttendanceUserScreenState extends State<AddInstituteAttendanc
   /// 🗑️ Delete instructor from database
   Future<void> _deleteInstructor(String instructorId, String instructorName) async {
     try {
-      print('🗑️ Deleting instructor: $instructorName (ID: $instructorId)');
+      print('🗑️ [DELETE] Attempting to delete instructor: $instructorName (ID: $instructorId)');
 
-      // Delete from profiles table
-      final resp = await appDb.from('profiles').delete().eq('id', instructorId);
-      print('✅ Deleted instructor: $instructorName');
+      // Use Supabase REST API with explicit auth header
+      print('🔍 [DELETE] Calling via Supabase client...');
+
+      final response = await appDb.from('profiles').delete().eq('id', instructorId).select();
+
+      print('✅ [DELETE] Response: $response');
+
+      // Double-check: verify instructor was actually deleted
+      print('🔍 [DELETE] Verifying deletion...');
+      final checkAfterDelete = await appDb
+          .from('profiles')
+          .select('id')
+          .eq('id', instructorId)
+          .maybeSingle();
+
+      if (checkAfterDelete != null) {
+        print('⚠️ [DELETE] Instructor still exists in database! RLS policy issue?');
+        throw Exception('Delete failed: Instructor still exists (RLS policy issue?)');
+      }
+
+      print('✅ [DELETE] Verified: Instructor deleted from database');
 
       // Refresh the list
       if (_instituteId != null) {
+        print('🔄 [DELETE] Refreshing instructor list...');
         await _loadStaffUsers(_instituteId!);
       }
 
       if (!mounted) return;
+
+      print('✅ [DELETE] Showing success message');
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('✅ Instructor "$instructorName" deleted')),
+        SnackBar(
+          content: Text('✅ Instructor "$instructorName" deleted'),
+          backgroundColor: Colors.green,
+        ),
       );
     } catch (e) {
-      print('❌ Error deleting instructor: $e');
+      print('❌ [DELETE] Error deleting instructor: $e');
+      print('❌ [DELETE] Stack trace: ${StackTrace.current}');
+
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('❌ Failed to delete: $e')),
+        SnackBar(
+          content: Text('❌ Delete failed (RLS policy issue): $e'),
+          backgroundColor: Colors.red,
+        ),
       );
     }
   }
