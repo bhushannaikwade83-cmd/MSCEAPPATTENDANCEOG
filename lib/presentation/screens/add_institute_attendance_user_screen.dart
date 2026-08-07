@@ -316,7 +316,7 @@ class _AddInstituteAttendanceUserScreenState extends State<AddInstituteAttendanc
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  _buildHeaderCard(isDark),
+                  _buildHeaderCard(isDark, atLimit),
                   SizedBox(height: 20.h),
                   Form(
                     key: _formKey,
@@ -344,7 +344,7 @@ class _AddInstituteAttendanceUserScreenState extends State<AddInstituteAttendanc
     );
   }
 
-  Widget _buildHeaderCard(bool isDark) {
+  Widget _buildHeaderCard(bool isDark, bool atLimit) {
     return Container(
       decoration: BoxDecoration(
         gradient: LinearGradient(
@@ -943,6 +943,19 @@ class _AddInstituteAttendanceUserScreenState extends State<AddInstituteAttendanc
               ),
             ),
             SizedBox(width: 8.w),
+            // 🗑️ Delete button
+            GestureDetector(
+              onTap: () => _showDeleteConfirmation(r),
+              child: Padding(
+                padding: EdgeInsets.all(8.w),
+                child: Icon(
+                  Icons.delete_rounded,
+                  color: Colors.red.withOpacity(0.7),
+                  size: 20.sp,
+                ),
+              ),
+            ),
+            SizedBox(width: 4.w),
             Icon(
               Icons.chevron_right_rounded,
               color: AppTheme.primaryGreen.withOpacity(0.6),
@@ -952,5 +965,62 @@ class _AddInstituteAttendanceUserScreenState extends State<AddInstituteAttendanc
         ),
       ),
     );
+  }
+
+  /// 🗑️ Show delete confirmation dialog
+  void _showDeleteConfirmation(Map<String, dynamic> instructor) {
+    final name = (instructor['name'] as String?)?.trim() ?? '—';
+    final id = instructor['id'] as String?;
+
+    if (id == null) return;
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('🗑️ Delete Instructor'),
+        content: Text('Delete "$name" from instructors?\n\nThis cannot be undone.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () async {
+              Navigator.pop(ctx);
+              await _deleteInstructor(id, name);
+            },
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// 🗑️ Delete instructor from database
+  Future<void> _deleteInstructor(String instructorId, String instructorName) async {
+    try {
+      print('🗑️ Deleting instructor: $instructorName (ID: $instructorId)');
+
+      // Delete from profiles table
+      final resp = await appDb.from('profiles').delete().eq('id', instructorId);
+      print('✅ Deleted instructor: $instructorName');
+
+      // Refresh the list
+      if (_instituteId != null) {
+        await _loadStaffUsers(_instituteId!);
+      }
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('✅ Instructor "$instructorName" deleted')),
+      );
+    } catch (e) {
+      print('❌ Error deleting instructor: $e');
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('❌ Failed to delete: $e')),
+      );
+    }
   }
 }
