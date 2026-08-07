@@ -499,9 +499,11 @@ class _LiveAntiSpoofCameraScreenState extends State<LiveAntiSpoofCameraScreen> {
       print('💾 [SAVE] Saving attendance to attendance table...');
 
       final supabase = Supabase.instance.client;
-      final now = DateTime.now();
-      // 🔧 FIX: Use local date, not UTC (format: YYYY-MM-DD)
+
+      // 🔧 INDIA TIMEZONE FIX: Use IST (UTC+5:30) for date calculation
+      final now = DateTime.now().toUtc().add(const Duration(hours: 5, minutes: 30));
       final today = '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
+      print('🕐 [TIMEZONE] Device time: ${DateTime.now()}, IST time: $now, Today: $today');
 
       // 🔍 Check if student already has both entry and exit marked
       print('🔍 Checking if attendance already marked for today...');
@@ -549,11 +551,13 @@ class _LiveAntiSpoofCameraScreenState extends State<LiveAntiSpoofCameraScreen> {
       // 💾 STEP 2: Send to backend and WAIT for response
       print('📋 [BACKEND] Sending attendance to backend...');
       try {
+        // 🔧 Send UTC time to backend (convert IST back to UTC)
+        final nowUtc = DateTime.now().toUtc();
         final backendResponse = await backendBatchService.queueAttendance(
           srNo: srNo,
           instituteId: widget.instituteId,
           recordType: recordType,
-          markedTime: now.toUtc().toIso8601String(),
+          markedTime: nowUtc.toIso8601String(),
           remark: '',
           photoUrl: photoUrl,
           studentName: _matchedStudentName,
