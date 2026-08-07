@@ -839,6 +839,16 @@ class _StudentManagementScreenState extends State<StudentManagementScreen>
     final list =
         (rows as List).map((e) => Map<String, dynamic>.from(e as Map)).toList();
 
+    // 🔍 DEBUG: Log what we got from Supabase
+    if (list.isNotEmpty) {
+      final first = list.first;
+      print('🔍 [SUPABASE RESPONSE] First row keys: ${first.keys.toList()}');
+      print('   ├─ Has "status" key? ${first.containsKey("status")}');
+      print('   ├─ status value: ${first["status"]}');
+      print('   ├─ status type: ${first["status"].runtimeType}');
+      print('   └─ All data: $first');
+    }
+
     final seen = <String>{};
     final deduped = <Map<String, dynamic>>[];
     for (final row in list) {
@@ -902,7 +912,7 @@ class _StudentManagementScreenState extends State<StudentManagementScreen>
             .select('id')
             .eq('institute_id', _instituteId!)
             .inFilter('id', slice)
-            .not('face_embedding', 'is', null);
+            .not('face_embedding_front', 'is', null);  // 🔧 Fixed: use face_embedding_front instead of face_embedding
         for (final raw in rows) {
           final id = (raw as Map)['id']?.toString().trim() ?? '';
           if (id.isNotEmpty) out.add(id);
@@ -1047,6 +1057,7 @@ class _StudentManagementScreenState extends State<StudentManagementScreen>
       'face_registration_status': row['face_registration_status'] ?? 'pending',
       'is_face_real': row['is_face_real'] ?? false,
       'form_serial_no': row['form_serial_no'] ?? '',
+      'status': row['status'] ?? 1,  // 💳 Payment status: 1=can register, 2=blocked
     };
   }
 
@@ -2130,6 +2141,14 @@ class _StudentManagementScreenState extends State<StudentManagementScreen>
     // Payment status: 1 = can register, 2 = payment pending
     final paymentStatus = data['status'] as int? ?? 1;
     final isPaymentPending = paymentStatus == 2;
+
+    // 🔍 DEBUG: Log payment status
+    print('🔍 [PAYMENT STATUS] Student: $name');
+    print('   ├─ Raw status value: ${data['status']}');
+    print('   ├─ Parsed paymentStatus: $paymentStatus');
+    print('   ├─ isPaymentPending: $isPaymentPending');
+    final buttonText = isPaymentPending ? 'FEES DUE (locked)' : 'REGISTER (enabled)';
+    print('   └─ Button will show: $buttonText');
 
     // ⏸️ DISABLED: Background subject fetch was firing DB query for EVERY student during scroll!
     // This blocked the main thread (nativePoll 99% CPU)

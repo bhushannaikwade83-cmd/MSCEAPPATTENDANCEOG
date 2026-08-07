@@ -500,7 +500,8 @@ class _LiveAntiSpoofCameraScreenState extends State<LiveAntiSpoofCameraScreen> {
 
       final supabase = Supabase.instance.client;
       final now = DateTime.now();
-      final today = now.toIso8601String().split('T')[0]; // YYYY-MM-DD
+      // 🔧 FIX: Use local date, not UTC (format: YYYY-MM-DD)
+      final today = '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
 
       // 🔍 Check if student already has both entry and exit marked
       print('🔍 Checking if attendance already marked for today...');
@@ -573,12 +574,16 @@ class _LiveAntiSpoofCameraScreenState extends State<LiveAntiSpoofCameraScreen> {
 
           // Show success to user with details
           if (mounted) {
+            final attendanceId = (backendResponse['attendance_id'] as String? ?? '').trim();
+            final displayId = attendanceId.length > 8
+                ? attendanceId.substring(0, 8)
+                : attendanceId;
             setState(() {
               _currentStage =
                   '✅ ${recordType.toUpperCase()} Marked Successfully!\n\n'
                   'Time: ${backendResponse['marked_time']}\n'
                   'Face: ${backendResponse['face_confidence']?.toStringAsFixed(0)}%\n'
-                  'ID: ${(backendResponse['attendance_id'] as String).substring(0, 8)}';
+                  'ID: $displayId';
             });
           }
           await Future.delayed(const Duration(seconds: 3));
