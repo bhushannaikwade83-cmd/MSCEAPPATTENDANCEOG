@@ -8,6 +8,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../core/app_db.dart';
 import '../../services/anti_spoof_api_service.dart';
 import '../../services/attendance_photo_service.dart';
+import '../../services/backend_batch_service.dart';
 
 class LiveAntiSpoofCameraScreen extends StatefulWidget {
   static const routeName = '/live-anti-spoof-camera';
@@ -373,13 +374,13 @@ class _LiveAntiSpoofCameraScreenState extends State<LiveAntiSpoofCameraScreen> {
         setState(() {
           _currentStage = '❌ No Face Detected';
         });
-        await Future.delayed(const Duration(seconds: 2));
+        await Future.delayed(const Duration(seconds: 6));
       } else if (faces.length > 1) {
         print('❌ [DETECT] Multiple faces detected: ${faces.length}');
         setState(() {
           _currentStage = '❌ Multiple Faces - Show Only 1';
         });
-        await Future.delayed(const Duration(seconds: 2));
+        await Future.delayed(const Duration(seconds: 6));
       } else {
         print('✅ [DETECT] Single face detected, proceeding to backend...');
         // Face detected - send to API
@@ -396,7 +397,7 @@ class _LiveAntiSpoofCameraScreenState extends State<LiveAntiSpoofCameraScreen> {
             setState(() {
               _currentStage = '❌ No Match Found';
             });
-            await Future.delayed(const Duration(seconds: 2));
+            await Future.delayed(const Duration(seconds: 6));
           } else {
             _matchedStudentName = result['student_name'] ?? 'Unknown';
             _similarityScore = result['similarity'] ?? 0.0;
@@ -409,7 +410,7 @@ class _LiveAntiSpoofCameraScreenState extends State<LiveAntiSpoofCameraScreen> {
               setState(() {
                 _currentStage = '⚠️ Already Marked Today ($_matchedStudentName)';
               });
-              await Future.delayed(const Duration(seconds: 2));
+              await Future.delayed(const Duration(seconds: 6));
             } else {
               // ⚡ Backend already determined entry/exit (STEP 7) — no extra round trip
               var recordType = result['record_type'] ?? 'entry';
@@ -446,7 +447,7 @@ class _LiveAntiSpoofCameraScreenState extends State<LiveAntiSpoofCameraScreen> {
                 _currentStage = '✅ Attendance Marked ($recordType)';
               });
 
-              await Future.delayed(const Duration(seconds: 2));
+              await Future.delayed(const Duration(seconds: 6));
             }
           }
         }
@@ -461,7 +462,7 @@ class _LiveAntiSpoofCameraScreenState extends State<LiveAntiSpoofCameraScreen> {
       setState(() {
         _currentStage = '❌ Capture Error: $e';
       });
-      await Future.delayed(const Duration(seconds: 2));
+      await Future.delayed(const Duration(seconds: 6));
       _resetUI();
     }
   }
@@ -544,29 +545,75 @@ class _LiveAntiSpoofCameraScreenState extends State<LiveAntiSpoofCameraScreen> {
         photoUrl = null;
       }
 
-      // 💾 STEP 2: Save attendance record with photo URL
-      await supabase.from('attendance').insert({
-        'sr_no': srNo,
-        'student_name': _matchedStudentName,
-        'institute_id': widget.instituteId,
-        'attendance_date': today,
-        'record_type': recordType, // 'entry' or 'exit'
-        'marked_time': now.toUtc().toIso8601String(), // store UTC (with 'Z') so display .toLocal() is correct
-        'similarity_score': _similarityScore,
-        'photo_url': photoUrl, // B2 public URL (compressed, <100KB)
-        'embedding': '[]',
-        'status': 'present',
-        'is_verified': _similarityScore > 0.75,
-      });
+      // 💾 STEP 2: Send to backend and WAIT for response
+      print('📋 [BACKEND] Sending attendance to backend...');
+      try {
+        final backendResponse = await backendBatchService.queueAttendance(
+          srNo: srNo,
+          instituteId: widget.instituteId,
+          recordType: recordType,
+          markedTime: now.toUtc().toIso8601String(),
+          remark: '',
+          photoUrl: photoUrl,
+          studentName: _matchedStudentName,
+          similarityScore: _similarityScore,
+        );
 
-      print('✅ [SAVE] Attendance saved successfully:');
-      print('   SR No: $srNo');
-      print('   Student: $_matchedStudentName');
-      print('   Type: $recordType');
-      print('   Date: $today');
-      print('   Time: $now');
-      print('   Similarity: ${(_similarityScore * 100).toStringAsFixed(1)}%');
-      print('   Photo URL: $photoUrl');
+        // Check if successful
+        if (backendResponse['success'] == true) {
+          print('✅ [BACKEND] Attendance marked successfully!');
+          print('   Attendance ID: ${backendResponse['attendance_id']}');
+          print('   SR No: $srNo');
+          print('   Student: $_matchedStudentName');
+          print('   Type: $recordType');
+          print('   Date: $today');
+          print('   Time: ${backendResponse['marked_time']}');
+          print('   Face Confidence: ${backendResponse['face_confidence']}%');
+          print('   Photo URL: $photoUrl');
+
+          // Show success to user with details
+          if (mounted) {
+            setState(() {
+              _currentStage =
+                  '✅ ${recordType.toUpperCase()} Marked Successfully!\n\n'
+                  'Time: ${backendResponse['marked_time']}\n'
+                  'Face: ${backendResponse['face_confidence']?.toStringAsFixed(0)}%\n'
+                  'ID: ${(backendResponse['attendance_id'] as String).substring(0, 8)}';
+            });
+          }
+          await Future.delayed(const Duration(seconds: 3));
+          if (mounted) _resetUI();
+        } else {
+          // Backend rejected
+          print('❌ [BACKEND] Attendance rejected: ${backendResponse['reason']}');
+
+          if (mounted) {
+            setState(() {
+              _currentStage =
+                  '❌ ${recordType.toUpperCase()} Failed\n\n'
+                  'Reason: ${backendResponse['reason']}\n'
+                  'Please try again\n\n'
+                  'Error ID: ${backendResponse['error_id']}';
+            });
+          }
+          await Future.delayed(const Duration(seconds: 4));
+          if (mounted) _resetUI();
+        }
+      } catch (e) {
+        print('❌ [BACKEND] Error: $e');
+
+        if (mounted) {
+          setState(() {
+            _currentStage = '❌ Network Error\n\n'
+                'Failed to connect to server\n'
+                'Please try again\n\n'
+                '$e';
+          });
+        }
+        await Future.delayed(const Duration(seconds: 4));
+        if (mounted) _resetUI();
+        throw e;
+      }
     } catch (e) {
       print('❌ [SAVE] Error saving attendance: $e');
       print('📍 [SAVE] Stack: ${StackTrace.current}');
