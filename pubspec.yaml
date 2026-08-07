@@ -2,7 +2,7 @@ name: smart_attendance_app
 description: "MSCE Attendance App - Smart attendance for MSCE institutes"
 publish_to: 'none'
 
-version: 2.0.0+2
+version: 2.1.0+3
 
 environment:
   sdk: ^3.10.3
@@ -92,3 +92,5 @@ flutter:
     - assets/models/minifas_v1se_80x80.tflite
     - assets/models/face_anti_spoofing.tflite
     - assets/models/anti_spoof_print_replay.tflite
+    - assets/templates/attendance_report_template.png
+    - assets/pdf_images/
