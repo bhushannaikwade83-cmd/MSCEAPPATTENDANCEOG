@@ -28,6 +28,10 @@ class BackendBatchService {
       print('📋 [CLIENT] Sending attendance to backend...');
       print('   SR No: $srNo | Type: $recordType');
 
+      // 🔧 Calculate IST date for attendance_date (NOT from UTC markedTime)
+      final now = DateTime.now().toUtc().add(const Duration(hours: 5, minutes: 30));
+      final attendanceDate = '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
+
       // Call Supabase Edge Function
       final response = await supabase.functions.invoke(
         'batch-attendance',
@@ -35,7 +39,7 @@ class BackendBatchService {
           'sr_no': srNo,
           'student_name': studentName ?? '-',
           'institute_id': instituteId,
-          'attendance_date': markedTime.split('T')[0], // YYYY-MM-DD
+          'attendance_date': attendanceDate, // IST date (YYYY-MM-DD)
           'record_type': recordType, // 'entry' or 'exit'
           'marked_time': markedTime, // ISO8601 UTC
           'remark': remark ?? '-',
