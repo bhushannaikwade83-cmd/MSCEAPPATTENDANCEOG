@@ -78,7 +78,7 @@ class _StudentManagementScreenState extends State<StudentManagementScreen>
 
   /// Omit `face_embedding` / `photo_thumbnail` — they are large JSON and slow every list page.
   static const String _studentSelectCols =
-      'id,sr_no,fname,lname,mname,sub1,sub2,sub3,sub4,sub5,sub6,sub7,sub8,form_serial_no,mother_nm,ctcd,identy_no,face_photo_url,face_embedding_front,face_embedding_left,face_embedding_right,face_registered_at,face_registration_status,is_face_real,created_at,updated_at';
+      'id,sr_no,fname,lname,mname,sub1,sub2,sub3,sub4,sub5,sub6,sub7,sub8,form_serial_no,mother_nm,ctcd,identy_no,face_photo_url,face_embedding_front,face_embedding_left,face_embedding_right,face_registered_at,face_registration_status,is_face_real,status,created_at,updated_at';
 
   /// Today's entry/exit UI state keyed by [students.id] only (avoids roll/userId collisions).
   Map<String, Map<String, dynamic>> _todayPayloadByStudentId = {};
@@ -2127,6 +2127,10 @@ class _StudentManagementScreenState extends State<StudentManagementScreen>
     final averageFaceQuality = 0.0; // Column not in DB yet, default to 0
     final formSerialNo = data['form_serial_no'] ?? '';
 
+    // Payment status: 1 = can register, 2 = payment pending
+    final paymentStatus = data['status'] as int? ?? 1;
+    final isPaymentPending = paymentStatus == 2;
+
     // ⏸️ DISABLED: Background subject fetch was firing DB query for EVERY student during scroll!
     // This blocked the main thread (nativePoll 99% CPU)
     // Subjects are fetched only when needed (marking attendance)
@@ -2777,34 +2781,53 @@ class _StudentManagementScreenState extends State<StudentManagementScreen>
                                   ),
                                 );
                               }
-                            : () {
-                                // Navigate to face registration camera
-                                if (!context.mounted || _instituteId == null) return;
-                                Navigator.of(context).push(
-                                  MaterialPageRoute(
-                                    builder: (_) => StudentFaceRegistrationWrapper(
-                                      studentId: studentId,
-                                      studentName: name,
-                                      srNo: _formatSrDisplay(srNo),
-                                      instituteId: _instituteId!,
-                                      onRegistrationSuccess: () {
-                                        // Refresh student list after registration
-                                        if (mounted) {
-                                          _bootstrapStudentList();
-                                        }
-                                      },
-                                    ),
-                                  ),
-                                );
-                              },
+                            : isPaymentPending
+                                ? () {
+                                    // Show payment required message
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      const SnackBar(
+                                        content: Text('❌ Please pay exam fees initially on MSCE portal'),
+                                        backgroundColor: Colors.red,
+                                        duration: Duration(seconds: 3),
+                                      ),
+                                    );
+                                  }
+                                : () {
+                                    // Navigate to face registration camera
+                                    if (!context.mounted || _instituteId == null) return;
+                                    Navigator.of(context).push(
+                                      MaterialPageRoute(
+                                        builder: (_) => StudentFaceRegistrationWrapper(
+                                          studentId: studentId,
+                                          studentName: name,
+                                          srNo: _formatSrDisplay(srNo),
+                                          instituteId: _instituteId!,
+                                          onRegistrationSuccess: () {
+                                            // Refresh student list after registration
+                                            if (mounted) {
+                                              _bootstrapStudentList();
+                                            }
+                                          },
+                                        ),
+                                      ),
+                                    );
+                                  },
                         borderRadius: BorderRadius.circular(12.r),
                         child: Container(
                           padding: EdgeInsets.symmetric(vertical: 10.h, horizontal: 8.w),
                           decoration: BoxDecoration(
-                            color: statusColor.withValues(alpha: 0.15),
+                            color: isFaceRegistered
+                                ? statusColor.withValues(alpha: 0.15)
+                                : isPaymentPending
+                                    ? const Color(0xFFFF6B6B).withValues(alpha: 0.15)
+                                    : statusColor.withValues(alpha: 0.15),
                             borderRadius: BorderRadius.circular(12.r),
                             border: Border.all(
-                              color: statusColor.withValues(alpha: 0.35),
+                              color: isFaceRegistered
+                                  ? statusColor.withValues(alpha: 0.35)
+                                  : isPaymentPending
+                                      ? const Color(0xFFFF6B6B).withValues(alpha: 0.35)
+                                      : statusColor.withValues(alpha: 0.35),
                               width: 1.5,
                             ),
                           ),
@@ -2812,17 +2835,33 @@ class _StudentManagementScreenState extends State<StudentManagementScreen>
                             mainAxisSize: MainAxisSize.min,
                             children: [
                               Icon(
-                                isFaceRegistered ? Icons.check_circle : Icons.person_add,
-                                color: statusColor,
+                                isFaceRegistered
+                                    ? Icons.check_circle
+                                    : isPaymentPending
+                                        ? Icons.lock
+                                        : Icons.person_add,
+                                color: isFaceRegistered
+                                    ? statusColor
+                                    : isPaymentPending
+                                        ? const Color(0xFFFF6B6B)
+                                        : statusColor,
                                 size: 20.sp,
                               ),
                               SizedBox(height: 4.h),
                               Text(
-                                isFaceRegistered ? 'Registered' : 'Register',
+                                isFaceRegistered
+                                    ? 'Registered'
+                                    : isPaymentPending
+                                        ? 'Fees Due'
+                                        : 'Register',
                                 style: TextStyle(
                                   fontSize: 11.sp,
                                   fontWeight: FontWeight.w700,
-                                  color: statusColor.withValues(alpha: isFaceRegistered ? 0.6 : 1.0),
+                                  color: isFaceRegistered
+                                      ? statusColor.withValues(alpha: 0.6)
+                                      : isPaymentPending
+                                          ? const Color(0xFFFF6B6B)
+                                          : statusColor,
                                   letterSpacing: 0.3,
                                 ),
                               ),
