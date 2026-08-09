@@ -13,6 +13,8 @@ import '../core/supabase_maps.dart';
 import '../core/time_parse.dart';
 import '../core/attendance_hours_db_reader.dart';
 import '../core/attendance_presence_rules.dart';
+import '../pdf/institute_report.dart';
+import '../pdf/models/institute_report_data.dart';
 // Institute holiday/open/close system removed.
 
 class PdfExportService {
@@ -1252,5 +1254,237 @@ class PdfExportService {
     await Printing.layoutPdf(
       onLayout: (format) async => pdfBytes,
     );
+  }
+
+  /// Generate institute attendance report PDF
+  static Future<Uint8List> generateInstituteReport({
+    required String instituteId,
+    String? instituteName,
+    required DateTime startDate,
+    required DateTime endDate,
+  }) async {
+    try {
+      final startDateStr = DateFormat('yyyy-MM-dd').format(startDate);
+      var cappedEndDate = endDate;
+      final today = DateTime.now();
+      final yesterday = today.subtract(const Duration(days: 1));
+      if (cappedEndDate.isAfter(yesterday)) {
+        cappedEndDate = yesterday;
+      }
+      final endDateStr = DateFormat('yyyy-MM-dd').format(cappedEndDate);
+
+      // Fetch all students with registration dates
+      final allStudents = await appDb
+          .from('students')
+          .select('id, sr_no, fname, mname, lname, face_registered_at, old_face_registered_at')
+          .eq('institute_id', instituteId);
+
+      final studentIds = allStudents.map((s) => s['id'] as String).toList();
+      final nameByRoll = <String, String>{};
+      final rollByStudentId = <String, String>{};
+      final registrationDateByRoll = <String, String>{};
+      final registrationDateByRollRaw = <String, DateTime>{};
+
+      for (final s in allStudents) {
+        final sid = s['id'] as String;
+        final roll = s['sr_no'] as String? ?? '';
+        if (roll.isNotEmpty) {
+          rollByStudentId[sid] = roll;
+          final fname = (s['fname'] as String?)?.trim() ?? '';
+          final mname = (s['mname'] as String?)?.trim() ?? '';
+          final lname = (s['lname'] as String?)?.trim() ?? '';
+          final name = [fname, mname, lname].where((e) => e.isNotEmpty).join(' ').trim();
+          nameByRoll[roll] = name.isNotEmpty ? name : 'Unknown';
+
+          // Parse registration date - use old_face_registered_at if exists (first registration)
+          final oldRegisteredAtRaw = s['old_face_registered_at'] as String?;
+          final currentRegisteredAtRaw = s['face_registered_at'] as String?;
+
+          DateTime? regDateToUse;
+          String displayText = 'N/A';
+
+          if (oldRegisteredAtRaw != null && oldRegisteredAtRaw.isNotEmpty) {
+            // Face was reset - use old date for attendance counting but show both dates
+            try {
+              regDateToUse = DateTime.parse(oldRegisteredAtRaw);
+              final oldDate = DateFormat('dd MMM yyyy').format(regDateToUse);
+              final newDate = currentRegisteredAtRaw != null && currentRegisteredAtRaw.isNotEmpty
+                  ? DateFormat('dd MMM yyyy').format(DateTime.parse(currentRegisteredAtRaw))
+                  : 'N/A';
+              displayText = '$oldDate (Reset: $newDate)';
+            } catch (_) {
+              displayText = 'N/A';
+            }
+          } else if (currentRegisteredAtRaw != null && currentRegisteredAtRaw.isNotEmpty) {
+            // First registration - use current date
+            try {
+              regDateToUse = DateTime.parse(currentRegisteredAtRaw);
+              displayText = DateFormat('dd MMM yyyy').format(regDateToUse);
+            } catch (_) {
+              displayText = 'N/A';
+            }
+          }
+
+          if (regDateToUse != null) {
+            registrationDateByRollRaw[roll] = regDateToUse;
+          }
+          registrationDateByRoll[roll] = displayText;
+        }
+      }
+
+      // Fetch attendance records
+      final records = await appDb
+          .from('attendance')
+          .select()
+          .eq('institute_id', instituteId)
+          .gte('attendance_date', startDateStr)
+          .lte('attendance_date', endDateStr)
+          .order('attendance_date, marked_time');
+
+      // Group by date and student
+      Map<String, Map<String, List<Map<String, dynamic>>>> byStudent = {};
+      for (final rec in records) {
+        final srNo = rec['sr_no'] as String?;
+        final date = rec['attendance_date'] as String?;
+        if (srNo != null && date != null) {
+          byStudent.putIfAbsent(srNo, () => {}).putIfAbsent(date, () => []).add(rec);
+        }
+      }
+
+      // Calculate attendance for each student
+      final students = <dynamic>[];
+      int totalPresentDays = 0;
+      int totalAbsentDays = 0;
+      double totalHours = 0.0;
+
+      for (final roll in nameByRoll.keys) {
+        int presentDays = 0;
+        int absentDays = 0;
+        double studentHours = 0.0;
+
+        // Get effective start date (registration date or selected start date, whichever is later)
+        final studentRegDateRaw = registrationDateByRollRaw[roll];
+        final effectiveStartDate = studentRegDateRaw != null && studentRegDateRaw.isAfter(startDate)
+            ? studentRegDateRaw
+            : startDate;
+
+        if (byStudent.containsKey(roll)) {
+          final studentRecords = byStudent[roll]!;
+          for (final dateStr in studentRecords.keys) {
+            final dateObj = DateTime.parse(dateStr);
+
+            // Skip if date is before registration
+            if (dateObj.isBefore(effectiveStartDate)) continue;
+
+            // Skip Sundays
+            if (dateObj.weekday == DateTime.sunday) continue;
+
+            final dayRecs = studentRecords[dateStr]!;
+            final entryRec = dayRecs.firstWhere(
+              (r) => (r['record_type'] as String?) == 'entry',
+              orElse: () => <String, dynamic>{},
+            );
+            final exitRec = dayRecs.firstWhere(
+              (r) => (r['record_type'] as String?) == 'exit',
+              orElse: () => <String, dynamic>{},
+            );
+
+            if (entryRec.isNotEmpty) {
+              presentDays++;
+              final hrs = exitRec.isNotEmpty
+                  ? (exitRec['attendance_alloted_hr'] as String? ?? '0.0')
+                  : (entryRec['attendance_alloted_hr'] as String? ?? '0.0');
+              final hrsDouble = _parseHoursString(hrs);
+              studentHours += hrsDouble;
+            } else {
+              absentDays++;
+            }
+          }
+        }
+
+        final totalDays = presentDays + absentDays;
+        final attendancePercent = totalDays > 0 ? (presentDays / totalDays) * 100 : 0.0;
+
+        students.add({
+          'srNo': roll,
+          'name': nameByRoll[roll] ?? 'Unknown',
+          'present': presentDays,
+          'absent': absentDays,
+          'totalHours': _formatHoursAsDuration(studentHours),
+          'attendancePercent': attendancePercent,
+          'status': _getAttendanceStatus(attendancePercent),
+          'faceRegisteredAt': registrationDateByRoll[roll] ?? 'N/A',
+        });
+
+        totalPresentDays += presentDays;
+        totalAbsentDays += absentDays;
+        totalHours += studentHours;
+      }
+
+      // Calculate average attendance
+      int totalStudentDays = 0;
+      for (final student in students) {
+        totalStudentDays += (student['present'] as int) + (student['absent'] as int);
+      }
+      final avgAttendance = totalStudentDays > 0
+          ? (totalPresentDays / totalStudentDays) * 100
+          : 0.0;
+
+      final reportData = InstituteReportData(
+        institute: InstituteInfo(
+          instituteId: instituteId,
+          instituteName: instituteName ?? 'Unknown Institute',
+        ),
+        students: students
+            .map((s) => StudentAttendanceRow(
+                  srNo: s['srNo'] as String,
+                  name: s['name'] as String,
+                  present: s['present'] as int,
+                  absent: s['absent'] as int,
+                  totalHours: s['totalHours'] as String,
+                  attendancePercent: s['attendancePercent'] as double,
+                  status: s['status'] as String,
+                  faceRegisteredAt: s['faceRegisteredAt'] as String?,
+                ))
+            .toList(),
+        summary: InstituteSummary(
+          totalStudents: nameByRoll.length,
+          totalPresent: totalPresentDays,
+          totalAbsent: totalAbsentDays,
+          totalHours: _formatHoursAsDuration(totalHours),
+          averageAttendancePercent: avgAttendance,
+        ),
+        reportPeriod: '${DateFormat('dd MMM').format(startDate)} - ${DateFormat('dd MMM yyyy').format(cappedEndDate)}',
+        generatedOn: DateTime.now(),
+      );
+
+      return await generateInstituteReportPdf(data: reportData);
+    } catch (e) {
+      debugPrint('Error generating institute report: $e');
+      rethrow;
+    }
+  }
+
+  /// Parse HH:MM:SS format to hours
+  static double _parseHoursString(String timeStr) {
+    if (timeStr.isEmpty || timeStr == '0.0') return 0.0;
+    try {
+      final parts = timeStr.split(':');
+      if (parts.length == 3) {
+        final hours = int.tryParse(parts[0]) ?? 0;
+        final minutes = int.tryParse(parts[1]) ?? 0;
+        final seconds = int.tryParse(parts[2]) ?? 0;
+        return hours + (minutes / 60) + (seconds / 3600);
+      }
+    } catch (_) {}
+    return 0.0;
+  }
+
+  /// Get attendance status based on percentage
+  static String _getAttendanceStatus(double percent) {
+    if (percent >= 100) return 'Perfect';
+    if (percent >= 80) return 'Good';
+    if (percent >= 70) return 'Average';
+    return 'Poor';
   }
 }

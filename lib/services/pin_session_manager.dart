@@ -252,13 +252,11 @@ class PinSessionManager {
               'Admin must open GPS Settings, set coordinates, and lock.',
             );
           }
+          // 🔧 Return same error as LocationVerificationService
           return (
             isWithinRadius: false,
             distanceMeters: null,
-            error:
-                '🔒 Institute attendance location is not locked yet.\n\n'
-                'Ask your admin to open GPS Settings in the app, capture the institute location, and tap Lock. '
-                'PIN login uses that same point.',
+            error: 'Institute GPS is not locked yet. Ask an admin to open GPS Settings, set the campus point, and lock it.',
           );
         }
 

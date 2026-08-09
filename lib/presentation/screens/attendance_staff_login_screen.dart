@@ -18,6 +18,7 @@ import '../../services/pin_session_manager.dart';
 import '../../services/pin_midnight_logout_service.dart';
 import 'login_screen.dart';
 import 'staff_attendance_portal_screen.dart';
+import 'gps_settings_screen.dart';
 import 'institute_location_gate_screen.dart';
 
 /// Login for institute instructors: Institute ID + PIN (access scoped by institute).
@@ -194,6 +195,24 @@ class _AttendanceStaffLoginScreenState extends State<AttendanceStaffLoginScreen>
       );
 
       if (!locationResult.isWithinRadius) {
+        // 🔧 Handle GPS not configured case
+        if (locationResult.error?.contains('GPS is not locked') == true) {
+          if (kDebugMode) {
+            debugPrint('🛰️ GPS not configured - navigating to GPS Settings screen');
+          }
+          if (mounted) {
+            Navigator.pushNamedAndRemoveUntil(
+              context,
+              GpsSettingsScreen.routeName,
+              (route) => false,
+              arguments: {'mandatory': true, 'fromPinLogin': true},
+            );
+            setState(() => _busy = false);
+          }
+          return;
+        }
+
+        // Regular out-of-radius error
         if (mounted) {
           final errorMsg = locationResult.error ??
               'You are outside the institute attendance zone. '

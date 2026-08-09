@@ -808,6 +808,27 @@ class _LoginScreenState extends State<LoginScreen>
       );
 
       if (!locationResult.isWithinRadius) {
+        // Check if GPS is not configured (vs being out of radius)
+        if (locationResult.error?.contains('GPS is not locked') == true) {
+          if (kDebugMode) {
+            debugPrint('🛰️ GPS NOT CONFIGURED - navigating to GPS Settings');
+            debugPrint('   Error message: ${locationResult.error}');
+            debugPrint('   Institute ID: $instituteId');
+          }
+          if (mounted) setState(() => _isLoading = false);
+          Navigator.pushNamedAndRemoveUntil(
+            context,
+            GpsSettingsScreen.routeName,
+            (route) => false,
+            arguments: {
+              'mandatory': true,
+              'fromLogin': true,
+              'instituteId': instituteId,
+            },
+          );
+          return;
+        }
+
         if (mounted) {
           final distanceStr = locationResult.distanceMeters != null
               ? ' (${PinSessionManager.formatDistance(locationResult.distanceMeters!)})'
@@ -999,30 +1020,7 @@ class _LoginScreenState extends State<LoginScreen>
     bool isBiometric = false,
   }) async {
     try {
-      // ✅ Check GPS geofence before full login
-      final instId = instituteId ?? _instituteIdController.text.trim();
-      if (instId.isNotEmpty) {
-        final locationResult = await PinSessionManager.verifyLocationRadius(
-          instituteId: instId,
-          cachedLatitude: null,
-          cachedLongitude: null,
-        );
-
-        if (!locationResult.isWithinRadius) {
-          if (mounted) {
-            final distanceStr = locationResult.distanceMeters != null
-                ? ' (${PinSessionManager.formatDistance(locationResult.distanceMeters!)})'
-                : '';
-            _showModernSnackbar(
-              '❌ Out of Radius - Try Again$distanceStr',
-              isSuccess: false,
-            );
-          }
-          if (mounted) setState(() => _isLoading = false);
-          return;
-        }
-      }
-
+      // ✅ Authenticate FIRST (before GPS check)
       final result = await _authService.signInWithEmail(
           email: email, password: password);
 
@@ -1035,6 +1033,47 @@ class _LoginScreenState extends State<LoginScreen>
           setState(() => _isLoading = false);
           _showModernSnackbar('Access denied. Admin only.', isSuccess: false);
           return;
+        }
+
+        // ✅ NOW check GPS AFTER authentication succeeds
+        final instId = instituteId ?? _instituteIdController.text.trim();
+        if (instId.isNotEmpty) {
+          final locationResult = await PinSessionManager.verifyLocationRadius(
+            instituteId: instId,
+            cachedLatitude: null,
+            cachedLongitude: null,
+          );
+
+          if (!locationResult.isWithinRadius) {
+            if (locationResult.error?.contains('GPS is not locked') == true) {
+              if (kDebugMode) debugPrint('🛰️ GPS not configured - navigating to GPS Settings');
+              if (mounted) setState(() => _isLoading = false);
+              Navigator.pushNamedAndRemoveUntil(
+                context,
+                GpsSettingsScreen.routeName,
+                (route) => false,
+                arguments: {
+                  'mandatory': true,
+                  'fromLogin': true,
+                  'instituteId': instId,
+                },
+              );
+              return;
+            }
+
+            // Out of radius error
+            if (mounted) {
+              final distanceStr = locationResult.distanceMeters != null
+                  ? ' (${PinSessionManager.formatDistance(locationResult.distanceMeters!)})'
+                  : '';
+              _showModernSnackbar(
+                '❌ Out of Radius - Try Again$distanceStr',
+                isSuccess: false,
+              );
+            }
+            if (mounted) setState(() => _isLoading = false);
+            return;
+          }
         }
 
         // Save email for future PIN-only logins
@@ -1334,12 +1373,32 @@ class _LoginScreenState extends State<LoginScreen>
           _buttonPulseController.stop();
           _masterController.stop();
 
-          Navigator.pushNamedAndRemoveUntil(
-            context,
-            InstituteLocationGateScreen.routeName,
-            (_) => false,
-            arguments: {'resumeRoute': MainNavigationScreen.routeName},
-          );
+          // Check if GPS is not configured (vs being out of radius)
+          final message = gateResult['message']?.toString() ?? '';
+          if (kDebugMode) {
+            debugPrint('🛰️ LOGIN GPS CHECK - Message: "$message"');
+            debugPrint('🛰️ Contains "GPS is not locked": ${message.contains('GPS is not locked')}');
+          }
+
+          if (message.contains('GPS is not locked')) {
+            // GPS not configured - show GPS settings screen
+            if (kDebugMode) debugPrint('🛰️ Navigating to GPS Settings screen');
+            Navigator.pushNamedAndRemoveUntil(
+              context,
+              GpsSettingsScreen.routeName,
+              (route) => false,
+              arguments: {'mandatory': true, 'fromLogin': true},
+            );
+          } else {
+            // Out of radius - show location gate screen
+            if (kDebugMode) debugPrint('🛰️ Navigating to Location Gate screen (out of radius)');
+            Navigator.pushNamedAndRemoveUntil(
+              context,
+              InstituteLocationGateScreen.routeName,
+              (_) => false,
+              arguments: {'resumeRoute': MainNavigationScreen.routeName},
+            );
+          }
           return;
         }
         _navigateToHome();
@@ -1480,22 +1539,48 @@ class _LoginScreenState extends State<LoginScreen>
     ));
   }
 
-  void _showForgotPinDialog() {
-    final email = _savedEmail?.trim();
-    if (email == null || email.isEmpty) {
-      _showModernSnackbar('Saved account email not found.', isSuccess: false);
-      return;
+  Future<void> _showForgotPinDialog() async {
+    // 🔧 Clear old PIN immediately - no dialog, no confirmation
+    print('🔑 Forgot PIN clicked - clearing old PIN from database...');
+
+    // Clear from local storage
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove('msce_pin_session_institute_id');
+    await prefs.remove('msce_pin_session_user_name');
+    await prefs.remove('msce_pin_session_user_data');
+    await prefs.remove('msce_pin_session_timestamp');
+    await prefs.remove('msce_pin_session_gps_latitude');
+    await prefs.remove('msce_pin_session_gps_longitude');
+    await _persistLastUserHasPin(false);
+
+    print('✅ Old PIN cleared from local storage');
+
+    // Clear from database (Supabase)
+    try {
+      await _authService.clearPinHashFromDatabase();
+      print('✅ Old PIN cleared from database');
+    } catch (e) {
+      print('⚠️ Error clearing PIN from database: $e');
     }
 
+    if (mounted) {
+      _showModernSnackbar(
+        'PIN cleared. Sign in with password to set a new PIN.',
+        isSuccess: true,
+      );
+    }
+  }
+
+  void _showForgotPinDialogOld() {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
         shape:
             RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        title: const Text('Forgot PIN?',
+        title: const Text('Reset PIN?',
             style: TextStyle(fontWeight: FontWeight.bold)),
         content: const Text(
-          'Your old PIN will be removed. Then sign in with Institute ID, password and CAPTCHA to set a new PIN.',
+          'Your old PIN will be cleared. Sign in with Institute ID, password and CAPTCHA. Then set a new PIN.',
           style: TextStyle(fontSize: 13),
         ),
         actions: [
@@ -1505,16 +1590,6 @@ class _LoginScreenState extends State<LoginScreen>
           ElevatedButton(
             onPressed: () async {
               Navigator.pop(context);
-              final prefs = await SharedPreferences.getInstance();
-              await prefs.setString(_prefForgotPinEmail, email.toLowerCase());
-              await _persistLastUserHasPin(false);
-              await _switchToChangeUser();
-              if (!mounted) return;
-              _emailController.text = email;
-              _showModernSnackbar(
-                'Old PIN removed. Sign in with Institute ID, password and CAPTCHA to set a new PIN.',
-                isSuccess: true,
-              );
             },
             style: ElevatedButton.styleFrom(
                 backgroundColor: AppTheme.primaryBlue,

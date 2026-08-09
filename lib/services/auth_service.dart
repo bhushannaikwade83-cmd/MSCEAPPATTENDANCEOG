@@ -2486,6 +2486,45 @@ class AuthService {
     }
   }
 
+  /// Clear PIN hash from database when "Forgot PIN" is clicked
+  Future<void> clearPinHashFromDatabase() async {
+    try {
+      final user = _db.auth.currentUser;
+      if (user == null) {
+        print('⚠️ No authenticated user to clear PIN');
+        return;
+      }
+
+      print('🔑 Clearing PIN hash from database for user ${user.id}');
+
+      // Fetch current user_data
+      final profile = await _db
+          .from('profiles')
+          .select('user_data')
+          .eq('id', user.id)
+          .maybeSingle();
+
+      if (profile == null) {
+        print('⚠️ Profile not found');
+        return;
+      }
+
+      // Update user_data to clear PIN
+      Map<String, dynamic> userData = profile['user_data'] ?? {};
+      userData['pinHash'] = null;
+      userData['hasPIN'] = false;
+
+      await _db.from('profiles').update({
+        'user_data': userData,
+      }).eq('id', user.id);
+
+      print('✅ PIN hash cleared from database');
+    } catch (e) {
+      print('❌ Error clearing PIN from database: $e');
+      rethrow;
+    }
+  }
+
   String _encryptPassword(String password, String pin) {
     final passwordBytes = utf8.encode(password);
     final pinBytes = utf8.encode(pin);

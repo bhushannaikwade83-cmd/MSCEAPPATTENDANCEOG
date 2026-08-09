@@ -80,7 +80,28 @@ class _GpsSettingsScreenState extends State<GpsSettingsScreen> with WidgetsBindi
       debugPrint('🛰️ GPS Settings: mandatory=$_isMandatory, fromLogin=$_fromLogin');
     }
 
-    _loadUserInstituteId();
+    // Schedule to run after initState completes
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _initializeWithArguments();
+    });
+  }
+
+  void _initializeWithArguments() {
+    // Try to get instituteId from navigation arguments first
+    final args = ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
+    final instituteIdFromArgs = args?['instituteId'] as String?;
+
+    if (instituteIdFromArgs != null && instituteIdFromArgs.isNotEmpty) {
+      print('✅ GPS Settings: Got instituteId from args: $instituteIdFromArgs');
+      _instituteId = instituteIdFromArgs;
+      _isAdmin = true;
+      _isCheckingRole = false;
+      _loadCurrentSettings();
+      _startServerPolling();
+    } else {
+      // Fall back to loading from profile
+      _loadUserInstituteId();
+    }
   }
 
   @override
@@ -107,8 +128,11 @@ class _GpsSettingsScreenState extends State<GpsSettingsScreen> with WidgetsBindi
   }
 
   Future<void> _loadUserInstituteId() async {
+    print('🛰️ GPS Settings: _loadUserInstituteId() called');
     final u = _currentUser;
+    print('   _currentUser: $u');
     if (u == null) {
+      print('❌ GPS Settings: No current user found');
       setState(() {
         _isCheckingRole = false;
         _isAdmin = false;
@@ -117,17 +141,21 @@ class _GpsSettingsScreenState extends State<GpsSettingsScreen> with WidgetsBindi
     }
 
     try {
-      final row = await appDb.from('profiles').select('institute_id,role').eq('id', u.id).maybeSingle();
+      print('🛰️ GPS Settings: Fetching profile for user ${u.id}');
+      final row = await appDb.from('profiles').select('*').eq('id', u.id).maybeSingle();
       if (!mounted) return;
       if (row == null) {
+        print('❌ GPS Settings: Profile not found for user ${u.id}');
         setState(() {
           _isCheckingRole = false;
           _isAdmin = false;
         });
         return;
       }
-      _instituteId = row['institute_id'] as String?;
+      print('📋 GPS Settings: Full profile row: $row');
+      _instituteId = row['institute_id']?.toString().trim() ?? (row['instituteId'] as String?);
       final role = (row['role'] as String?) ?? '';
+      print('✅ GPS Settings: Profile loaded - Institute: $_instituteId, Role: $role');
       setState(() {
         _isAdmin = role == 'admin';
         _isCheckingRole = false;
@@ -151,7 +179,8 @@ class _GpsSettingsScreenState extends State<GpsSettingsScreen> with WidgetsBindi
         _startServerPolling();
       }
     } catch (e) {
-      if (kDebugMode) debugPrint('Error checking role: $e');
+      print('❌ PROFILE LOADING ERROR: $e');
+      print('   Stack trace: $e');
       if (mounted) setState(() {
         _isCheckingRole = false;
         _isAdmin = false;
@@ -364,14 +393,20 @@ class _GpsSettingsScreenState extends State<GpsSettingsScreen> with WidgetsBindi
     if (!_formKey.currentState!.validate()) return;
     
     if (_instituteId == null) {
+      print('❌ SAVE ERROR: _instituteId is null!');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: const Row(
+            content: Row(
               children: [
-                Icon(Icons.error_outline, color: Colors.white),
-                SizedBox(width: 12),
-                Text("Error: Institute ID not found. Please login again."),
+                const Icon(Icons.error_outline, color: Colors.white),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    "Error: Institute ID not found. Please login again.",
+                    style: const TextStyle(color: Colors.white),
+                  ),
+                ),
               ],
             ),
             backgroundColor: AppTheme.accentRed,
@@ -385,18 +420,62 @@ class _GpsSettingsScreenState extends State<GpsSettingsScreen> with WidgetsBindi
 
     setState(() => _isLoading = true);
     try {
-      // Save to admin-specific GPS settings (each admin has their own geo-fencing)
-      if (_currentUser == null) {
-        throw 'User not authenticated';
+      // Get admin_id - either from current user or fetch from database
+      String? adminId;
+
+      if (_currentUser != null) {
+        adminId = _currentUser!.id;
+        print('✅ Using current user ID: $adminId');
+      } else if (_instituteId != null) {
+        // Fetch actual admin ID from profiles table
+        try {
+          print('🔍 Fetching admin for institute: $_instituteId');
+
+          // First try with exact role match
+          final adminProfile = await appDb
+              .from('profiles')
+              .select('id, role, institute_id')
+              .eq('institute_id', _instituteId!)
+              .eq('role', 'admin')
+              .limit(1)
+              .maybeSingle();
+
+          print('📋 Admin profile result: $adminProfile');
+
+          if (adminProfile != null) {
+            adminId = adminProfile['id'] as String?;
+            print('✅ Found admin ID: $adminId');
+          } else {
+            // Try fetching without role filter as fallback
+            print('⚠️ No admin found with role filter, trying all profiles for institute...');
+            final allProfiles = await appDb
+                .from('profiles')
+                .select('id, role, institute_id')
+                .eq('institute_id', _instituteId!)
+                .limit(5);
+
+            print('📋 All profiles for institute: $allProfiles');
+
+            // Find first admin or any profile
+            if (allProfiles.isNotEmpty) {
+              adminId = allProfiles[0]['id'] as String?;
+              print('✅ Using first profile ID: $adminId');
+            }
+          }
+        } catch (e) {
+          print('❌ Error fetching admin ID: $e');
+        }
       }
-      
-      final cu = _currentUser;
-      if (cu == null) throw 'User not authenticated';
+
+      if (adminId == null) {
+        throw 'Admin ID not found for institute. Please ensure an admin is registered.';
+      }
+
       final existingRow = await appDb
           .from('gps_settings')
           .select()
           .eq('institute_id', _instituteId!)
-          .eq('admin_id', cu.id)
+          .eq('admin_id', adminId)
           .maybeSingle();
       if (!mounted) return;
 
@@ -418,16 +497,15 @@ class _GpsSettingsScreenState extends State<GpsSettingsScreen> with WidgetsBindi
       final radiusToSave = kAttendanceFenceRadiusMeters;
 
       final ts = DateTime.now().toUtc().toIso8601String();
-      final cu2 = _currentUser!;
       await appDb.from('gps_settings').upsert({
         'institute_id': _instituteId,
-        'admin_id': cu2.id,
+        'admin_id': adminId,
         'latitude': latVal,
         'longitude': lngVal,
         'radius': radiusToSave,
         'is_locked': true,
         'locked_at': ts,
-        'locked_by': cu2.id,
+        'locked_by': adminId,
         'extra': {'updated_at': ts},
       });
 

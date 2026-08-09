@@ -1,12 +1,15 @@
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
+import 'package:http/http.dart' as http;
 import 'package:intl/intl.dart';
-import 'package:pdf/pdf.dart';
-import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 import '../../core/app_db.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/utils/responsive.dart';
+import '../../pdf/attendance_report.dart';
+import '../../pdf/models/attendance_data.dart';
 
 class AttendanceReportsScreen extends StatefulWidget {
   static const routeName = '/attendance-reports';
@@ -51,7 +54,7 @@ class _AttendanceReportsScreenState extends State<AttendanceReportsScreen> {
       print('🔄 Loading students for institute: $_instituteId');
       final response = await appDb
           .from('students')
-          .select('id,sr_no,fname,lname,sub1,sub2,sub3,sub4,sub5,sub6,sub7,sub8')
+          .select('id,sr_no,fname,lname,sub1,sub2,sub3,sub4,sub5,sub6,sub7,sub8,face_photo_url')
           .eq('institute_id', _instituteId!)
           .order('sr_no');
 
@@ -178,7 +181,7 @@ class _AttendanceReportsScreenState extends State<AttendanceReportsScreen> {
     );
   }
 
-  /// Generate PDF Report
+  /// Generate PDF Report using clean template system
   Future<void> _generatePDFReport() async {
     if (_selectedStudent == null) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -188,11 +191,53 @@ class _AttendanceReportsScreenState extends State<AttendanceReportsScreen> {
     }
 
     try {
-      final pdf = pw.Document();
       final student = _selectedStudent!;
       final studentName = '${student['fname']} ${student['lname']}';
       final srNo = student['sr_no'] as String;
       final subjects = _getStudentSubjects(student);
+
+      // Fetch registration date (use old_face_registered_at if face was reset)
+      String? faceRegisteredAtFormatted;
+      DateTime? effectiveStartDate = _filterStartDate;
+      try {
+        final studentData = await appDb
+            .from('students')
+            .select('face_registered_at, old_face_registered_at')
+            .eq('sr_no', srNo)
+            .maybeSingle();
+
+        if (studentData != null) {
+          final oldRegisteredAt = studentData['old_face_registered_at'] as String?;
+          final currentRegisteredAt = studentData['face_registered_at'] as String?;
+
+          DateTime? regDate;
+          if (oldRegisteredAt != null && oldRegisteredAt.isNotEmpty) {
+            // Face was reset - use old date for attendance counting
+            regDate = DateTime.parse(oldRegisteredAt);
+            final oldDate = DateFormat('dd MMM yyyy').format(regDate);
+            if (currentRegisteredAt != null && currentRegisteredAt.isNotEmpty) {
+              final newDate = DateFormat('dd MMM yyyy').format(DateTime.parse(currentRegisteredAt));
+              faceRegisteredAtFormatted = '$oldDate (Reset: $newDate)';
+            } else {
+              faceRegisteredAtFormatted = oldDate;
+            }
+          } else if (currentRegisteredAt != null && currentRegisteredAt.isNotEmpty) {
+            // First registration
+            regDate = DateTime.parse(currentRegisteredAt);
+            faceRegisteredAtFormatted = DateFormat('dd MMM yyyy').format(regDate);
+          }
+
+          if (regDate != null) {
+            // Adjust effective start date to registration date if needed
+            if (effectiveStartDate == null || regDate.isAfter(effectiveStartDate)) {
+              effectiveStartDate = regDate;
+            }
+            print('📅 Student registered: $faceRegisteredAtFormatted');
+          }
+        }
+      } catch (e) {
+        print('⚠️ Could not fetch registration date: $e');
+      }
 
       // Fetch attendance data
       final records = await appDb
@@ -203,13 +248,13 @@ class _AttendanceReportsScreenState extends State<AttendanceReportsScreen> {
 
       print('📄 Generating PDF with ${records.length} records');
 
-      // Filter by date range
+      // Filter by effective date range
       List<Map<String, dynamic>> filteredRecords = records.cast<Map<String, dynamic>>();
-      if (_filterStartDate != null && _filterEndDate != null) {
+      if (effectiveStartDate != null && _filterEndDate != null) {
         filteredRecords = filteredRecords.where((r) {
           try {
             final date = DateTime.parse(r['attendance_date'] as String);
-            return !date.isBefore(_filterStartDate!) && !date.isAfter(_filterEndDate!);
+            return !date.isBefore(effectiveStartDate!) && !date.isAfter(_filterEndDate!);
           } catch (e) {
             return false;
           }
@@ -225,31 +270,19 @@ class _AttendanceReportsScreenState extends State<AttendanceReportsScreen> {
         byDate[date]!.add(rec);
       }
 
-      // Build table rows
-      List<pw.TableRow> rows = [
-        pw.TableRow(
-          decoration: pw.BoxDecoration(color: PdfColors.blue300),
-          children: [
-            pw.Padding(padding: const pw.EdgeInsets.all(6), child: pw.Text('Date', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 10))),
-            pw.Padding(padding: const pw.EdgeInsets.all(6), child: pw.Text('Entry', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 10))),
-            pw.Padding(padding: const pw.EdgeInsets.all(6), child: pw.Text('Exit', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 10))),
-            pw.Padding(padding: const pw.EdgeInsets.all(6), child: pw.Text('Status', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 10))),
-            pw.Padding(padding: const pw.EdgeInsets.all(6), child: pw.Text('Hours', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 10))),
-            pw.Padding(padding: const pw.EdgeInsets.all(6), child: pw.Text('Reason', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 10))),
-          ],
-        ),
-      ];
+      // Build attendance records for PDF
+      List<AttendanceRecord> pdfRecords = [];
+      int presentDays = 0, absentDays = 0;
 
-      // Process each day
-      int totalSeconds = 0;
       byDate.forEach((dateStr, dayRecs) {
         final entryRec = dayRecs.firstWhere((r) => (r['record_type'] as String?) == 'entry', orElse: () => <String, dynamic>{});
         final exitRec = dayRecs.firstWhere((r) => (r['record_type'] as String?) == 'exit', orElse: () => <String, dynamic>{});
 
-        String entryTime = '--', exitTime = '--', status = 'ABSENT', hours = '00:00:00', reason = 'ABSENT';
+        String entryTime = '-', exitTime = '-', status = 'Absent', hours = '0.0', reason = 'Absent';
 
         if (entryRec.isNotEmpty) {
-          status = 'PRESENT';
+          status = 'Present';
+          presentDays++;
           try {
             final dt = DateTime.parse((entryRec['marked_time'] as String) + 'Z').toLocal();
             entryTime = '${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
@@ -261,137 +294,159 @@ class _AttendanceReportsScreenState extends State<AttendanceReportsScreen> {
               exitTime = '${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
             } catch (e) {}
             reason = '-';
-            // Use EXIT record's hours when both exist
-            hours = exitRec['attendance_alloted_hr'] as String? ?? '00:00:00';
+            hours = exitRec['attendance_alloted_hr'] as String? ?? '0.0';
           } else {
             reason = entryRec['remark'] as String? ?? '-';
-            // Use ENTRY record's hours when only entry exists
-            hours = entryRec['attendance_alloted_hr'] as String? ?? '00:00:00';
+            hours = entryRec['attendance_alloted_hr'] as String? ?? '0.0';
           }
-
-          // Add to total for summary
-          totalSeconds += _timeStringToSeconds(hours);
-        }
-
-        rows.add(pw.TableRow(children: [
-          pw.Padding(padding: const pw.EdgeInsets.all(4), child: pw.Text(dateStr, style: pw.TextStyle(fontSize: 9))),
-          pw.Padding(padding: const pw.EdgeInsets.all(4), child: pw.Text(entryTime, style: pw.TextStyle(fontSize: 9))),
-          pw.Padding(padding: const pw.EdgeInsets.all(4), child: pw.Text(exitTime, style: pw.TextStyle(fontSize: 9))),
-          pw.Padding(padding: const pw.EdgeInsets.all(4), child: pw.Text(status, style: pw.TextStyle(fontSize: 9))),
-          pw.Padding(padding: const pw.EdgeInsets.all(4), child: pw.Text(hours, style: pw.TextStyle(fontSize: 9))),
-          pw.Padding(padding: const pw.EdgeInsets.all(4), child: pw.Text(reason, style: pw.TextStyle(fontSize: 9))),
-        ]));
-      });
-
-      // Add total row
-      final totalHours = _secondsToTimeString(totalSeconds);
-      rows.add(pw.TableRow(
-        decoration: pw.BoxDecoration(color: PdfColors.grey300),
-        children: [
-          pw.Padding(padding: const pw.EdgeInsets.all(4), child: pw.Text('TOTAL', style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold))),
-          pw.Padding(padding: const pw.EdgeInsets.all(4), child: pw.Text('', style: pw.TextStyle(fontSize: 9))),
-          pw.Padding(padding: const pw.EdgeInsets.all(4), child: pw.Text('', style: pw.TextStyle(fontSize: 9))),
-          pw.Padding(padding: const pw.EdgeInsets.all(4), child: pw.Text('', style: pw.TextStyle(fontSize: 9))),
-          pw.Padding(padding: const pw.EdgeInsets.all(4), child: pw.Text(totalHours, style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold))),
-          pw.Padding(padding: const pw.EdgeInsets.all(4), child: pw.Text('', style: pw.TextStyle(fontSize: 9))),
-        ],
-      ));
-
-      // Calculate summary stats
-      int presentDays = 0, absentDays = 0, lateDays = 0;
-      byDate.forEach((dateStr, dayRecs) {
-        final entryRec = dayRecs.firstWhere((r) => (r['record_type'] as String?) == 'entry', orElse: () => <String, dynamic>{});
-        if (entryRec.isNotEmpty) {
-          presentDays++;
         } else {
           absentDays++;
         }
+
+        // Format date as DD-MM-YYYY
+        final dateObj = DateTime.parse(dateStr);
+        final formattedDate = DateFormat('dd-MM-yyyy').format(dateObj);
+
+        pdfRecords.add(AttendanceRecord(
+          date: formattedDate,
+          entryTime: entryTime,
+          exitTime: exitTime,
+          status: status,
+          hours: hours,
+          reason: reason,
+        ));
       });
-      int totalDays = presentDays + absentDays;
-      double attendancePercentage = totalDays > 0 ? (presentDays / totalDays) * 100 : 0.0;
 
-      // Add page
-      pdf.addPage(
-        pw.Page(
-          build: (pw.Context context) => pw.Column(
-            crossAxisAlignment: pw.CrossAxisAlignment.start,
-            children: [
-              // Header
-              pw.Container(
-                padding: const pw.EdgeInsets.all(12),
-                decoration: pw.BoxDecoration(
-                  border: pw.Border.all(color: PdfColors.blue800, width: 2),
-                  borderRadius: const pw.BorderRadius.all(pw.Radius.circular(4)),
-                ),
-                child: pw.Row(
-                  mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                  children: [
-                    pw.Column(
-                      crossAxisAlignment: pw.CrossAxisAlignment.start,
-                      children: [
-                        pw.Text('MAHARASHTRA STATE COUNCIL', style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold, color: PdfColors.blue800)),
-                        pw.Text('OF EXAMINATION', style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold, color: PdfColors.blue800)),
-                      ],
-                    ),
-                    pw.Text('ATTENDANCE REPORT', style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold, color: PdfColors.blue800)),
-                  ],
-                ),
-              ),
-              pw.SizedBox(height: 16),
+      // Load MSCE logo
+      Uint8List? logoBytes;
+      try {
+        logoBytes = (await rootBundle.load('assets/pdf_images/msce_logo.png'))
+            .buffer
+            .asUint8List();
+        print('✅ [PDF] Logo loaded successfully');
+      } catch (e) {
+        print('⚠️ [PDF] Logo not found: $e');
+        logoBytes = null;
+      }
 
-              // Student Details
-              pw.Row(
-                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                children: [
-                  pw.Column(
-                    crossAxisAlignment: pw.CrossAxisAlignment.start,
-                    children: [
-                      pw.Row(children: [pw.Text('Institute ID', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)), pw.Text(': $_instituteId')]),
-                      pw.Row(children: [pw.Text('Institute Name', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)), pw.Text(': ____________')]),
-                      pw.Row(children: [pw.Text('Student Name', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)), pw.Text(': $studentName')]),
-                      pw.Row(children: [pw.Text('SR No', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)), pw.Text(': $srNo')]),
-                      pw.Row(children: [pw.Text('Subjects', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)), pw.Text(': ${subjects.join(", ")}')]),
-                    ],
-                  ),
-                  pw.Container(
-                    width: 80,
-                    height: 100,
-                    decoration: pw.BoxDecoration(border: pw.Border.all(color: PdfColors.black, width: 1)),
-                    child: pw.Center(child: pw.Text('Student\nPhoto', textAlign: pw.TextAlign.center, style: pw.TextStyle(fontSize: 10, color: PdfColors.grey))),
-                  ),
-                ],
-              ),
-              pw.SizedBox(height: 16),
+      // Load institute name
+      String instituteName = '';
+      try {
+        final instResp = await appDb
+            .from('institutes')
+            .select('name')
+            .eq('id', _instituteId!)
+            .single();
+        instituteName = instResp['name'] as String? ?? '';
+        print('✅ [PDF] Institute name loaded: $instituteName');
+      } catch (e) {
+        print('⚠️ [PDF] Institute name not found: $e');
+      }
 
-              // Attendance Table
-              pw.Table(border: pw.TableBorder.all(color: PdfColors.blue800, width: 1.5), children: rows),
-              pw.SizedBox(height: 16),
+      // Load student's registered photo
+      Uint8List? photoBytes;
+      try {
+        final photoUrl = student['face_photo_url'] as String?;
+        print('📸 [PDF] face_photo_url value: "$photoUrl"');
 
-              // Summary Section
-              pw.Text('Summary', style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold)),
-              pw.SizedBox(height: 8),
-              pw.Row(
-                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                children: [
-                  pw.Row(children: [pw.Text('Total Present Days', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)), pw.Text(': $presentDays')]),
-                  pw.Row(children: [pw.Text('Total Absent Days', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)), pw.Text(': $absentDays')]),
-                ],
-              ),
-              pw.Row(
-                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                children: [
-                  pw.Row(children: [pw.Text('Total Late Days', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)), pw.Text(': $lateDays')]),
-                  pw.Row(children: [pw.Text('Attendance Percentage', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)), pw.Text(': ${attendancePercentage.toStringAsFixed(2)}%')]),
-                ],
-              ),
-            ],
-          ),
-        ),
+        // Try 1: Load face_photo_url (registered photo)
+        if (photoUrl != null && photoUrl.isNotEmpty) {
+          print('📸 [PDF] Trying face_photo_url...');
+          try {
+            final photoResponse = await http.get(Uri.parse(photoUrl)).timeout(
+              const Duration(seconds: 10),
+              onTimeout: () => throw Exception('Timeout'),
+            );
+            if (photoResponse.statusCode == 200) {
+              photoBytes = photoResponse.bodyBytes;
+              print('✅ [PDF] Loaded from face_photo_url (${photoBytes.length} bytes)');
+            }
+          } catch (e) {
+            print('⚠️ [PDF] face_photo_url failed: $e');
+          }
+        }
+
+        // Try 2: If no face photo, load latest attendance photo
+        if (photoBytes == null) {
+          print('📸 [PDF] Trying attendance photos...');
+          try {
+            final attendancePhotos = await appDb
+                .from('attendance_in_out')
+                .select('photo_url')
+                .eq('student_id', student['id'])
+                .neq('photo_url', '')
+                .order('created_at', ascending: false)
+                .limit(1);
+
+            if (attendancePhotos.isNotEmpty && attendancePhotos[0]['photo_url'] != null) {
+              final attendancePhotoUrl = attendancePhotos[0]['photo_url'] as String?;
+              if (attendancePhotoUrl != null && attendancePhotoUrl.isNotEmpty) {
+                print('📸 [PDF] Found attendance photo: $attendancePhotoUrl');
+                final photoResponse = await http.get(Uri.parse(attendancePhotoUrl)).timeout(
+                  const Duration(seconds: 10),
+                  onTimeout: () => throw Exception('Timeout'),
+                );
+                if (photoResponse.statusCode == 200) {
+                  photoBytes = photoResponse.bodyBytes;
+                  print('✅ [PDF] Loaded from attendance (${photoBytes.length} bytes)');
+                }
+              }
+            }
+          } catch (e) {
+            print('⚠️ [PDF] Attendance photo failed: $e');
+          }
+        }
+
+        // Try 3: If still no photo, use placeholder
+        if (photoBytes == null) {
+          print('📸 [PDF] No photo found, using placeholder');
+          try {
+            photoBytes = (await rootBundle.load('assets/msce_attendance_app_logo.png'))
+                .buffer
+                .asUint8List();
+            print('📸 [PDF] Using MSCE logo placeholder (${photoBytes.length} bytes)');
+          } catch (e) {
+            print('⚠️ [PDF] Placeholder failed: $e');
+          }
+        }
+      } catch (e) {
+        print('⚠️ [PDF] Photo load error: $e');
+      }
+
+      // Build student info
+      final studentInfo = StudentInfo(
+        instituteId: _instituteId ?? '',
+        instituteName: instituteName,
+        studentName: studentName,
+        srNo: srNo,
+        subjects: subjects,
+        photoBytes: photoBytes,
+        faceRegisteredAt: faceRegisteredAtFormatted,
       );
 
-      // Print/Download
-      await Printing.layoutPdf(onLayout: (PdfPageFormat format) async => pdf.save());
-      print('✅ PDF generated successfully');
+      // Build summary
+      final summary = AttendanceSummary(
+        totalPresent: presentDays,
+        totalAbsent: absentDays,
+        totalLate: 0,
+      );
+
+      // Create report data
+      final reportData = AttendanceReportData(
+        student: studentInfo,
+        records: pdfRecords,
+        summary: summary,
+        logoBytes: logoBytes,
+        generatedOn: DateTime.now(),
+      );
+
+      // Generate PDF
+      print('📊 Building PDF document...');
+      final pdfBytes = await generatePdfReport(data: reportData);
+
+      // Display
+      print('✅ PDF generated successfully (${pdfBytes.length} bytes)');
+      await Printing.layoutPdf(onLayout: (_) async => pdfBytes);
     } catch (e) {
       print('❌ PDF Error: $e');
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
@@ -514,6 +569,37 @@ class _AttendanceReportsScreenState extends State<AttendanceReportsScreen> {
       final srNo = _selectedStudent!['sr_no'] as String;
       print('🔄 Fetching history for: $srNo');
 
+      // Fetch registration date (use old_face_registered_at if face was reset)
+      DateTime? registrationDate;
+      String? formattedCurrentRegDate;
+      try {
+        final studentData = await appDb
+            .from('students')
+            .select('face_registered_at, old_face_registered_at')
+            .eq('sr_no', srNo)
+            .maybeSingle();
+
+        if (studentData != null) {
+          final oldRegisteredAt = studentData['old_face_registered_at'] as String?;
+          final currentRegisteredAt = studentData['face_registered_at'] as String?;
+
+          if (oldRegisteredAt != null && oldRegisteredAt.isNotEmpty) {
+            // Face was reset - use old date for attendance counting
+            registrationDate = DateTime.parse(oldRegisteredAt);
+            if (currentRegisteredAt != null && currentRegisteredAt.isNotEmpty) {
+              formattedCurrentRegDate = DateFormat('dd MMM yyyy').format(DateTime.parse(currentRegisteredAt));
+            }
+            print('📅 Student first registered: $registrationDate (Reset: $formattedCurrentRegDate)');
+          } else if (currentRegisteredAt != null && currentRegisteredAt.isNotEmpty) {
+            // First registration
+            registrationDate = DateTime.parse(currentRegisteredAt);
+            print('📅 Student registered: $registrationDate');
+          }
+        }
+      } catch (e) {
+        print('⚠️ Could not fetch registration date: $e');
+      }
+
       // Get all records ordered by date and time
       final records = await appDb
           .from('attendance')
@@ -539,6 +625,12 @@ class _AttendanceReportsScreenState extends State<AttendanceReportsScreen> {
       for (final MapEntry(key: dateStr, value: dayRecs) in byDate.entries) {
         try {
           final dateObj = DateTime.parse(dateStr);
+
+          // Filter by registration date - only count attendance from registration date onwards
+          if (registrationDate != null && dateObj.isBefore(registrationDate)) {
+            print('⏭️ Skipping (before registration): $dateStr');
+            continue;
+          }
 
           // Apply date filter
           if (_filterStartDate != null && _filterEndDate != null) {
@@ -602,11 +694,21 @@ class _AttendanceReportsScreenState extends State<AttendanceReportsScreen> {
 
       print('📊 Summary - Present: $present, Absent: $absent, Total: $total, Total Hours: $totalTimeStr');
 
+      // Format registration date if available
+      String formattedRegDate = '-';
+      if (registrationDate != null) {
+        formattedRegDate = DateFormat('dd MMM yyyy').format(registrationDate);
+        if (formattedCurrentRegDate != null) {
+          formattedRegDate = '$formattedRegDate (Reset: $formattedCurrentRegDate)';
+        }
+      }
+
       return {
         'present': present,
         'absent': absent,
         'total': total,
         'hours': totalTimeStr,
+        'registered': formattedRegDate,
       };
     } catch (e) {
       print('❌ Error: $e');
@@ -918,6 +1020,7 @@ class _AttendanceReportsScreenState extends State<AttendanceReportsScreen> {
                           final absent = data['absent'] as int? ?? 0;
                           final total = data['total'] as int? ?? 0;
                           final hours = data['hours'] as String? ?? '00:00:00';
+                          final registered = data['registered'] as String? ?? '-';
 
                           return Container(
                             decoration: BoxDecoration(
@@ -945,6 +1048,16 @@ class _AttendanceReportsScreenState extends State<AttendanceReportsScreen> {
                                   DataColumn(
                                     label: Text(
                                       'Subjects',
+                                      style: TextStyle(
+                                        fontSize: 12.sp,
+                                        fontWeight: FontWeight.w700,
+                                        color: AppTheme.primaryBlue,
+                                      ),
+                                    ),
+                                  ),
+                                  DataColumn(
+                                    label: Text(
+                                      'Registered',
                                       style: TextStyle(
                                         fontSize: 12.sp,
                                         fontWeight: FontWeight.w700,
@@ -1031,6 +1144,16 @@ class _AttendanceReportsScreenState extends State<AttendanceReportsScreen> {
                                                 '-',
                                                 style: TextStyle(fontSize: 12.sp, color: isDark ? Colors.white70 : AppTheme.textGray),
                                               ),
+                                      ),
+                                      DataCell(
+                                        Text(
+                                          registered,
+                                          style: TextStyle(
+                                            fontSize: 11.sp,
+                                            fontWeight: FontWeight.w600,
+                                            color: AppTheme.primaryBlue,
+                                          ),
+                                        ),
                                       ),
                                       DataCell(
                                         Container(

@@ -93,15 +93,14 @@ class InstituteReportTable extends StatelessWidget {
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        _buildCell('Sr No', flex: 1, isHeader: true),
-                        _buildCell('Student Name', flex: 2, isHeader: true),
-                        _buildCell('Subjects', flex: 1, isHeader: true),
-                        _buildCell('Present', flex: 1, isHeader: true),
-                        _buildCell('Absent', flex: 1, isHeader: true),
-                        _buildCell('Total Days', flex: 1, isHeader: true),
-                        _buildCell('Total Hours', flex: 2, isHeader: true),
-                        _buildCell('Attendance %', flex: 1.5, isHeader: true),
-                        _buildCell('Status', flex: 1.2, isHeader: true),
+                        _buildCell('Sr No', flex: 0.8, isHeader: true),
+                        _buildCell('Student Name', flex: 1.8, isHeader: true),
+                        _buildCell('Registered', flex: 1.2, isHeader: true),
+                        _buildCell('Present', flex: 0.8, isHeader: true),
+                        _buildCell('Absent', flex: 0.8, isHeader: true),
+                        _buildCell('Total Hours', flex: 1.5, isHeader: true),
+                        _buildCell('Attendance %', flex: 1.2, isHeader: true),
+                        _buildCell('Status', flex: 1, isHeader: true),
                       ],
                     ),
                   ),
@@ -127,15 +126,14 @@ class InstituteReportTable extends StatelessWidget {
                         child: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            _buildCell('${index + 1}', flex: 1),
-                            _buildCell(student['name'] ?? '', flex: 2),
-                            _buildCell('${student['subjects'] ?? 0}', flex: 1, textAlign: TextAlign.center),
-                            _buildCell('${student['present'] ?? 0}', flex: 1, textAlign: TextAlign.center),
-                            _buildCell('${student['absent'] ?? 0}', flex: 1, textAlign: TextAlign.center),
-                            _buildCell('${student['totalDays'] ?? 0}', flex: 1, textAlign: TextAlign.center),
-                            _buildCell(student['totalHours'] ?? '0h 0m 0s', flex: 2),
-                            _buildCell('${attendancePercent.toStringAsFixed(0)}% $statusEmoji', flex: 1.5),
-                            _buildCell(statusText, flex: 1.2, textAlign: TextAlign.center),
+                            _buildCell('${index + 1}', flex: 0.8),
+                            _buildCell(student['name'] ?? '', flex: 1.8),
+                            _buildCell(student['registered'] ?? '-', flex: 1.2, textAlign: TextAlign.center),
+                            _buildCell('${student['present'] ?? 0}', flex: 0.8, textAlign: TextAlign.center),
+                            _buildCell('${student['absent'] ?? 0}', flex: 0.8, textAlign: TextAlign.center),
+                            _buildCell(student['totalHours'] ?? '0h 0m 0s', flex: 1.5),
+                            _buildCell('${attendancePercent.toStringAsFixed(0)}% $statusEmoji', flex: 1.2),
+                            _buildCell(statusText, flex: 1, textAlign: TextAlign.center),
                           ],
                         ),
                       ),
@@ -150,15 +148,14 @@ class InstituteReportTable extends StatelessWidget {
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        _buildCell('', flex: 1),
-                        _buildCell('TOTAL', flex: 2, isBold: true),
-                        _buildCell('${totals['totalSubjects'] ?? 0}', flex: 1, isBold: true, textAlign: TextAlign.center),
-                        _buildCell('${totals['totalPresent'] ?? 0}', flex: 1, isBold: true, textAlign: TextAlign.center),
-                        _buildCell('${totals['totalAbsent'] ?? 0}', flex: 1, isBold: true, textAlign: TextAlign.center),
-                        _buildCell('${totals['totalDays'] ?? 0}', flex: 1, isBold: true, textAlign: TextAlign.center),
-                        _buildCell(totals['totalHours'] ?? '0h 0m 0s', flex: 2, isBold: true),
-                        _buildCell('${totals['totalAttendancePercent']?.toStringAsFixed(1) ?? '0'}%', flex: 1.5, isBold: true),
+                        _buildCell('', flex: 0.8),
+                        _buildCell('TOTAL', flex: 1.8, isBold: true),
                         _buildCell('', flex: 1.2),
+                        _buildCell('${totals['totalPresent'] ?? 0}', flex: 0.8, isBold: true, textAlign: TextAlign.center),
+                        _buildCell('${totals['totalAbsent'] ?? 0}', flex: 0.8, isBold: true, textAlign: TextAlign.center),
+                        _buildCell(totals['totalHours'] ?? '0h 0m 0s', flex: 1.5, isBold: true),
+                        _buildCell('${totals['totalAttendancePercent']?.toStringAsFixed(1) ?? '0'}%', flex: 1.2, isBold: true),
+                        _buildCell('', flex: 1),
                       ],
                     ),
                   ),
@@ -171,15 +168,14 @@ class InstituteReportTable extends StatelessWidget {
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        _buildCell('', flex: 1),
-                        _buildCell('AVERAGE', flex: 2, isBold: true),
-                        _buildCell('', flex: 1), // Subjects count average is not needed
-                        _buildCell('${(averages['avgPresent'] as num?)?.toStringAsFixed(2) ?? '0'}', flex: 1, isBold: true, textAlign: TextAlign.center),
-                        _buildCell('${(averages['avgAbsent'] as num?)?.toStringAsFixed(2) ?? '0'}', flex: 1, isBold: true, textAlign: TextAlign.center),
-                        _buildCell('', flex: 1), // Average of total days is not needed
-                        _buildCell(averages['avgHours'] ?? '0h 0m 0s', flex: 2, isBold: true),
-                        _buildCell('${(averages['avgAttendancePercent'] as num?)?.toStringAsFixed(1) ?? '0'}%', flex: 1.5, isBold: true),
+                        _buildCell('', flex: 0.8),
+                        _buildCell('AVERAGE', flex: 1.8, isBold: true),
                         _buildCell('', flex: 1.2),
+                        _buildCell('${(averages['avgPresent'] as num?)?.toStringAsFixed(2) ?? '0'}', flex: 0.8, isBold: true, textAlign: TextAlign.center),
+                        _buildCell('${(averages['avgAbsent'] as num?)?.toStringAsFixed(2) ?? '0'}', flex: 0.8, isBold: true, textAlign: TextAlign.center),
+                        _buildCell(averages['avgHours'] ?? '0h 0m 0s', flex: 1.5, isBold: true),
+                        _buildCell('${(averages['avgAttendancePercent'] as num?)?.toStringAsFixed(1) ?? '0'}%', flex: 1.2, isBold: true),
+                        _buildCell('', flex: 1),
                       ],
                     ),
                   ),
@@ -249,17 +245,19 @@ class InstituteReportTable extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Row(
-                      children: [
-                        Text(
-                          '🎯 HOURS ALLOCATION POLICY',
-                          style: TextStyle(
-                            fontSize: 13.sp,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.blue[900],
+                    SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: Row(
+                        children: [
+                          Text(
+                            '🎯 HOURS ALLOCATION POLICY',
+                            style: TextStyle(
+                              fontSize: 13.sp,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.blue[900],
+                            ),
                           ),
-                        ),
-                        const Spacer(),
+                          const SizedBox(width: 12),
                         Container(
                           padding: EdgeInsets.symmetric(horizontal: 8.w, vertical: 2.h),
                           decoration: BoxDecoration(
@@ -276,6 +274,7 @@ class InstituteReportTable extends StatelessWidget {
                           ),
                         ),
                       ],
+                      ),
                     ),
                     SizedBox(height: 12.h),
                     _buildSimplifiedPolicyRow('Within Window', '✅ Full credit for actual hours present'),

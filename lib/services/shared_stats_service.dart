@@ -19,10 +19,14 @@ class SharedStatsService {
   final _statsController = StreamController<Map<String, int>>.broadcast();
   Stream<Map<String, int>> get statsStream => _statsController.stream;
 
-  // Student total count cache (5-min TTL) — avoids re-counting on every stats refresh.
+  // Student total count cache (10-min TTL) — avoids re-counting on every stats refresh.
+  // Stats cache (15-min TTL) — heavy query, cache aggressively during peak
   static final Map<String, int>      _totalCache   = {};
   static final Map<String, DateTime> _totalCacheAt = {};
-  static const _kTotalTtl = Duration(minutes: 5);
+  static final Map<String, Map<String, int>> _statsCache = {};
+  static final Map<String, DateTime> _statsCacheAt = {};
+  static const _kTotalTtl = Duration(minutes: 10);
+  static const _kStatsTtl = Duration(minutes: 15);
 
   // Track last date for midnight reset
   static String _lastDateChecked = '';
@@ -40,17 +44,41 @@ class SharedStatsService {
   }
 
   static void invalidateTotalCache([String? instituteId]) {
-    if (instituteId == null) { _totalCache.clear(); _totalCacheAt.clear(); }
-    else { _totalCache.remove(instituteId); _totalCacheAt.remove(instituteId); }
+    if (instituteId == null) {
+      _totalCache.clear();
+      _totalCacheAt.clear();
+      _statsCache.clear();
+      _statsCacheAt.clear();
+    }
+    else {
+      _totalCache.remove(instituteId);
+      _totalCacheAt.remove(instituteId);
+      // Also clear today's stats cache for this institute
+      final today = DateFormat('yyyy-MM-dd').format(DateTime.now());
+      _statsCache.remove('$instituteId-$today');
+      _statsCacheAt.remove('$instituteId-$today');
+    }
   }
 
-  /// ✅ Get today's stats directly from database
+  /// ✅ Get today's stats directly from database (with 15-min cache for peak load)
   /// Returns: {present, absent, total}
   static Future<Map<String, int>> getTodayStats(String instituteId) async {
     // ✅ Auto-reset at midnight
     _checkAndResetAtMidnight();
 
     final today = DateFormat('yyyy-MM-dd').format(DateTime.now());
+    final cacheKey = '$instituteId-$today';
+
+    // ✅ Check stats cache first (15-min TTL for peak time)
+    final cachedAt = _statsCacheAt[cacheKey];
+    if (cachedAt != null &&
+        DateTime.now().difference(cachedAt) < _kStatsTtl &&
+        _statsCache.containsKey(cacheKey)) {
+      if (kDebugMode) {
+        debugPrint('✅ STATS CACHE HIT: Returning cached stats for $instituteId');
+      }
+      return _statsCache[cacheKey]!;
+    }
 
     try {
       // Student count: cached 5 min (rarely changes).
@@ -160,11 +188,21 @@ class SharedStatsService {
         );
       }
 
-      return {
+      final result = {
         'present': present,
         'absent': absent,
         'total': total,
       };
+
+      // ✅ Cache the result for 15 minutes (peak time optimization)
+      _statsCache[cacheKey] = result;
+      _statsCacheAt[cacheKey] = DateTime.now();
+
+      if (kDebugMode) {
+        debugPrint('✅ STATS CACHED: Will use cached values until ${DateTime.now().add(_kStatsTtl)}');
+      }
+
+      return result;
     } catch (e) {
       debugPrint('❌ Error getting stats: $e');
       if (kDebugMode) {

@@ -42,6 +42,7 @@ import 'presentation/screens/auto_face_scan_screen.dart';
 import 'presentation/screens/attendance_staff_login_screen.dart';
 import 'presentation/screens/help_desk_screen.dart';
 import 'presentation/screens/biometric_lock_screen.dart';
+import 'presentation/screens/pin_setup_screen.dart';
 import 'presentation/screens/security_dashboard_screen.dart';
 import 'services/anti_spoof_service.dart';
 import 'services/face_recognition_service.dart';
@@ -237,6 +238,8 @@ class SmartAttendanceApp extends StatelessWidget {
                     HelpDeskScreen.routeName: (_) => const HelpDeskScreen(),
                     BiometricLockScreen.routeName: (_) =>
                         const BiometricLockScreen(),
+                    PinSetupScreen.routeName: (_) =>
+                        const PinSetupScreen(),
                     SecurityDashboardScreen.routeName: (_) =>
                         const SecurityDashboardScreen(),
                     AutoFaceScanScreen.routeName: (context) {
