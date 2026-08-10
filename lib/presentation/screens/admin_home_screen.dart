@@ -2441,20 +2441,22 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> with TickerProviderSt
           crossAxisSpacing: 12,
           childAspectRatio: 1.0,
           children: [
-            _buildFeatureGridCard(
-              title: 'Institute instructor',
-              icon: Icons.person_add_alt_1,
-              color: AppTheme.primaryBlue,
-              onTap: () async {
-                if (!await _ensureLockedGpsForRestrictedActions()) return;
-                if (!mounted) return;
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (_) => const AddInstituteAttendanceUserScreen()),
-                );
-              },
-              isDark: isDark,
-            ),
+            // Hide "Institute instructor" for institute 90999 (employees)
+            if (_instituteId != '90999')
+              _buildFeatureGridCard(
+                title: 'Institute instructor',
+                icon: Icons.person_add_alt_1,
+                color: AppTheme.primaryBlue,
+                onTap: () async {
+                  if (!await _ensureLockedGpsForRestrictedActions()) return;
+                  if (!mounted) return;
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => const AddInstituteAttendanceUserScreen()),
+                  );
+                },
+                isDark: isDark,
+              ),
             _buildFeatureGridCard(
               title: 'Auto Face Scan',
               icon: Icons.face_retouching_natural,
