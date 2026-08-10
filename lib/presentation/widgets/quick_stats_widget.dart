@@ -168,7 +168,9 @@ class _QuickStatsWidgetState extends State<QuickStatsWidget>
                 SizedBox(width: 12.w),
                 Expanded(
                   child: Text(
-                    '📊 Today\'s Stats',
+                    widget.instituteId == '90999'
+                      ? '📊 Employee Stats'
+                      : '📊 Today\'s Stats',
                     style: TextStyle(
                       fontSize: 16.sp,
                       fontWeight: FontWeight.w800,
@@ -207,7 +209,7 @@ class _QuickStatsWidgetState extends State<QuickStatsWidget>
               Expanded(
                 child: _buildStatItem(
                   context,
-                  'Total',
+                  widget.instituteId == '90999' ? 'Total Employees' : 'Total',
                   totalStudents,
                   AppTheme.primaryBlue,
                   Icons.people,
