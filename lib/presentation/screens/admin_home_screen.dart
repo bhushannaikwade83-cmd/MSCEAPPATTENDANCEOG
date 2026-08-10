@@ -131,6 +131,7 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> with TickerProviderSt
       if (!mounted) return;
       final instituteId = row?['institute_id'] as String?;
       if (instituteId != null && instituteId.isNotEmpty) {
+        if (kDebugMode) debugPrint('🏢 Institute ID loaded: "$instituteId" (type: ${instituteId.runtimeType})');
         if (mounted) {
           setState(() {
             _instituteId = instituteId;
