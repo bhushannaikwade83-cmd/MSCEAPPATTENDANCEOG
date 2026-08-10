@@ -2471,7 +2471,7 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> with TickerProviderSt
               isDark: isDark,
             ),
             _buildFeatureGridCard(
-              title: 'Students',
+              title: _instituteId == '90999' ? 'Employees' : 'Students',
               icon: Icons.school,
               color: AppTheme.primaryGreen,
               onTap: () => Navigator.push(
@@ -2481,7 +2481,7 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> with TickerProviderSt
               isDark: isDark,
             ),
             _buildFeatureGridCard(
-              title: 'Students Report',
+              title: _instituteId == '90999' ? 'Employees Report' : 'Students Report',
               icon: Icons.bar_chart,
               color: AppTheme.accentOrange,
               onTap: () async {
