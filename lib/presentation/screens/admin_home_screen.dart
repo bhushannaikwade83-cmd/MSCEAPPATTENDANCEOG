@@ -2068,7 +2068,7 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> with TickerProviderSt
                 SizedBox(width: 12.w),
                 Expanded(
                   child: _buildActionCard(
-                    'Student Reports',
+                    _instituteId == '90999' ? 'Employee Reports' : 'Student Reports',
                     Icons.bar_chart,
                     AppTheme.accentGreen,
                     () async {
@@ -2125,7 +2125,7 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> with TickerProviderSt
             ),
             SizedBox(height: 12.h),
             _buildActionCard(
-              'Student Attendance',
+              _instituteId == '90999' ? 'Employee Attendance' : 'Student Attendance',
               Icons.how_to_reg_rounded,
               AppTheme.primaryGreen,
               () => Navigator.push(
