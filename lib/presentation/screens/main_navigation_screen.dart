@@ -224,6 +224,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
       bottomNavigationBar: ModernBottomNavBar(
         selectedIndex: _currentIndex,
         onTap: (i) => _onNavItemTapped(i),
+        instituteId: _instituteId,
       ),
       ),
     );

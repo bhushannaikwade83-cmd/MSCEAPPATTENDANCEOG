@@ -8,11 +8,13 @@ import '../../core/utils/responsive.dart';
 class ModernBottomNavBar extends StatefulWidget {
   final int selectedIndex;
   final Function(int) onTap;
+  final String? instituteId;
 
   const ModernBottomNavBar({
     super.key,
     required this.selectedIndex,
     required this.onTap,
+    this.instituteId,
   });
 
   @override
@@ -87,13 +89,15 @@ class _ModernBottomNavBarState extends State<ModernBottomNavBar>
                         index: 0,
                         isDark: isDark,
                       ),
-                      _buildAnimatedNavItem(
-                        context,
-                        icon: Icons.person_add_rounded,
-                        label: 'Add',
-                        index: 1,
-                        isDark: isDark,
-                      ),
+                      // Hide ADD button for institute 90999 (employees)
+                      if (widget.instituteId != '90999')
+                        _buildAnimatedNavItem(
+                          context,
+                          icon: Icons.person_add_rounded,
+                          label: 'Add',
+                          index: 1,
+                          isDark: isDark,
+                        ),
                       _buildAnimatedNavItem(
                         context,
                         icon: Icons.people_rounded,
