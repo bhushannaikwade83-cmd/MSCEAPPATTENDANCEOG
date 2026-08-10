@@ -2022,25 +2022,28 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> with TickerProviderSt
                     isDark,
                   ),
                 ),
-                SizedBox(width: 12.w),
-                Expanded(
-                  child: _buildActionCard(
-                    'Institute instructor',
-                    Icons.person_add_alt_1,
-                    AppTheme.primaryBlue,
-                    () async {
-                      if (!await _ensureLockedGpsForRestrictedActions()) return;
-                      if (!mounted) return;
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => const AddInstituteAttendanceUserScreen(),
-                        ),
-                      );
-                    },
-                    isDark,
+                // Hide "Institute instructor" for institute 90999 (employees)
+                if (_instituteId != '90999') ...[
+                  SizedBox(width: 12.w),
+                  Expanded(
+                    child: _buildActionCard(
+                      'Institute instructor',
+                      Icons.person_add_alt_1,
+                      AppTheme.primaryBlue,
+                      () async {
+                        if (!await _ensureLockedGpsForRestrictedActions()) return;
+                        if (!mounted) return;
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => const AddInstituteAttendanceUserScreen(),
+                          ),
+                        );
+                      },
+                      isDark,
+                    ),
                   ),
-                ),
+                ],
               ],
             ),
             SizedBox(height: 12.h),
