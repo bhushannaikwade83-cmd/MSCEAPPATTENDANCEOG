@@ -207,10 +207,11 @@ class _StudentManagementScreenState extends State<StudentManagementScreen>
     final q = _sanitizeStudentSearchToken(rawQuery);
     if (q.isEmpty) return null;
     const cols = [
-      'name',
-      'user_id',
-      'sr_no',
-      'year',
+      'fname',  // First name
+      'lname',  // Last name
+      'mname',  // Middle name
+      'sr_no',  // Student roll number
+      'identy_no',  // Identity number
     ];
     return cols.map((c) => '$c.ilike.%$q%').join(',');
   }
