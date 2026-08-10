@@ -174,12 +174,13 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
+    final isEmployeeInstitute = _instituteId == '90999';
     final navSubtitles = <String>[
       l10n.mainNavSubtitleAdmin,
       l10n.mainNavSubtitleInstructor,
-      l10n.mainNavSubtitleStudent,
+      isEmployeeInstitute ? 'Employees' : l10n.mainNavSubtitleStudent,
       l10n.mainNavSubtitleGps,
-      'Student Reports',
+      isEmployeeInstitute ? 'Employee Reports' : 'Student Reports',
       'Institute Report',
     ];
     // Show loading until instituteId is loaded and screens are built
