@@ -1236,7 +1236,7 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> with TickerProviderSt
             ),
           ),
           SizedBox(width: 12.w),
-          // 👥 Students Count Badge
+          // 👥 Students/Employees Count Badge
           Container(
             padding: EdgeInsets.symmetric(horizontal: 14.w, vertical: 10.h),
             decoration: BoxDecoration(
@@ -1273,7 +1273,7 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> with TickerProviderSt
                 ),
                 SizedBox(height: 2.h),
                 Text(
-                  'Students',
+                  _instituteId == '90999' ? 'Employees' : 'Students',
                   style: TextStyle(
                     color: Colors.white.withOpacity(0.85),
                     fontSize: 9.sp,
