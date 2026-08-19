@@ -1981,7 +1981,9 @@ class _StudentManagementScreenState extends State<StudentManagementScreen>
                     Text(
                       _searchQuery.isNotEmpty
                           ? 'Try a different search term'
-                          : 'Student records from your institute appear here.',
+                          : _instituteId == '90999'
+                              ? 'Employee records from your institute appear here.'
+                              : 'Student records from your institute appear here.',
                       style: TextStyle(
                         color: isDark ? Colors.white70 : AppTheme.textGray,
                         fontSize: 14,
@@ -2346,22 +2348,23 @@ class _StudentManagementScreenState extends State<StudentManagementScreen>
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         // Name with status badge
-                        Row(
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Expanded(
-                              child: Text(
-                                name,
-                                style: TextStyle(
-                                  color: isDark ? Colors.white : AppTheme.textDark,
-                                  fontWeight: FontWeight.w800,
-                                  fontSize: 16.sp,
-                                  letterSpacing: -0.3,
-                                ),
-                                maxLines: 3,
-                                overflow: TextOverflow.ellipsis,
+                            // Full name - show complete without truncation
+                            Text(
+                              name,
+                              style: TextStyle(
+                                color: isDark ? Colors.white : AppTheme.textDark,
+                                fontWeight: FontWeight.w800,
+                                fontSize: 15.sp,
+                                letterSpacing: -0.3,
                               ),
+                              maxLines: 2,
+                              overflow: TextOverflow.visible,
                             ),
-                            SizedBox(width: 8.w),
+                            SizedBox(height: 6.h),
+                            // Status badge
                             Container(
                               padding: EdgeInsets.symmetric(horizontal: 10.w, vertical: 5.h),
                               decoration: BoxDecoration(
@@ -3351,7 +3354,8 @@ class _ScrollingWelcomeMessageState extends State<_ScrollingWelcomeMessage>
         : (_instituteName?.isNotEmpty == true ? _instituteName : null);
 
     final nameDisplay = finalName != null && finalName.isNotEmpty ? ' ($finalName)' : '';
-    final segment = '   👋 Welcome Students - Mark your attendance here  •  Institute: $instId$nameDisplay  •  ';
+    final role = widget.instituteId == '90999' ? 'Employees' : 'Students';
+    final segment = '   👋 Welcome $role - Mark your attendance here  •  Institute: $instId$nameDisplay  •  ';
     // Repeat 4x to ensure seamless loop (first half scrolls, second half mirrors for seamless wrap)
     final message = segment + segment + segment + segment;
 

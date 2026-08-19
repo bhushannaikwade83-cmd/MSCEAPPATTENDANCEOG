@@ -300,7 +300,7 @@ class _StudentFaceRegistrationWrapperState
         'face_registration_status': 'registered',  // ✅ ONLY mark after ALL fields saved
         'is_face_real': true,
         'face_registered_at': DateTime.now().toIso8601String(),
-      }).eq('sr_no', widget.srNo);
+      }).eq('id', widget.studentId);  // ✅ Use UUID instead of sr_no (globally unique!)
 
       print('✅ 512-D ArcFace embeddings (3 angles) saved! Uses MAX similarity for attendance');
 

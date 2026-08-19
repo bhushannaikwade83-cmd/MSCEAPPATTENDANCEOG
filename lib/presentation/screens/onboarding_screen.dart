@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'dart:ui' as ui;
 import '../../core/theme/app_theme.dart';
 import '../../core/utils/responsive.dart';
 import 'login_screen.dart';
@@ -94,41 +95,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> with TickerProvider
       body: Column(
         children: [
           // ✅ Government UI Header (Tricolor)
-          Container(
-            decoration: const BoxDecoration(
-              gradient: LinearGradient(
-                colors: [AppTheme.accentSaffron, Colors.white, AppTheme.primaryGreen],
-                stops: [0.0, 0.5, 1.0],
-              ),
-            ),
-            padding: const EdgeInsets.symmetric(vertical: 12),
-            child: SafeArea(
-              bottom: false,
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Text(
-                    'MSCE',
-                    style: TextStyle(
-                      color: AppTheme.primaryBlueDark,
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                      letterSpacing: 1.2,
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Text(
-                    'Attendance App',
-                    style: TextStyle(
-                      color: AppTheme.primaryGreen,
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
+          const GovTricolorStrip(),
           // Content Area
           Expanded(
             child: SafeArea(
@@ -171,22 +138,49 @@ class _OnboardingScreenState extends State<OnboardingScreen> with TickerProvider
                               ),
                               Padding(
                                 padding: EdgeInsets.symmetric(vertical: 16.h),
-                                child: Row(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: List.generate(3, (index) {
-                                    return AnimatedContainer(
-                                      duration: const Duration(milliseconds: 300),
-                                      margin: const EdgeInsets.symmetric(horizontal: 4),
-                                      width: _currentPage == index ? 24 : 8,
-                                      height: 8,
+                                child: ClipRRect(
+                                  borderRadius: BorderRadius.circular(20.r),
+                                  child: BackdropFilter(
+                                    filter: ui.ImageFilter.blur(sigmaX: 8, sigmaY: 8),
+                                    child: Container(
+                                      padding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 8.h),
                                       decoration: BoxDecoration(
-                                        color: _currentPage == index
-                                            ? AppTheme.primaryBlue
-                                            : AppTheme.primaryBlue.withValues(alpha: 0.3),
-                                        borderRadius: BorderRadius.circular(4),
+                                        color: Colors.white.withOpacity(0.1),
+                                        borderRadius: BorderRadius.circular(20.r),
+                                        border: Border.all(
+                                          color: Colors.white.withOpacity(0.2),
+                                          width: 1,
+                                        ),
                                       ),
-                                    );
-                                  }),
+                                      child: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        mainAxisAlignment: MainAxisAlignment.center,
+                                        children: List.generate(3, (index) {
+                                          return AnimatedContainer(
+                                            duration: const Duration(milliseconds: 300),
+                                            margin: EdgeInsets.symmetric(horizontal: 4.w),
+                                            width: _currentPage == index ? 24.w : 8.w,
+                                            height: 8.h,
+                                            decoration: BoxDecoration(
+                                              color: _currentPage == index
+                                                  ? AppTheme.primaryBlue
+                                                  : AppTheme.primaryBlue.withOpacity(0.3),
+                                              borderRadius: BorderRadius.circular(4.r),
+                                              boxShadow: _currentPage == index
+                                                  ? [
+                                                      BoxShadow(
+                                                        color: AppTheme.primaryBlue.withOpacity(0.4),
+                                                        blurRadius: 8,
+                                                        spreadRadius: 2,
+                                                      ),
+                                                    ]
+                                                  : [],
+                                            ),
+                                          );
+                                        }),
+                                      ),
+                                    ),
+                                  ),
                                 ),
                               ),
                               Padding(
@@ -217,22 +211,32 @@ class _OnboardingScreenState extends State<OnboardingScreen> with TickerProvider
                         right: horizontalPadding,
                         child: FadeTransition(
                           opacity: _animations[0],
-                          child: TextButton(
-                            onPressed: _completeOnboarding,
-                            style: TextButton.styleFrom(
-                              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                              backgroundColor: AppTheme.primaryBlue.withValues(alpha: 0.2),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                            ),
-                            child: Text(
-                              'Skip',
-                              style: TextStyle(
-                                color: AppTheme.primaryBlue,
-                                fontSize: 14,
-                                fontWeight: FontWeight.w600,
-                                letterSpacing: 0.5,
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(10.r),
+                            child: BackdropFilter(
+                              filter: ui.ImageFilter.blur(sigmaX: 8, sigmaY: 8),
+                              child: TextButton(
+                                onPressed: _completeOnboarding,
+                                style: TextButton.styleFrom(
+                                  padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 10.h),
+                                  backgroundColor: AppTheme.primaryBlue.withOpacity(0.15),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(10.r),
+                                    side: BorderSide(
+                                      color: AppTheme.primaryBlue.withOpacity(0.3),
+                                      width: 1.5,
+                                    ),
+                                  ),
+                                ),
+                                child: Text(
+                                  'Skip',
+                                  style: TextStyle(
+                                    color: AppTheme.primaryBlue,
+                                    fontSize: 14.sp,
+                                    fontWeight: FontWeight.w600,
+                                    letterSpacing: 0.5,
+                                  ),
+                                ),
                               ),
                             ),
                           ),
@@ -259,8 +263,8 @@ class _OnboardingScreenState extends State<OnboardingScreen> with TickerProvider
       builder: (context, constraints) {
         final pagePadding = Responsive.padding(context).horizontal;
         final illustrationHeight = (constraints.maxHeight * 0.42).clamp(180.0, 300.0);
-        final titleSize = constraints.maxWidth < 360 ? 26.0 : 32.0;
-        final descriptionSize = constraints.maxWidth < 360 ? 14.0 : 16.0;
+        final titleSize = constraints.maxWidth < 360 ? 26.0.sp : 32.0.sp;
+        final descriptionSize = constraints.maxWidth < 360 ? 14.0.sp : 16.0.sp;
 
         return SingleChildScrollView(
           physics: const BouncingScrollPhysics(),
@@ -275,10 +279,31 @@ class _OnboardingScreenState extends State<OnboardingScreen> with TickerProvider
                   opacity: _animations[1],
                   child: ScaleTransition(
                     scale: _animations[1],
-                    child: Container(
-                      height: illustrationHeight,
-                      margin: EdgeInsets.only(bottom: 24.h),
-                      child: illustrationBuilder(context, illustrationHeight),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(20.r),
+                      child: BackdropFilter(
+                        filter: ui.ImageFilter.blur(sigmaX: 15, sigmaY: 15),
+                        child: Container(
+                          height: illustrationHeight,
+                          margin: EdgeInsets.only(bottom: 24.h),
+                          decoration: BoxDecoration(
+                            gradient: LinearGradient(
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
+                              colors: [
+                                Colors.white.withOpacity(0.1),
+                                Colors.white.withOpacity(0.05),
+                              ],
+                            ),
+                            borderRadius: BorderRadius.circular(20.r),
+                            border: Border.all(
+                              color: Colors.white.withOpacity(0.2),
+                              width: 1.5,
+                            ),
+                          ),
+                          child: illustrationBuilder(context, illustrationHeight),
+                        ),
+                      ),
                     ),
                   ),
                 ),
@@ -641,64 +666,74 @@ class _OnboardingScreenState extends State<OnboardingScreen> with TickerProvider
 
   Widget _buildActionButton() {
     final isLastPage = _currentPage == 2;
-    
-    return Container(
-      height: 56,
-      width: double.infinity,
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            Colors.white,
-            Colors.white.withOpacity(0.95),
-          ],
-        ),
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.2),
-            blurRadius: 20,
-            spreadRadius: 2,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: () {
-            if (isLastPage) {
-              _completeOnboarding();
-            } else {
-              _pageController.nextPage(
-                duration: const Duration(milliseconds: 300),
-                curve: Curves.easeInOut,
-              );
-            }
-          },
-          borderRadius: BorderRadius.circular(16),
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 24),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Text(
-                  isLastPage ? 'Get Started' : 'Continue',
-                  style: const TextStyle(
-                    color: AppTheme.primaryBlue,
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                    letterSpacing: 0.8,
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Icon(
-                  isLastPage ? Icons.arrow_forward_rounded : Icons.arrow_forward_ios_rounded,
-                  color: AppTheme.primaryBlue,
-                  size: 20,
-                ),
+
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(16.r),
+      child: BackdropFilter(
+        filter: ui.ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+        child: Container(
+          height: 56.h,
+          width: double.infinity,
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [
+                AppTheme.primaryBlue.withOpacity(0.15),
+                AppTheme.primaryBlue.withOpacity(0.05),
               ],
+            ),
+            borderRadius: BorderRadius.circular(16.r),
+            border: Border.all(
+              color: AppTheme.primaryBlue.withOpacity(0.3),
+              width: 1.5,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: AppTheme.primaryBlue.withOpacity(0.2),
+                blurRadius: 20,
+                spreadRadius: 2,
+                offset: const Offset(0, 8),
+              ),
+            ],
+          ),
+          child: Material(
+            color: Colors.transparent,
+            child: InkWell(
+              onTap: () {
+                if (isLastPage) {
+                  _completeOnboarding();
+                } else {
+                  _pageController.nextPage(
+                    duration: const Duration(milliseconds: 300),
+                    curve: Curves.easeInOut,
+                  );
+                }
+              },
+              borderRadius: BorderRadius.circular(16.r),
+              child: Container(
+                padding: EdgeInsets.symmetric(horizontal: 24.w),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text(
+                      isLastPage ? 'Get Started' : 'Continue',
+                      style: TextStyle(
+                        color: AppTheme.primaryBlue,
+                        fontSize: 18.sp,
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: 0.8,
+                      ),
+                    ),
+                    SizedBox(width: 8.w),
+                    Icon(
+                      isLastPage ? Icons.arrow_forward_rounded : Icons.arrow_forward_ios_rounded,
+                      color: AppTheme.primaryBlue,
+                      size: 20.sp,
+                    ),
+                  ],
+                ),
+              ),
             ),
           ),
         ),

@@ -101,7 +101,7 @@ class _ModernBottomNavBarState extends State<ModernBottomNavBar>
                       _buildAnimatedNavItem(
                         context,
                         icon: Icons.people_rounded,
-                        label: 'Students',
+                        label: widget.instituteId == '90999' ? 'Employees' : 'Students',
                         index: 2,
                         isDark: isDark,
                       ),
@@ -115,7 +115,7 @@ class _ModernBottomNavBarState extends State<ModernBottomNavBar>
                       _buildAnimatedNavItem(
                         context,
                         icon: Icons.bar_chart_rounded,
-                        label: 'Reports',
+                        label: widget.instituteId == '90999' ? 'Employee Reports' : 'Reports',
                         index: 4,
                         isDark: isDark,
                       ),

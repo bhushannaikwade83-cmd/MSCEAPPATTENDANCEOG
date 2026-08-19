@@ -73,12 +73,27 @@ class AttendanceMarkingService {
         }
       }
 
-      // Check if match quality is good enough (>70% similarity)
-      const double MATCH_THRESHOLD = 0.70;
+      // Load threshold from app_settings (dynamic) or use default 0.70
+      double MATCH_THRESHOLD = 0.70;
+      try {
+        final settings = await appDb
+            .from('app_settings')
+            .select('value')
+            .eq('key', 'similarity_threshold')
+            .maybeSingle();
+
+        if (settings != null && settings['value'] != null) {
+          MATCH_THRESHOLD = double.tryParse(settings['value'].toString()) ?? 0.70;
+          debugPrint('📊 Loaded threshold from app_settings: $MATCH_THRESHOLD');
+        }
+      } catch (e) {
+        debugPrint('⚠️ Could not load threshold from app_settings, using default 0.70: $e');
+      }
+
       if (bestScore < MATCH_THRESHOLD) {
         return {
           'success': false,
-          'message': 'Face not recognized (similarity: ${(bestScore * 100).toStringAsFixed(1)}%)',
+          'message': 'Face not recognized (similarity: ${(bestScore * 100).toStringAsFixed(1)}%, threshold: ${(MATCH_THRESHOLD * 100).toStringAsFixed(1)}%)',
           'similarity': bestScore,
         };
       }
