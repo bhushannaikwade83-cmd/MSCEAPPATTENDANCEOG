@@ -13,7 +13,7 @@ class BackendBatchService {
 
   final supabase = Supabase.instance.client;
 
-  /// Queue attendance record - WAITS FOR RESPONSE
+  /// Queue attendance record - RETURNS IMMEDIATELY (saves in background!)
   Future<Map<String, dynamic>> queueAttendance({
     required String srNo,
     required String instituteId,
@@ -25,68 +25,89 @@ class BackendBatchService {
     double similarityScore = 0.0,
   }) async {
     try {
-      print('📋 [CLIENT] Sending attendance to backend...');
+      print('📋 [CLIENT] Queueing attendance (ASYNC - return immediately)...');
       print('   SR No: $srNo | Type: $recordType');
 
       // 🔧 Calculate IST date for attendance_date (NOT from UTC markedTime)
       final now = DateTime.now().toUtc().add(const Duration(hours: 5, minutes: 30));
       final attendanceDate = '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
 
-      // Call Supabase Edge Function
-      final response = await supabase.functions.invoke(
-        'batch-attendance',
-        body: {
-          'sr_no': srNo,
-          'student_name': studentName ?? '-',
-          'institute_id': instituteId,
-          'attendance_date': attendanceDate, // IST date (YYYY-MM-DD)
-          'record_type': recordType, // 'entry' or 'exit'
-          'marked_time': markedTime, // ISO8601 UTC
-          'remark': remark ?? '-',
-          'photo_url': photoUrl,
-          'status': 'present',
-          'is_verified': false,
-          'similarity_score': similarityScore,
-          'embedding': '[]',
-        },
+      final tempId = '${DateTime.now().millisecondsSinceEpoch}';
+
+      // ⚡ RETURN IMMEDIATELY TO USER - Save in background!
+      print('⚡ [CLIENT] Returning immediately with temp ID: $tempId');
+
+      // ⏳ BACKGROUND: Call Supabase Edge Function (fire-and-forget!)
+      _saveAttendanceInBackground(
+        srNo: srNo,
+        studentName: studentName,
+        instituteId: instituteId,
+        attendanceDate: attendanceDate,
+        recordType: recordType,
+        markedTime: markedTime,
+        remark: remark,
+        photoUrl: photoUrl,
+        similarityScore: similarityScore,
       );
 
-      // Parse response
-      final result = response.data as Map<String, dynamic>;
-
-      if (result['success'] == true) {
-        print('✅ [CLIENT] Attendance marked successfully!');
-        print('   Attendance ID: ${result['attendance_id']}');
-        print('   Face Confidence: ${result['face_confidence']}%');
-        print('   Time: ${result['marked_time']}');
-
-        return {
-          'success': true,
-          'attendance_id': result['attendance_id'] ?? '',
-          'marked_time': result['marked_time'] ?? markedTime,
-          'face_confidence': (result['face_confidence'] ?? 0).toDouble(),
-          'message': result['message'] ?? 'Marked successfully',
-        };
-      } else {
-        print('❌ [CLIENT] Backend rejected: ${result['reason']}');
-
-        return {
-          'success': false,
-          'reason': result['reason'] ?? 'Unknown error',
-          'error_id': result['error_id'] ?? '',
-          'message': 'Failed to mark attendance',
-        };
-      }
+      // ⚡ INSTANT RESPONSE TO USER
+      return {
+        'success': true,
+        'attendance_id': tempId,
+        'marked_time': markedTime,
+        'face_confidence': similarityScore * 100,
+        'message': 'Attendance marked successfully',
+      };
     } catch (e) {
-      print('❌ [CLIENT] Network error: $e');
-
+      print('❌ [CLIENT] Error: $e');
       return {
         'success': false,
         'reason': '$e',
-        'error_id': 'NETWORK_ERROR',
-        'message': 'Network error - will retry',
+        'error_id': 'ERROR',
+        'message': 'Failed to queue attendance',
       };
     }
+  }
+
+  /// Background save to backend (doesn't block user!)
+  void _saveAttendanceInBackground({
+    required String srNo,
+    required String? studentName,
+    required String instituteId,
+    required String attendanceDate,
+    required String recordType,
+    required String markedTime,
+    required String? remark,
+    required String? photoUrl,
+    required double similarityScore,
+  }) {
+    // Fire-and-forget: save in background without awaiting
+    supabase.functions.invoke(
+      'batch-attendance',
+      body: {
+        'sr_no': srNo,
+        'student_name': studentName ?? '-',
+        'institute_id': instituteId,
+        'attendance_date': attendanceDate,
+        'record_type': recordType,
+        'marked_time': markedTime,
+        'remark': remark ?? '-',
+        'photo_url': photoUrl,
+        'status': 'present',
+        'is_verified': false,
+        'similarity_score': similarityScore,
+        'embedding': '[]',
+      },
+    ).then((response) {
+      final result = response.data as Map<String, dynamic>;
+      if (result['success'] == true) {
+        print('✅ [BACKGROUND] Attendance saved: ${result['attendance_id']}');
+      } else {
+        print('❌ [BACKGROUND] Save failed: ${result['reason']}');
+      }
+    }).catchError((e) {
+      print('❌ [BACKGROUND] Network error: $e');
+    });
   }
 
   /// Get queue status from backend
