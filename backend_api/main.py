@@ -2538,7 +2538,7 @@ async def upload_attendance_photo(
 @app.get("/attendance-photos/{institute_id}/{date}/{filename}")
 async def serve_attendance_photo(institute_id: str, date: str, filename: str):
     """
-    ✅ Serve attendance photos directly from backend
+    ✅ Serve attendance photos directly from backend (DISPLAY, not download!)
 
     Path: /attendance-photos/{institute_id}/{date}/{filename}
     Example: /attendance-photos/99099/2026-08-20/990_entry_182836.jpg
@@ -2558,11 +2558,13 @@ async def serve_attendance_photo(institute_id: str, date: str, filename: str):
         file_size = os.path.getsize(filepath)
         print(f'   ✅ File exists: {file_size} bytes')
 
-        # Serve file
+        # ✅ Serve file with INLINE (display) instead of download
         return FileResponse(
             filepath,
             media_type="image/jpeg",
-            filename=filename,
+            headers={
+                "Content-Disposition": "inline; filename=attendance.jpg"
+            }
         )
 
     except HTTPException:
