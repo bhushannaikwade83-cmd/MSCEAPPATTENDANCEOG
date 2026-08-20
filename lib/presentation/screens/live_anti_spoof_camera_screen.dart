@@ -615,12 +615,24 @@ class _LiveAntiSpoofCameraScreenState extends State<LiveAntiSpoofCameraScreen> {
               '  🔍 Match: ${simMs.toStringAsFixed(3)}s';
         }
 
-        // Show success to user
+        // Show success to user with SnackBar (more visible)
         if (mounted) {
           final attendanceId = (backendResponse['attendance_id'] as String? ?? '').trim();
           final displayId = attendanceId.length > 8
               ? attendanceId.substring(0, 8)
               : attendanceId;
+
+          // Show SnackBar success (visible at bottom)
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('✅ ${recordType.toUpperCase()} Marked!\n'
+                  '$_matchedStudentName (${(_similarityScore * 100).toStringAsFixed(1)}%)'),
+              backgroundColor: Colors.green,
+              duration: const Duration(seconds: 4),
+            ),
+          );
+
+          // Also show full screen success
           setState(() {
             _currentStage =
                 '✅ ${recordType.toUpperCase()} Marked Successfully!\n\n'
