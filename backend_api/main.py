@@ -1661,11 +1661,11 @@ async def register_multi_angle_face(
         live_logger.stats['successful_requests'] += 1
         live_logger.stats['active_processing'] = max(0, live_logger.stats['active_processing'] - 1)
 
-        # Generate photo URLs (photos already uploaded to server by PHP)
+        # Generate photo URLs (served via backend endpoint with proper display headers)
         photo_urls = {
-            "front": f"https://digitrixmedia.com/registration-photos/{institute_id}/{roll_number}/front.jpg",
-            "left": f"https://digitrixmedia.com/registration-photos/{institute_id}/{roll_number}/left.jpg",
-            "right": f"https://digitrixmedia.com/registration-photos/{institute_id}/{roll_number}/right.jpg",
+            "front": f"https://api.digitrixmedia.com/registration-photos/{institute_id}/{roll_number}/front.jpg",
+            "left": f"https://api.digitrixmedia.com/registration-photos/{institute_id}/{roll_number}/left.jpg",
+            "right": f"https://api.digitrixmedia.com/registration-photos/{institute_id}/{roll_number}/right.jpg",
         }
 
         return {
@@ -2587,6 +2587,47 @@ async def serve_attendance_photo(institute_id: str, sr_no: str, date: str, filen
             media_type="image/jpeg",
             headers={
                 "Content-Disposition": "inline; filename=attendance.jpg"
+            }
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f'   ❌ Error: {e}')
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/registration-photos/{institute_id}/{sr_no}/{filename}")
+async def serve_registration_photo(institute_id: str, sr_no: str, filename: str):
+    """
+    ✅ Serve registration photos directly from web server (DISPLAY, not download)
+
+    Path: /registration-photos/{institute_id}/{sr_no}/{filename}
+    Example: /registration-photos/99099/990/front.jpg
+    """
+    try:
+        # Construct file path
+        filepath = f"/home/digitrix/public_html/registration-photos/{institute_id}/{sr_no}/{filename}"
+
+        print(f'📸 [SERVE-REG] Looking for: {filename}')
+        print(f'   Path: {filepath}')
+
+        # Check if file exists
+        if not os.path.exists(filepath):
+            print(f'❌ [SERVE-REG] File not found: {filepath}')
+            raise HTTPException(status_code=404, detail="Registration photo not found")
+
+        print(f'✅ [SERVE-REG] Found!')
+
+        # Check file size
+        file_size = os.path.getsize(filepath)
+        print(f'   ✅ File exists: {file_size} bytes')
+
+        # ✅ Serve file with INLINE (display) instead of download
+        return FileResponse(
+            filepath,
+            media_type="image/jpeg",
+            headers={
+                "Content-Disposition": "inline; filename=registration.jpg"
             }
         )
 
