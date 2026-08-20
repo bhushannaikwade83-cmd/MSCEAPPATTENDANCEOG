@@ -2448,9 +2448,25 @@ async def upload_attendance_photo(
 
         # Create directories with error checking
         try:
+            print(f'   📁 Base dir: {base_dir}')
+            print(f'   📁 Photo dir: {photo_dir}')
+
+            # Check if base directory exists
+            if not os.path.exists(base_dir):
+                print(f'   ❌ Base dir does not exist: {base_dir}')
+                raise Exception(f'Base dir not found: {base_dir}')
+
+            # Check base dir permissions
+            print(f'   🔐 Base dir readable: {os.access(base_dir, os.R_OK)}')
+            print(f'   🔐 Base dir writable: {os.access(base_dir, os.W_OK)}')
+
             os.makedirs(photo_dir, exist_ok=True)
-            print(f'   📁 Directory: {photo_dir}')
             print(f'   ✅ Directory exists/created')
+
+            # Check directory permissions
+            print(f'   🔐 Photo dir readable: {os.access(photo_dir, os.R_OK)}')
+            print(f'   🔐 Photo dir writable: {os.access(photo_dir, os.W_OK)}')
+
         except Exception as dir_err:
             print(f'   ❌ Directory creation failed: {dir_err}')
             raise
@@ -2460,24 +2476,34 @@ async def upload_attendance_photo(
         filename = f"{sr_no}_{record_type}_{time_str}.jpg"
         filepath = os.path.join(photo_dir, filename)
 
-        print(f'   📝 Saving to: {filepath}')
+        print(f'   📝 Full path: {filepath}')
 
         # Read and save photo
         contents = await photo.read()
         file_size_kb = len(contents) / 1024
         print(f'   📦 File size: {file_size_kb:.1f}KB')
 
-        with open(filepath, "wb") as f:
-            bytes_written = f.write(contents)
-            print(f'   ✍️  Wrote {bytes_written} bytes')
+        try:
+            with open(filepath, "wb") as f:
+                bytes_written = f.write(contents)
+                print(f'   ✍️  Wrote {bytes_written} bytes')
+        except IOError as io_err:
+            print(f'   ❌ IO Error writing file: {io_err}')
+            raise
 
         # Verify file exists
         if not os.path.exists(filepath):
+            print(f'   ❌ File NOT found after write!')
+            print(f'   📋 Directory contents: {os.listdir(photo_dir)}')
             raise Exception(f'File not saved! Path: {filepath}')
 
         file_stat = os.stat(filepath)
         print(f'   ✅ File verified: {file_stat.st_size} bytes on disk')
-        print(f'   ✅ Saved: {filename} ({file_size_kb:.1f}KB)')
+        print(f'   ✅ Saved: {filename} ({file_size_kb:.1f}KB)
+
+        # List directory to confirm
+        dir_contents = os.listdir(photo_dir)
+        print(f'   📋 Directory now has {len(dir_contents)} files')
 
         # Generate public URL
         # Pattern: https://api.digitrixmedia.com/attendance-photos/90999/2024-01-15/SR123_entry_143022.jpg
