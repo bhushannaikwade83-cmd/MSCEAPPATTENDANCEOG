@@ -2444,47 +2444,21 @@ async def upload_attendance_photo(
 
         # Create directory structure: attendance-photos/{institute}/{sr_no}/{date}/
         # Organize by: Institute → Student → Date
-        # Example: attendance-photos/99099/990/2026-08-21/entry_183349.jpg
+        # Example: /home/digitrix/public_html/attendance-photos/99099/990/2026-08-21/entry_183349.jpg
 
-        # Try multiple base paths (container or local)
-        possible_bases = [
-            "/home/digitrix/public_html/attendance-photos",
-            "/app/attendance-photos",
-            "./attendance-photos",
-        ]
-
-        base_dir = None
-        for possible_base in possible_bases:
-            if os.path.exists(os.path.dirname(possible_base)) or possible_base.startswith("."):
-                base_dir = possible_base
-                break
-
-        if base_dir is None:
-            base_dir = "/home/digitrix/public_html/attendance-photos"
+        # Use web root directly
+        base_dir = "/home/digitrix/public_html/attendance-photos"
 
         # Full path: attendance-photos/{institute_id}/{sr_no}/{date}/
         photo_dir = os.path.join(base_dir, institute_id, sr_no, date)
 
-        # Create directories with error checking
+        # Create directories recursively
         try:
-            print(f'   📁 Base dir: {base_dir}')
             print(f'   📁 Photo dir: {photo_dir}')
 
-            # Check if base directory exists
-            if not os.path.exists(base_dir):
-                print(f'   ❌ Base dir does not exist: {base_dir}')
-                raise Exception(f'Base dir not found: {base_dir}')
-
-            # Check base dir permissions
-            print(f'   🔐 Base dir readable: {os.access(base_dir, os.R_OK)}')
-            print(f'   🔐 Base dir writable: {os.access(base_dir, os.W_OK)}')
-
+            # Create all directories recursively (auto-create institute/sr_no/date folders)
             os.makedirs(photo_dir, exist_ok=True)
-            print(f'   ✅ Directory exists/created')
-
-            # Check directory permissions
-            print(f'   🔐 Photo dir readable: {os.access(photo_dir, os.R_OK)}')
-            print(f'   🔐 Photo dir writable: {os.access(photo_dir, os.W_OK)}')
+            print(f'   ✅ Directory created/exists')
 
         except Exception as dir_err:
             print(f'   ❌ Directory creation failed: {dir_err}')
@@ -2567,24 +2541,18 @@ async def serve_attendance_photo(institute_id: str, sr_no: str, date: str, filen
     https://digitrixmedia.com/attendance-photos/99099/990/2026-08-21/entry_183349.jpg
     """
     try:
-        # Try multiple possible locations
-        possible_paths = [
-            f"/home/digitrix/public_html/attendance-photos/{institute_id}/{sr_no}/{date}/{filename}",
-            f"/app/attendance-photos/{institute_id}/{sr_no}/{date}/{filename}",
-            f"./attendance-photos/{institute_id}/{sr_no}/{date}/{filename}",
-        ]
+        # Construct file path
+        filepath = f"/home/digitrix/public_html/attendance-photos/{institute_id}/{sr_no}/{date}/{filename}"
 
-        filepath = None
-        for path in possible_paths:
-            if os.path.exists(path):
-                filepath = path
-                break
+        print(f'📸 [SERVE] Looking for: {filename}')
+        print(f'   Path: {filepath}')
 
-        if filepath is None:
-            print(f'❌ [SERVE] File not found: {filename}')
+        # Check if file exists
+        if not os.path.exists(filepath):
+            print(f'❌ [SERVE] File not found: {filepath}')
             raise HTTPException(status_code=404, detail="Photo not found")
 
-        print(f'📸 [SERVE] Found at: {filepath}')
+        print(f'✅ [SERVE] Found!')
 
         # Check file size
         file_size = os.path.getsize(filepath)
