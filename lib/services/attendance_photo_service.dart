@@ -10,7 +10,7 @@ class AttendancePhotoService {
   static const String SERVER_URL = "https://api.digitrixmedia.com";
   static const int MAX_SIZE_KB = 50; // Compress aggressively
 
-  /// Upload attendance photo to SERVER (free unlimited storage!)
+  /// Upload attendance photo to PHP API
   static Future<String?> uploadAttendancePhoto({
     required File photoFile,
     required String srNo,
@@ -28,18 +28,17 @@ class AttendancePhotoService {
       final compressedBytes = await _compressImage(bytes);
       print('   Compressed: ${(compressedBytes.length / 1024).toStringAsFixed(1)} KB');
 
-      // 2. Upload to SERVER
-      print('   📤 Uploading to SERVER...');
+      // 2. Upload to PHP API
+      print('   📤 Uploading to PHP API...');
       final photoUploadStart = DateTime.now();
 
       var request = http.MultipartRequest(
         'POST',
-        Uri.parse('$SERVER_URL/api/upload-attendance-photo'),
+        Uri.parse('https://digitrixmedia.com/upload.php'),
       );
 
       // Add metadata
       request.fields['sr_no'] = srNo;
-      request.fields['student_name'] = studentName;
       request.fields['institute_id'] = instituteId;
       request.fields['record_type'] = recordType;
       request.fields['date'] = DateFormat('yyyy-MM-dd').format(DateTime.now());
