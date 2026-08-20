@@ -615,9 +615,8 @@ class _LiveAntiSpoofCameraScreenState extends State<LiveAntiSpoofCameraScreen> {
           });
         }
 
-        // ⏳ BACKGROUND: Upload photo and save DB (fire-and-forget!)
+        // ⏳ BACKGROUND: Upload photo and update database with photo URL!
         print('📸 [BACKGROUND] Starting photo upload (async)...');
-        print('💾 [BACKGROUND] Starting database save (async)...');
 
         _uploadPhotoToB2(
           photoPath: photoPath,
@@ -626,8 +625,24 @@ class _LiveAntiSpoofCameraScreenState extends State<LiveAntiSpoofCameraScreen> {
         ).then((photoUrl) {
           if (photoUrl != null) {
             print('   ✅ [BACKGROUND] Photo uploaded: $photoUrl');
+            print('   💾 [BACKGROUND] Updating attendance with photo URL...');
+
+            // Save photo URL to attendance record
+            final today = DateFormat('yyyy-MM-dd').format(DateTime.now());
+            appDb
+                .from('attendance')
+                .update({'photo_url': photoUrl})
+                .eq('sr_no', srNo)
+                .eq('institute_id', widget.instituteId)
+                .eq('attendance_date', today)
+                .eq('record_type', recordType)
+                .then((_) {
+              print('   ✅ [BACKGROUND] Photo URL saved to database!');
+            }).catchError((e) {
+              print('   ⚠️ [BACKGROUND] Failed to update photo URL: $e');
+            });
           } else {
-            print('   ⚠️ [BACKGROUND] Photo upload failed');
+            print('   ⚠️ [BACKGROUND] Photo upload failed - skipping DB update');
           }
         }).catchError((e) {
           print('   ❌ [BACKGROUND] Photo error: $e');
