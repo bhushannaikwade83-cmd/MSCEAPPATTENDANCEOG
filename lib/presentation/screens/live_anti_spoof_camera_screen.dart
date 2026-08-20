@@ -558,29 +558,47 @@ class _LiveAntiSpoofCameraScreenState extends State<LiveAntiSpoofCameraScreen> {
         return;
       }
 
-      // ⏱️ OPTIMIZED FLOW: Show result FIRST, then save in background!
-      print('🔥 [OPTIMIZED] Queue attendance with backend result...');
+      // ⚡ OPTIMIZED FLOW: Upload photo FIRST, then queue with URL!
+      print('🔥 [OPTIMIZED] Upload photo first, then queue attendance...');
 
       final nowUtc = DateTime.now().toUtc();
+      String? photoUrl;
 
-      // Queue attendance (returns immediately with temp ID)
+      // STEP 1: Upload photo to B2 FIRST
+      print('📸 [PHOTO] Starting photo upload...');
+      try {
+        photoUrl = await _uploadPhotoToB2(
+          photoPath: photoPath,
+          srNo: srNo,
+          recordType: recordType,
+        );
+        if (photoUrl != null) {
+          print('✅ [PHOTO] Uploaded: $photoUrl');
+        } else {
+          print('⚠️ [PHOTO] Upload returned null - will queue without photo');
+        }
+      } catch (e) {
+        print('❌ [PHOTO] Upload failed: $e - will queue without photo');
+      }
+
+      // STEP 2: Queue attendance with photo URL included!
+      print('📋 [QUEUE] Queuing attendance with photo URL...');
       final backendResponse = await backendBatchService.queueAttendance(
         srNo: srNo,
         instituteId: widget.instituteId,
         recordType: recordType,
         markedTime: nowUtc.toIso8601String(),
         remark: '',
-        photoUrl: null, // Will update in background
+        photoUrl: photoUrl, // NOW we have the URL! (or null if upload failed)
         studentName: _matchedStudentName,
         similarityScore: _similarityScore,
       );
 
-      print('⚡ [INSTANT] Got backend response (temp ID returned)');
+      print('⚡ [INSTANT] Got backend response (attendance saved with photo URL!)');
 
-      // ✅ SHOW SUCCESS TO USER IMMEDIATELY (this line matters!)
-      // Don't await anything below - just fire and forget
+      // ✅ SHOW SUCCESS TO USER IMMEDIATELY!
       if (backendResponse['success'] == true) {
-        print('⚡ [UI] Showing success to user NOW (not waiting for uploads)');
+        print('⚡ [UI] Showing success to user NOW');
 
         // Extract timing if available
         final timing = backendResponse['timing'] as Map<String, dynamic>?;
@@ -590,16 +608,14 @@ class _LiveAntiSpoofCameraScreenState extends State<LiveAntiSpoofCameraScreen> {
           final embeddingMs = (timing['embedding'] as num?)?.toDouble() ?? 0;
           final loadMs = (timing['load_embeddings'] as num?)?.toDouble() ?? 0;
           final simMs = (timing['similarities'] as num?)?.toDouble() ?? 0;
-          final prepareMs = (timing['prepare_matrix'] as num?)?.toDouble() ?? 0;
 
           timingDisplay = '\n⏱️ Backend: ${totalMs.toStringAsFixed(2)}s\n'
               '  🧠 Embedding: ${embeddingMs.toStringAsFixed(2)}s\n'
               '  📚 Load: ${loadMs.toStringAsFixed(2)}s\n'
-              '  🔢 Prepare: ${prepareMs.toStringAsFixed(2)}s\n'
               '  🔍 Match: ${simMs.toStringAsFixed(3)}s';
         }
 
-        // Show success to user with details (don't wait for photo/DB!)
+        // Show success to user
         if (mounted) {
           final attendanceId = (backendResponse['attendance_id'] as String? ?? '').trim();
           final displayId = attendanceId.length > 8
@@ -614,64 +630,6 @@ class _LiveAntiSpoofCameraScreenState extends State<LiveAntiSpoofCameraScreen> {
                 '$timingDisplay';
           });
         }
-
-        // ⏳ BACKGROUND: Upload photo and update database with photo URL!
-        print('📸 [BACKGROUND] Starting photo upload (async)...');
-
-        _uploadPhotoToB2(
-          photoPath: photoPath,
-          srNo: srNo,
-          recordType: recordType,
-        ).then((photoUrl) async {
-          if (photoUrl != null) {
-            print('   ✅ [BACKGROUND] Photo uploaded: $photoUrl');
-            print('   💾 [BACKGROUND] Updating attendance with photo URL...');
-
-            // Wait a bit to ensure record is saved by backend
-            await Future.delayed(const Duration(milliseconds: 500));
-
-            try {
-              // Save photo URL to attendance record
-              final today = DateFormat('yyyy-MM-dd').format(DateTime.now());
-
-              print('   🔍 [DEBUG] Updating record with:');
-              print('      sr_no: $srNo');
-              print('      institute_id: ${widget.instituteId}');
-              print('      attendance_date: $today');
-              print('      record_type: $recordType');
-
-              final response = await appDb
-                  .from('attendance')
-                  .update({'photo_url': photoUrl})
-                  .eq('sr_no', srNo)
-                  .eq('institute_id', widget.instituteId)
-                  .eq('attendance_date', today)
-                  .eq('record_type', recordType);
-
-              print('   ✅ [BACKGROUND] Photo URL saved to database!');
-              print('   Response: $response');
-            } catch (e) {
-              print('   ⚠️ [BACKGROUND] Failed to update photo URL: $e');
-              print('   📍 Attempting alternative update method...');
-
-              // Try alternative: update all records for this sr_no today
-              try {
-                await appDb
-                    .from('attendance')
-                    .update({'photo_url': photoUrl})
-                    .eq('sr_no', srNo)
-                    .eq('institute_id', widget.instituteId);
-                print('   ✅ [BACKGROUND] Photo URL saved (alternative method)!');
-              } catch (e2) {
-                print('   ❌ [BACKGROUND] Alternative update also failed: $e2');
-              }
-            }
-          } else {
-            print('   ⚠️ [BACKGROUND] Photo upload failed - skipping DB update');
-          }
-        }).catchError((e) {
-          print('   ❌ [BACKGROUND] Photo error: $e');
-        });
       }
 
       // Show success to user for 3 seconds
