@@ -120,7 +120,7 @@ _settings_cache = {'values': {}, 'loaded_at': None}
 _SETTINGS_CACHE_TTL_SECONDS = 30
 
 _SETTINGS_DEFAULTS = {
-    'similarity_threshold': 0.70,
+    'similarity_threshold': 0.65,  # Acceptable range: 0.65-0.70
 }
 
 def get_setting(key: str, default=None):
@@ -1812,8 +1812,8 @@ async def verify_face(
                 processing_time_ms=(time.time() - start_time) * 1000
             )
         
-        # Use default threshold if not provided
-        threshold_value = threshold if threshold is not None else 0.70
+        # Use default threshold if not provided (0.65-0.70 range acceptable)
+        threshold_value = threshold if threshold is not None else 0.65
         
         # Calculate similarity (direct 1:1 comparison)
         similarity = vector_db.calculate_similarity(embedding, stored_vector)
