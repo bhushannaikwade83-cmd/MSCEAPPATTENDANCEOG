@@ -622,25 +622,50 @@ class _LiveAntiSpoofCameraScreenState extends State<LiveAntiSpoofCameraScreen> {
           photoPath: photoPath,
           srNo: srNo,
           recordType: recordType,
-        ).then((photoUrl) {
+        ).then((photoUrl) async {
           if (photoUrl != null) {
             print('   ✅ [BACKGROUND] Photo uploaded: $photoUrl');
             print('   💾 [BACKGROUND] Updating attendance with photo URL...');
 
-            // Save photo URL to attendance record
-            final today = DateFormat('yyyy-MM-dd').format(DateTime.now());
-            appDb
-                .from('attendance')
-                .update({'photo_url': photoUrl})
-                .eq('sr_no', srNo)
-                .eq('institute_id', widget.instituteId)
-                .eq('attendance_date', today)
-                .eq('record_type', recordType)
-                .then((_) {
+            // Wait a bit to ensure record is saved by backend
+            await Future.delayed(const Duration(milliseconds: 500));
+
+            try {
+              // Save photo URL to attendance record
+              final today = DateFormat('yyyy-MM-dd').format(DateTime.now());
+
+              print('   🔍 [DEBUG] Updating record with:');
+              print('      sr_no: $srNo');
+              print('      institute_id: ${widget.instituteId}');
+              print('      attendance_date: $today');
+              print('      record_type: $recordType');
+
+              final response = await appDb
+                  .from('attendance')
+                  .update({'photo_url': photoUrl})
+                  .eq('sr_no', srNo)
+                  .eq('institute_id', widget.instituteId)
+                  .eq('attendance_date', today)
+                  .eq('record_type', recordType);
+
               print('   ✅ [BACKGROUND] Photo URL saved to database!');
-            }).catchError((e) {
+              print('   Response: $response');
+            } catch (e) {
               print('   ⚠️ [BACKGROUND] Failed to update photo URL: $e');
-            });
+              print('   📍 Attempting alternative update method...');
+
+              // Try alternative: update all records for this sr_no today
+              try {
+                await appDb
+                    .from('attendance')
+                    .update({'photo_url': photoUrl})
+                    .eq('sr_no', srNo)
+                    .eq('institute_id', widget.instituteId);
+                print('   ✅ [BACKGROUND] Photo URL saved (alternative method)!');
+              } catch (e2) {
+                print('   ❌ [BACKGROUND] Alternative update also failed: $e2');
+              }
+            }
           } else {
             print('   ⚠️ [BACKGROUND] Photo upload failed - skipping DB update');
           }
