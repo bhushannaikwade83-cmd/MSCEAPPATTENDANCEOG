@@ -244,70 +244,17 @@ class _StudentFaceRegistrationWrapperState
       print('✅ Left: ${leftEmbedding.length}-D');
       print('✅ Right: ${rightEmbedding.length}-D');
 
-      // 📸 Upload photos to Backblaze B2 with compression (PARALLEL!)
-      print('📸 Compressing & uploading photos to Backblaze B2...');
-      String? facePhotoUrl;
-      bool photosUploadedSuccessfully = false;
+      // ✅ Photos already uploaded to server via PHP endpoint (from registerStudentFace)
+      // Extract photo URLs from backend response
+      final photoUrls = result['photo_urls'] as Map<String, dynamic>?;
+      final facePhotoUrl = photoUrls?['front'] ??
+        'https://digitrixmedia.com/registration-photos/${widget.instituteId}/${widget.srNo}/front.jpg';
 
-      try {
-        // Compress each photo first
-        final compressStart = DateTime.now();
-        final frontBytes = await PhotoCompressionService.compressPhoto(photos[0].path);
-        final leftBytes = await PhotoCompressionService.compressPhoto(photos[1].path);
-        final rightBytes = await PhotoCompressionService.compressPhoto(photos[2].path);
-        final compressTime = DateTime.now().difference(compressStart).inMilliseconds;
+      print('📸 Photos already saved to server');
+      print('✅ Front photo: $facePhotoUrl');
 
-        print('  ✅ Front: ${(frontBytes.length / 1024).toStringAsFixed(1)}KB');
-        print('  ✅ Left: ${(leftBytes.length / 1024).toStringAsFixed(1)}KB');
-        print('  ✅ Right: ${(rightBytes.length / 1024).toStringAsFixed(1)}KB');
-        print('📊 [STEP 2] Photo compression: ${compressTime}ms');
-
-        // Generate path: DEC-2026/GCC/REGISTRATION/{institute_id}/{student_name}/
-        final timestamp = DateTime.now().toIso8601String().replaceAll(':', '-');
-        final photoPath = 'DEC-2026/GCC/REGISTRATION/${widget.instituteId}/${widget.studentName}';
-
-        // ⚡ PARALLEL UPLOAD: Upload all 3 photos at SAME TIME!
-        print('🚀 Uploading 3 photos in PARALLEL...');
-        final uploadStartTime = DateTime.now();
-
-        final uploadFutures = [
-          B2BStorageService.uploadFile(
-            '$photoPath/front_${widget.srNo}_$timestamp.jpg',
-            frontBytes,
-            contentType: 'image/jpeg',
-          ),
-          B2BStorageService.uploadFile(
-            '$photoPath/left_${widget.srNo}_$timestamp.jpg',
-            leftBytes,
-            contentType: 'image/jpeg',
-          ),
-          B2BStorageService.uploadFile(
-            '$photoPath/right_${widget.srNo}_$timestamp.jpg',
-            rightBytes,
-            contentType: 'image/jpeg',
-          ),
-        ];
-
-        // Wait for ALL uploads simultaneously
-        final uploadResults = await Future.wait(uploadFutures);
-
-        facePhotoUrl = uploadResults[0];  // Front photo URL (primary)
-        final uploadTime = DateTime.now().difference(uploadStartTime).inMilliseconds;
-
-        print('✅ Front photo uploaded: $facePhotoUrl');
-        print('✅ Left photo uploaded');
-        print('✅ Right photo uploaded');
-        print('⚡ All 3 photos uploaded in ${uploadTime}ms (PARALLEL!)');
-
-        photosUploadedSuccessfully = true;
-      } catch (e) {
-        print('❌ Photo upload FAILED (CRITICAL): $e');
-        throw Exception('Photo upload failed - registration incomplete: $e');
-      }
-
-      // ✅ Only mark as "registered" if BOTH embeddings AND photos are saved
-      if (!photosUploadedSuccessfully || facePhotoUrl == null) {
-        throw Exception('Photos not uploaded - cannot complete registration');
+      if (facePhotoUrl == null || facePhotoUrl.isEmpty) {
+        throw Exception('No photo URL returned from backend');
       }
 
       // ⚡ ASYNC DATABASE SAVE: Show success immediately, save in background!

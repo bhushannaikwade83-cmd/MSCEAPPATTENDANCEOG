@@ -1668,10 +1668,18 @@ async def register_multi_angle_face(
         live_logger.stats['successful_requests'] += 1
         live_logger.stats['active_processing'] = max(0, live_logger.stats['active_processing'] - 1)
 
+        # Generate photo URLs (photos already uploaded to server by PHP)
+        photo_urls = {
+            "front": f"https://digitrixmedia.com/registration-photos/{institute_id}/{roll_number}/front.jpg",
+            "left": f"https://digitrixmedia.com/registration-photos/{institute_id}/{roll_number}/left.jpg",
+            "right": f"https://digitrixmedia.com/registration-photos/{institute_id}/{roll_number}/right.jpg",
+        }
+
         return {
             "success": True,
             "message": f"Face registered for {roll_number}",
             "embeddings": embeddings_result,  # Return embeddings for Flutter to display immediately
+            "photo_urls": photo_urls,  # Photo URLs already saved by PHP
             "timing": {
                 "embedding_generation_sec": round(embedding_time, 2),
                 "note": "Supabase save happening in background (silent)"
