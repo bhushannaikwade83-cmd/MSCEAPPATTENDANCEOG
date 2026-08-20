@@ -2499,7 +2499,7 @@ async def upload_attendance_photo(
 
         file_stat = os.stat(filepath)
         print(f'   ✅ File verified: {file_stat.st_size} bytes on disk')
-        print(f'   ✅ Saved: {filename} ({file_size_kb:.1f}KB)
+        print(f'   ✅ Saved: {filename} ({file_size_kb:.1f}KB)')
 
         # List directory to confirm
         dir_contents = os.listdir(photo_dir)
