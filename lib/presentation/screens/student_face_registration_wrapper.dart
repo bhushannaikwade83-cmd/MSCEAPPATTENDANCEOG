@@ -236,7 +236,7 @@ class _StudentFaceRegistrationWrapperState
       print('✅ Left: ${leftEmbedding.length}-D');
       print('✅ Right: ${rightEmbedding.length}-D');
 
-      // 📸 Upload photos to Backblaze B2 with compression
+      // 📸 Upload photos to Backblaze B2 with compression (PARALLEL!)
       print('📸 Compressing & uploading photos to Backblaze B2...');
       String? facePhotoUrl;
       bool photosUploadedSuccessfully = false;
@@ -255,29 +255,38 @@ class _StudentFaceRegistrationWrapperState
         final timestamp = DateTime.now().toIso8601String().replaceAll(':', '-');
         final photoPath = 'DEC-2026/GCC/REGISTRATION/${widget.instituteId}/${widget.studentName}';
 
-        // Upload front photo (primary registration photo)
-        facePhotoUrl = await B2BStorageService.uploadFile(
-          '$photoPath/front_${widget.srNo}_$timestamp.jpg',
-          frontBytes,
-          contentType: 'image/jpeg',
-        );
+        // ⚡ PARALLEL UPLOAD: Upload all 3 photos at SAME TIME!
+        print('🚀 Uploading 3 photos in PARALLEL...');
+        final uploadStartTime = DateTime.now();
+
+        final uploadFutures = [
+          B2BStorageService.uploadFile(
+            '$photoPath/front_${widget.srNo}_$timestamp.jpg',
+            frontBytes,
+            contentType: 'image/jpeg',
+          ),
+          B2BStorageService.uploadFile(
+            '$photoPath/left_${widget.srNo}_$timestamp.jpg',
+            leftBytes,
+            contentType: 'image/jpeg',
+          ),
+          B2BStorageService.uploadFile(
+            '$photoPath/right_${widget.srNo}_$timestamp.jpg',
+            rightBytes,
+            contentType: 'image/jpeg',
+          ),
+        ];
+
+        // Wait for ALL uploads simultaneously
+        final uploadResults = await Future.wait(uploadFutures);
+
+        facePhotoUrl = uploadResults[0];  // Front photo URL (primary)
+        final uploadTime = DateTime.now().difference(uploadStartTime).inMilliseconds;
+
         print('✅ Front photo uploaded: $facePhotoUrl');
-
-        // Upload left photo
-        await B2BStorageService.uploadFile(
-          '$photoPath/left_${widget.srNo}_$timestamp.jpg',
-          leftBytes,
-          contentType: 'image/jpeg',
-        );
         print('✅ Left photo uploaded');
-
-        // Upload right photo
-        await B2BStorageService.uploadFile(
-          '$photoPath/right_${widget.srNo}_$timestamp.jpg',
-          rightBytes,
-          contentType: 'image/jpeg',
-        );
         print('✅ Right photo uploaded');
+        print('⚡ All 3 photos uploaded in ${uploadTime}ms (PARALLEL!)');
 
         photosUploadedSuccessfully = true;
       } catch (e) {
@@ -290,20 +299,10 @@ class _StudentFaceRegistrationWrapperState
         throw Exception('Photos not uploaded - cannot complete registration');
       }
 
-      // 💾 Save 512-D embeddings + photo URL to database (ONLY IF ALL SUCCESSFUL)
-      print('💾 Saving 512-D ArcFace embeddings (3 angles) + photo URL to database...');
-      await appDb.from('students').update({
-        'face_embedding_front': jsonEncode(frontEmbedding),
-        'face_embedding_left': jsonEncode(leftEmbedding),
-        'face_embedding_right': jsonEncode(rightEmbedding),
-        'face_photo_url': facePhotoUrl,
-        'face_registration_status': 'registered',  // ✅ ONLY mark after ALL fields saved
-        'is_face_real': true,
-        'face_registered_at': DateTime.now().toIso8601String(),
-      }).eq('id', widget.studentId);  // ✅ Use UUID instead of sr_no (globally unique!)
+      // ⚡ ASYNC DATABASE SAVE: Show success immediately, save in background!
+      print('💾 Saving 512-D ArcFace embeddings (3 angles) + photo URL to database (ASYNC)...');
 
-      print('✅ 512-D ArcFace embeddings (3 angles) saved! Uses MAX similarity for attendance');
-
+      // Show success to user IMMEDIATELY
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -318,6 +317,23 @@ class _StudentFaceRegistrationWrapperState
       if (mounted) {
         Navigator.pop(context, true);
       }
+
+      // ⏳ BACKGROUND: Save to database (don't wait!)
+      // User already sees success, so we don't block on DB save
+      appDb.from('students').update({
+        'face_embedding_front': jsonEncode(frontEmbedding),
+        'face_embedding_left': jsonEncode(leftEmbedding),
+        'face_embedding_right': jsonEncode(rightEmbedding),
+        'face_photo_url': facePhotoUrl,
+        'face_registration_status': 'registered',
+        'is_face_real': true,
+        'face_registered_at': DateTime.now().toIso8601String(),
+      }).eq('id', widget.studentId).then((_) {
+        print('✅ [BACKGROUND] 512-D ArcFace embeddings (3 angles) saved to Supabase!');
+      }).catchError((e) {
+        print('❌ [BACKGROUND] Database save error: $e');
+        // Log error but don't crash - photos already uploaded
+      });
     } catch (e) {
       if (kDebugMode) debugPrint('❌ Registration error: $e');
       if (mounted) {
