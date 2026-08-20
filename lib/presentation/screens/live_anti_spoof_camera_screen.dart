@@ -532,7 +532,8 @@ class _LiveAntiSpoofCameraScreenState extends State<LiveAntiSpoofCameraScreen> {
       // 📸 STEP 1: Compress and upload photo to B2
       String? photoUrl;
       try {
-        print('   📸 Uploading compressed photo to B2...');
+        print('📸 [PHOTO] Uploading compressed photo to B2...');
+        final photoUploadStart = DateTime.now();
         final photoFile = File(photoPath);
         if (photoFile.existsSync()) {
           photoUrl = await AttendancePhotoService.uploadAttendancePhoto(
@@ -542,6 +543,8 @@ class _LiveAntiSpoofCameraScreenState extends State<LiveAntiSpoofCameraScreen> {
             instituteId: widget.instituteId,
             recordType: recordType,
           );
+          final photoUploadMs = DateTime.now().difference(photoUploadStart).inMilliseconds;
+          print('   ✅ [PHOTO] Upload complete (${photoUploadMs}ms)');
         }
       } catch (e) {
         print('   ⚠️ Photo upload failed: $e');
@@ -553,6 +556,7 @@ class _LiveAntiSpoofCameraScreenState extends State<LiveAntiSpoofCameraScreen> {
       try {
         // 🔧 Send UTC time to backend (convert IST back to UTC)
         final nowUtc = DateTime.now().toUtc();
+        final backendStartTime = DateTime.now();
         final backendResponse = await backendBatchService.queueAttendance(
           srNo: srNo,
           instituteId: widget.instituteId,
@@ -563,10 +567,11 @@ class _LiveAntiSpoofCameraScreenState extends State<LiveAntiSpoofCameraScreen> {
           studentName: _matchedStudentName,
           similarityScore: _similarityScore,
         );
+        final backendElapsedMs = DateTime.now().difference(backendStartTime).inMilliseconds;
 
         // Check if successful
         if (backendResponse['success'] == true) {
-          print('✅ [BACKEND] Attendance marked successfully!');
+          print('✅ [BACKEND] Attendance marked successfully! (${backendElapsedMs}ms network round-trip)');
           print('   Attendance ID: ${backendResponse['attendance_id']}');
           print('   SR No: $srNo');
           print('   Student: $_matchedStudentName');
@@ -575,6 +580,37 @@ class _LiveAntiSpoofCameraScreenState extends State<LiveAntiSpoofCameraScreen> {
           print('   Time: ${backendResponse['marked_time']}');
           print('   Face Confidence: ${backendResponse['face_confidence']}%');
           print('   Photo URL: $photoUrl');
+
+          // Extract timing data from backend
+          final timing = backendResponse['timing'] as Map<String, dynamic>?;
+          String timingDisplay = '';
+          if (timing != null) {
+            final totalMs = (timing['total'] as num?)?.toDouble() ?? 0;
+            final embeddingMs = (timing['embedding'] as num?)?.toDouble() ?? 0;
+            final loadMs = (timing['load_embeddings'] as num?)?.toDouble() ?? 0;
+            final simMs = (timing['similarities'] as num?)?.toDouble() ?? 0;
+            final prepareMs = (timing['prepare_matrix'] as num?)?.toDouble() ?? 0;
+
+            timingDisplay = '\n⏱️ Backend: ${totalMs.toStringAsFixed(2)}s\n'
+                '  🧠 Embedding: ${embeddingMs.toStringAsFixed(2)}s\n'
+                '  📚 Load: ${loadMs.toStringAsFixed(2)}s\n'
+                '  🔢 Prepare: ${prepareMs.toStringAsFixed(2)}s\n'
+                '  🔍 Match: ${simMs.toStringAsFixed(3)}s\n'
+                '🌐 Network: ${(backendElapsedMs / 1000).toStringAsFixed(2)}s';
+
+            print('');
+            print('═══════════════════════════════════════════');
+            print('⏱️  COMPLETE TIMING BREAKDOWN');
+            print('═══════════════════════════════════════════');
+            print('📊 Backend Processing: ${totalMs.toStringAsFixed(2)}s');
+            print('   🧠 Embedding: ${embeddingMs.toStringAsFixed(2)}s (${((embeddingMs / totalMs) * 100).toStringAsFixed(0)}%)');
+            print('   📚 Load embeddings: ${loadMs.toStringAsFixed(2)}s (${((loadMs / totalMs) * 100).toStringAsFixed(0)}%)');
+            print('   🔢 Prepare matrix: ${prepareMs.toStringAsFixed(2)}s (${((prepareMs / totalMs) * 100).toStringAsFixed(0)}%)');
+            print('   🔍 Similarities: ${simMs.toStringAsFixed(3)}s');
+            print('🌐 Network round-trip: ${(backendElapsedMs / 1000).toStringAsFixed(2)}s');
+            print('═══════════════════════════════════════════');
+            print('');
+          }
 
           // Show success to user with details
           if (mounted) {
@@ -585,9 +621,10 @@ class _LiveAntiSpoofCameraScreenState extends State<LiveAntiSpoofCameraScreen> {
             setState(() {
               _currentStage =
                   '✅ ${recordType.toUpperCase()} Marked Successfully!\n\n'
-                  'Time: ${backendResponse['marked_time']}\n'
-                  'Face: ${backendResponse['face_confidence']?.toStringAsFixed(0)}%\n'
-                  'ID: $displayId';
+                  'Student: $_matchedStudentName\n'
+                  'Match: ${(_similarityScore * 100).toStringAsFixed(1)}%\n'
+                  'ID: $displayId'
+                  '$timingDisplay';
             });
           }
           await Future.delayed(const Duration(seconds: 3));
