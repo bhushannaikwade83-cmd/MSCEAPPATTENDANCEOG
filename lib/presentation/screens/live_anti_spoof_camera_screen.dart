@@ -632,12 +632,14 @@ class _LiveAntiSpoofCameraScreenState extends State<LiveAntiSpoofCameraScreen> {
             ),
           );
 
-          // Also show full screen success
+          // Also show full screen success WITH TIME
+          final markedTime = DateTime.now().toLocal().toString().substring(11, 19);
           setState(() {
             _currentStage =
                 '✅ ${recordType.toUpperCase()} Marked Successfully!\n\n'
                 'Student: $_matchedStudentName\n'
                 'Match: ${(_similarityScore * 100).toStringAsFixed(1)}%\n'
+                'Time: $markedTime\n'
                 'ID: $displayId'
                 '$timingDisplay';
           });
