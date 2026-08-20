@@ -357,15 +357,24 @@ class _LiveAntiSpoofCameraScreenState extends State<LiveAntiSpoofCameraScreen> {
       print('✅ [CAPTURE] Picture taken: ${picture.path}');
       print('📊 [CAPTURE] File size: ${await imageFile.length()} bytes');
 
+      // ⏱️ START COMPREHENSIVE TIMING FROM FACE DETECTION
+      final overallStartTime = DateTime.now();
+      print('');
+      print('═══════════════════════════════════════════════════════════');
+      print('⏱️  COMPLETE ATTENDANCE FLOW TIMING');
+      print('═══════════════════════════════════════════════════════════');
+
       setState(() {
         _currentStage = 'Matching Face...';
       });
 
       print('🔍 [DETECT] Starting face detection...');
       // Detect face in captured image
+      final detectStart = DateTime.now();
       final inputImage = InputImage.fromFilePath(imageFile.path);
       final faces = await _faceDetector.processImage(inputImage);
-      print('✅ [DETECT] Face detection complete. Faces found: ${faces.length}');
+      final detectMs = DateTime.now().difference(detectStart).inMilliseconds;
+      print('✅ [DETECT] Face detection complete: ${detectMs}ms | Faces found: ${faces.length}');
 
       if (!mounted) return;
 
@@ -385,11 +394,14 @@ class _LiveAntiSpoofCameraScreenState extends State<LiveAntiSpoofCameraScreen> {
         print('✅ [DETECT] Single face detected, proceeding to backend...');
         // Face detected - send to API
         print('🌐 [API] Calling /api/mark-attendance-auto...');
+        final apiStart = DateTime.now();
         final result = await AntiSpoofApiService.markAttendanceAuto(
           imageFile,
           instId: widget.instituteId,
         );
-        print('✅ [API] Response received: $result');
+        final apiMs = DateTime.now().difference(apiStart).inMilliseconds;
+        print('✅ [API] Response received in ${apiMs}ms');
+        print('📊 [API] Result: $result');
 
         if (mounted) {
           if (result.containsKey('error')) {
@@ -441,11 +453,27 @@ class _LiveAntiSpoofCameraScreenState extends State<LiveAntiSpoofCameraScreen> {
 
               // Save attendance to Supabase
               print('💾 [SAVE] Saving attendance to Supabase...');
+              final saveStart = DateTime.now();
               await _saveAttendanceToSupabase(_srNo, recordType, picture.path);
+              final saveMs = DateTime.now().difference(saveStart).inMilliseconds;
 
               setState(() {
                 _currentStage = '✅ Attendance Marked ($recordType)';
               });
+
+              // ⏱️ PRINT COMPLETE TIMING BREAKDOWN
+              final overallMs = DateTime.now().difference(overallStartTime).inMilliseconds;
+              print('');
+              print('═══════════════════════════════════════════════════════════');
+              print('📊 COMPLETE TIMING BREAKDOWN');
+              print('═══════════════════════════════════════════════════════════');
+              print('🔍 Face detection: ${detectMs}ms');
+              print('🌐 Backend API (match+process): ${apiMs}ms');
+              print('💾 Save to B2+Supabase: ${saveMs}ms');
+              print('─────────────────────────────────────');
+              print('⏱️  TOTAL END-TO-END: ${(overallMs / 1000).toStringAsFixed(2)}s');
+              print('═══════════════════════════════════════════════════════════');
+              print('');
 
               await Future.delayed(const Duration(seconds: 6));
             }
@@ -495,6 +523,7 @@ class _LiveAntiSpoofCameraScreenState extends State<LiveAntiSpoofCameraScreen> {
     String recordType,
     String photoPath,
   ) async {
+    final saveSectionStart = DateTime.now();
     try {
       print('💾 [SAVE] Saving attendance to attendance table...');
 
@@ -531,8 +560,9 @@ class _LiveAntiSpoofCameraScreenState extends State<LiveAntiSpoofCameraScreen> {
 
       // 📸 STEP 1: Compress and upload photo to B2
       String? photoUrl;
+      var photoTotalMs = 0;
       try {
-        print('📸 [PHOTO] Uploading compressed photo to B2...');
+        print('📸 [PHOTO] Compressing and uploading photo to B2...');
         final photoUploadStart = DateTime.now();
         final photoFile = File(photoPath);
         if (photoFile.existsSync()) {
@@ -543,8 +573,8 @@ class _LiveAntiSpoofCameraScreenState extends State<LiveAntiSpoofCameraScreen> {
             instituteId: widget.instituteId,
             recordType: recordType,
           );
-          final photoUploadMs = DateTime.now().difference(photoUploadStart).inMilliseconds;
-          print('   ✅ [PHOTO] Upload complete (${photoUploadMs}ms)');
+          photoTotalMs = DateTime.now().difference(photoUploadStart).inMilliseconds;
+          print('   ✅ [PHOTO] Complete (${photoTotalMs}ms)');
         }
       } catch (e) {
         print('   ⚠️ Photo upload failed: $e');
@@ -660,6 +690,14 @@ class _LiveAntiSpoofCameraScreenState extends State<LiveAntiSpoofCameraScreen> {
         if (mounted) _resetUI();
         throw e;
       }
+
+      // 📊 Print timing breakdown for this save section
+      final saveSectionMs = DateTime.now().difference(saveSectionStart).inMilliseconds;
+      print('');
+      print('───────────────────────────────────────────');
+      print('📸 Photo upload + Supabase: ${saveSectionMs}ms');
+      print('  📸 Photo comp+upload: ${photoTotalMs}ms');
+      print('───────────────────────────────────────────');
     } catch (e) {
       print('❌ [SAVE] Error saving attendance: $e');
       print('📍 [SAVE] Stack: ${StackTrace.current}');
