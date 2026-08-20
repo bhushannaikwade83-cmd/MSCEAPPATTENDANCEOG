@@ -32,7 +32,7 @@ function log_debug($message) {
     $timestamp = date('Y-m-d H:i:s');
     $log_entry = "[$timestamp] $message\n";
     file_put_contents($log_file, $log_entry, FILE_APPEND);
-    echo "[LOG] $message\n";
+    // Don't echo - breaks JSON response!
 }
 
 try {
