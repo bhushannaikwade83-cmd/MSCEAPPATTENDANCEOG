@@ -2449,19 +2449,30 @@ async def upload_attendance_photo(
         # Use web root directly
         base_dir = "/home/digitrix/public_html/attendance-photos"
 
+        print(f'🔍 [DEBUG] START SAVE PROCESS')
+        print(f'   Base dir: {base_dir}')
+        print(f'   Base dir exists: {os.path.exists(base_dir)}')
+        print(f'   Institute ID: {institute_id}')
+        print(f'   SR No: {sr_no}')
+        print(f'   Date: {date}')
+
         # Full path: attendance-photos/{institute_id}/{sr_no}/{date}/
         photo_dir = os.path.join(base_dir, institute_id, sr_no, date)
 
+        print(f'   📁 Full photo dir: {photo_dir}')
+
         # Create directories recursively
         try:
-            print(f'   📁 Photo dir: {photo_dir}')
-
-            # Create all directories recursively (auto-create institute/sr_no/date folders)
+            print(f'   🔨 Creating directories...')
             os.makedirs(photo_dir, exist_ok=True)
-            print(f'   ✅ Directory created/exists')
+            print(f'   ✅ Directories created')
+            print(f'   📋 Dir exists now: {os.path.exists(photo_dir)}')
+            print(f'   📋 Dir writable: {os.access(photo_dir, os.W_OK)}')
 
         except Exception as dir_err:
-            print(f'   ❌ Directory creation failed: {dir_err}')
+            print(f'   ❌ Directory creation FAILED: {dir_err}')
+            import traceback
+            print(traceback.format_exc())
             raise
 
         # Generate filename: entry_143022.jpg (sr_no is in folder path)
@@ -2470,7 +2481,7 @@ async def upload_attendance_photo(
         filepath = os.path.join(photo_dir, filename)
 
         print(f'   📝 Filename: {filename}')
-        print(f'   📝 Full path: {filepath}')
+        print(f'   📝 Full filepath: {filepath}')
 
         # Read and save photo
         contents = await photo.read()
@@ -2478,26 +2489,37 @@ async def upload_attendance_photo(
         print(f'   📦 File size: {file_size_kb:.1f}KB')
 
         try:
+            print(f'   💾 Writing to disk...')
             with open(filepath, "wb") as f:
                 bytes_written = f.write(contents)
                 print(f'   ✍️  Wrote {bytes_written} bytes')
         except IOError as io_err:
-            print(f'   ❌ IO Error writing file: {io_err}')
+            print(f'   ❌ IO ERROR: {io_err}')
+            import traceback
+            print(traceback.format_exc())
             raise
 
         # Verify file exists
+        print(f'   🔍 Verifying file...')
         if not os.path.exists(filepath):
-            print(f'   ❌ File NOT found after write!')
+            print(f'   ❌ FILE NOT FOUND after write!')
             print(f'   📋 Directory contents: {os.listdir(photo_dir)}')
-            raise Exception(f'File not saved! Path: {filepath}')
+            print(f'   📋 Dir listing:')
+            for item in os.listdir(photo_dir):
+                print(f'       - {item}')
+            raise Exception(f'File NOT saved! Path: {filepath}')
 
         file_stat = os.stat(filepath)
-        print(f'   ✅ File verified: {file_stat.st_size} bytes on disk')
-        print(f'   ✅ Saved: {filename} ({file_size_kb:.1f}KB)')
+        print(f'   ✅ File VERIFIED: {file_stat.st_size} bytes on disk')
+        print(f'   ✅ File path: {filepath}')
 
         # List directory to confirm
         dir_contents = os.listdir(photo_dir)
         print(f'   📋 Directory now has {len(dir_contents)} files')
+        for item in dir_contents:
+            print(f'       - {item}')
+
+        print(f'🔍 [DEBUG] SAVE COMPLETE ✅')
 
         # Generate public URL
         # Pattern: https://digitrixmedia.com/attendance-photos/99099/990/2026-08-21/entry_143022.jpg
