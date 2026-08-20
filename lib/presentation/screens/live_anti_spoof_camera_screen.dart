@@ -558,47 +558,43 @@ class _LiveAntiSpoofCameraScreenState extends State<LiveAntiSpoofCameraScreen> {
         return;
       }
 
-      // 📸 STEP 1: Compress and upload photo to B2
+      // ⚡ STEP 1 + 2: Photo upload AND backend call in PARALLEL!
+      print('🚀 [PARALLEL] Starting photo upload and backend queue in parallel...');
+
+      final nowUtc = DateTime.now().toUtc();
       String? photoUrl;
       var photoTotalMs = 0;
-      try {
-        print('📸 [PHOTO] Compressing and uploading photo to B2...');
-        final photoUploadStart = DateTime.now();
-        final photoFile = File(photoPath);
-        if (photoFile.existsSync()) {
-          photoUrl = await AttendancePhotoService.uploadAttendancePhoto(
-            photoFile: photoFile,
-            srNo: srNo,
-            studentName: _matchedStudentName,
-            instituteId: widget.instituteId,
-            recordType: recordType,
-          );
-          photoTotalMs = DateTime.now().difference(photoUploadStart).inMilliseconds;
-          print('   ✅ [PHOTO] Complete (${photoTotalMs}ms)');
-        }
-      } catch (e) {
-        print('   ⚠️ Photo upload failed: $e');
-        photoUrl = null;
-      }
 
-      // 💾 STEP 2: Send to backend (NO WAIT - fire and forget!)
-      print('📋 [BACKEND] Queuing attendance in background (async)...');
+      // Start both operations in parallel
+      final parallelStart = DateTime.now();
+      final photoUploadFuture = _uploadPhotoToB2(
+        photoPath: photoPath,
+        srNo: srNo,
+        recordType: recordType,
+      );
 
-      // 🔧 Send UTC time to backend (convert IST back to UTC)
-      final nowUtc = DateTime.now().toUtc();
-
-      // ⚡ RETURN IMMEDIATELY - don't wait for backend!
-      // The queueAttendance function now returns instantly with temp ID
-      final backendResponse = await backendBatchService.queueAttendance(
+      final backendQueueFuture = backendBatchService.queueAttendance(
         srNo: srNo,
         instituteId: widget.instituteId,
         recordType: recordType,
         markedTime: nowUtc.toIso8601String(),
         remark: '',
-        photoUrl: photoUrl,
+        photoUrl: null, // Will update after photo uploads
         studentName: _matchedStudentName,
         similarityScore: _similarityScore,
       );
+
+      // Wait for both to complete
+      final results = await Future.wait([photoUploadFuture, backendQueueFuture]);
+      final parallelMs = DateTime.now().difference(parallelStart).inMilliseconds;
+
+      photoUrl = results[0] as String?;
+      photoTotalMs = parallelMs; // Approximate (parallel time)
+      final backendResponse = results[1] as Map<String, dynamic>;
+
+      print('✅ [PARALLEL] Complete in ${parallelMs}ms (photo upload done)');
+      print('   📸 Photo: ${photoUrl != null ? "✓" : "✗"}');
+      print('   📋 Backend: queued');
 
       try {
         // Check if successful (should always be true since we return immediately)
@@ -700,6 +696,34 @@ class _LiveAntiSpoofCameraScreenState extends State<LiveAntiSpoofCameraScreen> {
     } catch (e) {
       print('❌ [SAVE] Error saving attendance: $e');
       print('📍 [SAVE] Stack: ${StackTrace.current}');
+    }
+  }
+
+  /// Helper: Upload photo to B2 (for parallel execution)
+  Future<String?> _uploadPhotoToB2({
+    required String photoPath,
+    required String srNo,
+    required String recordType,
+  }) async {
+    try {
+      final photoUploadStart = DateTime.now();
+      final photoFile = File(photoPath);
+      if (!photoFile.existsSync()) return null;
+
+      final photoUrl = await AttendancePhotoService.uploadAttendancePhoto(
+        photoFile: photoFile,
+        srNo: srNo,
+        studentName: _matchedStudentName,
+        instituteId: widget.instituteId,
+        recordType: recordType,
+      );
+
+      final uploadMs = DateTime.now().difference(photoUploadStart).inMilliseconds;
+      print('   ✅ [PHOTO] Uploaded in ${uploadMs}ms');
+      return photoUrl;
+    } catch (e) {
+      print('   ⚠️ [PHOTO] Upload failed: $e');
+      return null;
     }
   }
 
