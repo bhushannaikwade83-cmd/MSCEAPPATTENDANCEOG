@@ -1653,16 +1653,9 @@ async def register_multi_angle_face(
         embedding_time = time.time() - start_time
         live_logger.add_log('success', f"✅ Embedding generation complete: {embedding_time:.2f}s")
 
-        # ⚡ RETURN IMMEDIATELY (don't wait for Supabase save)
-        # Schedule background task to save to Supabase (runs after response is sent)
-        background_tasks.add_task(
-            _save_registration_async,
-            student_id=student_id,
-            institute_id=institute_id,
-            roll_number=roll_number,
-            name=name,
-            embeddings_result=embeddings_result,
-        )
+        # ⚡ RETURN IMMEDIATELY (Flutter app saves to Supabase)
+        # Note: Flutter app handles all database saves (embeddings + photo_url)
+        # Backend just returns embeddings for immediate display
 
         live_logger.add_log('success', f"⚡ FAST RESPONSE SENT: {embedding_time:.2f}s | Background save in progress...")
         live_logger.stats['successful_requests'] += 1
