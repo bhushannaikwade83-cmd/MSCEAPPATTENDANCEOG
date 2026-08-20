@@ -2509,6 +2509,42 @@ async def upload_attendance_photo(
             "traceback": error_trace,
         }
 
+@app.get("/attendance-photos/{institute_id}/{date}/{filename}")
+async def serve_attendance_photo(institute_id: str, date: str, filename: str):
+    """
+    ✅ Serve attendance photos directly from backend
+
+    Path: /attendance-photos/{institute_id}/{date}/{filename}
+    Example: /attendance-photos/99099/2026-08-20/990_entry_182836.jpg
+    """
+    try:
+        filepath = f"/home/digitrix/public_html/attendance-photos/{institute_id}/{date}/{filename}"
+
+        print(f'📸 [SERVE] Requesting: {filename}')
+        print(f'   Path: {filepath}')
+
+        # Check if file exists
+        if not os.path.exists(filepath):
+            print(f'   ❌ File not found: {filepath}')
+            raise HTTPException(status_code=404, detail="Photo not found")
+
+        # Check file size
+        file_size = os.path.getsize(filepath)
+        print(f'   ✅ File exists: {file_size} bytes')
+
+        # Serve file
+        return FileResponse(
+            filepath,
+            media_type="image/jpeg",
+            filename=filename,
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f'   ❌ Error: {e}')
+        raise HTTPException(status_code=500, detail=str(e))
+
 @app.get("/api/debug/faiss-status")
 async def debug_faiss_status():
     """
