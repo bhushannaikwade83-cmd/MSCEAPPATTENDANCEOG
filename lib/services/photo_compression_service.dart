@@ -5,7 +5,7 @@ import 'package:flutter/foundation.dart' show compute, kDebugMode, debugPrint;
 import 'package:image/image.dart' as img;
 
 /// Tunables shared with the isolate [must be compile-time for worker].
-const int _maxKb = 95;
+const int _maxKb = 50; // Reduced from 95 for faster uploads
 
 /// CPU-heavy work runs in a [compute] isolate so the UI thread keeps scrolling/animating.
 Uint8List _compressPhotoBytesWorker(Uint8List photoBytes) {
@@ -20,27 +20,30 @@ Uint8List _compressPhotoBytesWorker(Uint8List photoBytes) {
     // technically JPEGs but have problematic SOS markers or orientation data.
     final normalized = img.bakeOrientation(image);
 
-    var quality = 90;
+    // Start with lower quality for faster uploads (50KB target)
+    var quality = 75;
     var compressed = img.encodeJpg(normalized, quality: quality);
 
-    while (compressed.length > _maxKb * 1024 && quality > 35) {
+    // Step 1: Reduce quality aggressively
+    while (compressed.length > _maxKb * 1024 && quality > 30) {
       quality -= 5;
       compressed = img.encodeJpg(normalized, quality: quality);
     }
 
+    // Step 2: If still too large, scale down resolution
     if (compressed.length > _maxKb * 1024) {
-      var scale = 0.7;
-      while (compressed.length > _maxKb * 1024 && scale > 0.15) {
+      var scale = 0.85; // Start scaling from 85% (more aggressive)
+      while (compressed.length > _maxKb * 1024 && scale > 0.25) {
         final width = (normalized.width * scale).toInt();
         final height = (normalized.height * scale).toInt();
         var resized = img.copyResize(normalized, width: width, height: height);
-        var resizeQuality = 70;
+        var resizeQuality = 60; // Lower starting quality for resized
         compressed = img.encodeJpg(resized, quality: resizeQuality);
-        while (compressed.length > _maxKb * 1024 && resizeQuality > 35) {
+        while (compressed.length > _maxKb * 1024 && resizeQuality > 30) {
           resizeQuality -= 5;
           compressed = img.encodeJpg(resized, quality: resizeQuality);
         }
-        scale -= 0.08;
+        scale -= 0.10; // Larger scale steps (more aggressive)
       }
     }
 
@@ -64,12 +67,12 @@ String _createTinyThumbnailWorker(Uint8List photoBytes) {
 }
 
 /// Photo Compression Service
-/// Compresses photos to stay safely under 100KB while keeping enough detail
-/// for attendance evidence and face-related workflows.
+/// Compresses photos to stay under 50KB for fast uploads while keeping
+/// enough detail for attendance evidence and face-related workflows.
 class PhotoCompressionService {
-  static const int MIN_KB = 35;
-  static const int MAX_KB = 95;
-  static const int TARGET_KB = 70;
+  static const int MIN_KB = 25; // Reduced from 35
+  static const int MAX_KB = 50; // Reduced from 95 (for fast uploads)
+  static const int TARGET_KB = 40; // Reduced from 70
 
   /// Compress photo bytes directly to target size (50-100KB)
   static Future<Uint8List> compressPhotoBytes(Uint8List photoBytes) async {
