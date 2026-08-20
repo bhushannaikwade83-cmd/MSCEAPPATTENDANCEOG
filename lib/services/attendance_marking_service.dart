@@ -11,9 +11,11 @@ class AttendanceMarkingService {
     required String instituteId,
   }) async {
     try {
+      final startTime = DateTime.now();
       debugPrint('🔍 Matching face embedding against registered students...');
 
       // Fetch all registered students for this institute (all 3 angles)
+      final dbQueryStart = DateTime.now();
       final students = await appDb
           .from('students')
           .select('id, sr_no, fname, lname, mname, institute_id, face_embedding_front, face_embedding_left, face_embedding_right')
@@ -28,12 +30,16 @@ class AttendanceMarkingService {
         };
       }
 
+      final dbQueryEnd = DateTime.now();
+      final dbQueryMs = dbQueryEnd.difference(dbQueryStart).inMilliseconds;
+      debugPrint('⏱️  DB Query took: ${dbQueryMs}ms');
       debugPrint('📊 Checking ${students.length} registered students (with 3-angle embeddings)...');
 
       double bestScore = 0;
       Map<String, dynamic>? bestMatch;
 
       // Compare with each registered student (using MAX of 3 angles)
+      final comparisonStart = DateTime.now();
       for (final student in students) {
         try {
           final frontEmb = student['face_embedding_front'] as String?;
@@ -72,6 +78,10 @@ class AttendanceMarkingService {
           continue;
         }
       }
+
+      final comparisonEnd = DateTime.now();
+      final comparisonMs = comparisonEnd.difference(comparisonStart).inMilliseconds;
+      debugPrint('⏱️  Embedding comparison took: ${comparisonMs}ms');
 
       // Load threshold from app_settings (dynamic) or use default 0.70
       double MATCH_THRESHOLD = 0.70;
@@ -159,6 +169,7 @@ class AttendanceMarkingService {
     required String recordType, // 'entry' or 'exit'
   }) async {
     try {
+      final saveStart = DateTime.now();
       debugPrint('💾 Saving $recordType record for $studentName...');
 
       final attendanceDate = timestamp.toIso8601String().split('T')[0]; // YYYY-MM-DD
@@ -180,6 +191,10 @@ class AttendanceMarkingService {
       if (result.isEmpty) {
         throw Exception('Failed to create attendance record');
       }
+
+      final saveEnd = DateTime.now();
+      final saveMs = saveEnd.difference(saveStart).inMilliseconds;
+      debugPrint('⏱️  Database save took: ${saveMs}ms');
 
       final emoji = recordType == 'entry' ? '🚪➡️' : '🚪⬅️';
       debugPrint('✅ $emoji $recordType marked for ${result[0]['sr_no']} at ${timestamp.hour}:${timestamp.minute}');

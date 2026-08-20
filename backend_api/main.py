@@ -4,7 +4,7 @@ Architecture: RetinaFace (detection) + ArcFace (embedding) + FAISS (vector searc
 Supports 200,000+ students with high accuracy and fast search
 """
 
-from fastapi import FastAPI, HTTPException, UploadFile, File, Form, Request, status
+from fastapi import FastAPI, HTTPException, UploadFile, File, Form, Request, status, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from dashboard import dashboard_app, log_request, log_event
 from fastapi.responses import FileResponse, JSONResponse
@@ -23,6 +23,10 @@ import os
 import tempfile
 import traceback
 from datetime import datetime
+import asyncio
+from collections import deque
+from fastapi.responses import StreamingResponse
+import json
 
 _face_service_import_error: Optional[Exception] = None
 _vector_db_import_error: Optional[Exception] = None
@@ -49,6 +53,47 @@ except Exception as exc:
 # Setup logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+# 📊 LIVE LOGS SYSTEM: Store recent logs for dashboard
+class LiveLogger:
+    def __init__(self, max_logs=500):
+        self.logs = deque(maxlen=max_logs)
+        self.subscribers = []  # WebSocket/SSE clients
+        self.stats = {
+            'total_requests': 0,
+            'successful_requests': 0,
+            'failed_requests': 0,
+            'active_processing': 0,
+        }
+
+    def add_log(self, level, message):
+        """Add log entry with timestamp"""
+        timestamp = datetime.now().strftime('%H:%M:%S.%f')[:-3]
+        log_entry = {
+            'timestamp': timestamp,
+            'level': level.upper(),
+            'message': message,
+        }
+        self.logs.appendleft(log_entry)
+        return log_entry
+
+    def get_logs(self, limit=100):
+        """Get recent logs"""
+        return list(self.logs)[:limit]
+
+    def get_stats(self):
+        """Get current statistics"""
+        return {
+            'total_requests': self.stats['total_requests'],
+            'successful_requests': self.stats['successful_requests'],
+            'failed_requests': self.stats['failed_requests'],
+            'active_processing': self.stats['active_processing'],
+            'success_rate': round(
+                (self.stats['successful_requests'] / max(self.stats['total_requests'], 1)) * 100
+            ),
+        }
+
+live_logger = LiveLogger()
 
 # ⚡ EMBEDDING CACHE: Lazy-load per institute (not all 200K at once!)
 # Each institute's embeddings cached until timeout (300s = 5min)
@@ -1398,9 +1443,150 @@ async def verify_face_info():
         }
     }
 
-# 🔥 NEW ENDPOINT: Multi-angle registration (3 photos for front, left, right)
+# 📊 LIVE LOGS API ENDPOINTS
+
+@app.get("/api/v1/logs")
+async def get_logs():
+    """Get recent logs (for initial dashboard load)"""
+    return {
+        'success': True,
+        'logs': live_logger.get_logs(100),
+        'stats': live_logger.get_stats(),
+    }
+
+@app.get("/api/v1/logs/stream")
+async def stream_logs():
+    """Server-Sent Events (SSE) endpoint for live log streaming"""
+    async def event_generator():
+        # Send initial data
+        yield f"data: {json.dumps({'type': 'init', 'logs': live_logger.get_logs(50), 'stats': live_logger.get_stats()})}\n\n"
+
+        # Keep connection alive and send updates
+        last_log_count = len(live_logger.logs)
+        while True:
+            await asyncio.sleep(0.5)  # Check for new logs every 500ms
+
+            current_log_count = len(live_logger.logs)
+            if current_log_count > last_log_count:
+                # New logs added
+                new_logs = list(live_logger.logs)[:current_log_count - last_log_count]
+                yield f"data: {json.dumps({'type': 'new_logs', 'logs': new_logs, 'stats': live_logger.get_stats()})}\n\n"
+                last_log_count = current_log_count
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+            "Connection": "keep-alive",
+        }
+    )
+
+@app.get("/api/v1/stats")
+async def get_stats():
+    """Get current processing statistics"""
+    return {
+        'success': True,
+        'stats': live_logger.get_stats(),
+    }
+
+# ⚡ BACKGROUND TASK: Save registration to Supabase (async, doesn't block user)
+async def _save_registration_async(
+    student_id: str,
+    institute_id: str,
+    roll_number: str,
+    name: str,
+    embeddings_result: dict,
+):
+    """
+    Save registration embeddings to Supabase in background (non-blocking)
+    This runs AFTER response is sent to user
+
+    VERIFICATION CHECKS:
+    1. ✅ Student exists in Supabase
+    2. ✅ Institute exists in Supabase
+    """
+    try:
+        live_logger.add_log('info', f"🔄 [BACKGROUND] Saving registration for {roll_number} to Supabase...")
+
+        supabase = _get_supabase_client()
+
+        # ✅ VERIFICATION 1: Check student exists
+        live_logger.add_log('info', f"  🔍 Verifying student exists...")
+        student_check = supabase.table('students').select('id, sr_no, fname, lname, face_registration_status').eq('id', student_id).maybeSingle().execute()
+
+        if not student_check.data:
+            live_logger.add_log('error', f"    ❌ Student ID {student_id} NOT FOUND in Supabase")
+            raise Exception(f"Student {student_id} not found in Supabase")
+
+        # Get student details
+        student_data = student_check.data
+        stored_sr_no = student_data.get('sr_no')
+        stored_name = f"{student_data.get('fname', '')} {student_data.get('lname', '')}".strip()
+
+        live_logger.add_log('success', f"    ✅ Student FOUND: {stored_sr_no} ({stored_name})")
+        live_logger.add_log('info', f"       Current status: {student_data.get('face_registration_status', 'unknown')}")
+
+        # ✅ VERIFICATION 1B: Check for duplicate SR-NO in same institute
+        if stored_sr_no:
+            live_logger.add_log('info', f"  🔍 Checking for duplicate SR-NO in institute...")
+            duplicate_check = supabase.table('students').select('id, fname, lname').eq('institute_id', institute_id).eq('sr_no', stored_sr_no).execute()
+
+            if duplicate_check.data:
+                duplicate_count = len(duplicate_check.data)
+                if duplicate_count > 1:
+                    # Multiple students with same SR-NO!
+                    other_students = [s for s in duplicate_check.data if s['id'] != student_id]
+                    live_logger.add_log('warning', f"    ⚠️ DUPLICATE ALERT: {duplicate_count} students with SR-NO '{stored_sr_no}'!")
+                    for dup in other_students:
+                        dup_name = f"{dup.get('fname', '')} {dup.get('lname', '')}".strip()
+                        live_logger.add_log('warning', f"       • {dup['id']}: {dup_name}")
+                else:
+                    live_logger.add_log('success', f"    ✅ SR-NO is unique in institute")
+            else:
+                live_logger.add_log('warning', f"    ⚠️ Could not verify SR-NO uniqueness")
+        else:
+            live_logger.add_log('info', f"  ℹ️ No SR-NO set for this student")
+
+        # ✅ VERIFICATION 2: Check institute exists
+        live_logger.add_log('info', f"  🔍 Verifying institute exists...")
+        inst_check = supabase.table('institutes').select('id, name').eq('id', institute_id).maybeSingle().execute()
+
+        if not inst_check.data:
+            live_logger.add_log('error', f"    ❌ Institute ID {institute_id} NOT FOUND in Supabase")
+            raise Exception(f"Institute {institute_id} not found in Supabase")
+
+        institute_name = inst_check.data.get('name', 'Unknown')
+        live_logger.add_log('success', f"    ✅ Institute FOUND: {institute_name}")
+
+        # ✅ ALL VERIFICATIONS PASSED - Save embeddings
+        live_logger.add_log('info', f"  💾 Saving 3×512D embeddings to Supabase...")
+
+        response = supabase.table('students').update({
+            'face_embedding_front': json.dumps(embeddings_result.get('face_embedding_front', [])),
+            'face_embedding_left': json.dumps(embeddings_result.get('face_embedding_left', [])),
+            'face_embedding_right': json.dumps(embeddings_result.get('face_embedding_right', [])),
+            'face_registration_status': 'registered',
+            'face_registered_at': datetime.now().isoformat(),
+            'updated_at': datetime.now().isoformat(),
+        }).eq('id', student_id).execute()
+
+        if not response.data:
+            raise Exception(f"Failed to update student record")
+
+        live_logger.add_log('success', f"✅ [BACKGROUND] Registration saved!")
+        live_logger.add_log('info', f"    Student: {stored_sr_no} | Institute: {institute_name} | Status: registered")
+
+    except Exception as e:
+        live_logger.add_log('error', f"❌ [BACKGROUND] Failed to save: {str(e)}")
+        # Don't raise - already sent response to user
+
+
+# 🔥 NEW ENDPOINT: Multi-angle registration (3 photos for front, left, right) - ASYNC VERSION
 @app.post("/api/v1/register-multi-angle")
 async def register_multi_angle_face(
+    background_tasks: BackgroundTasks,
     front_photo: UploadFile = File(...),
     left_photo: UploadFile = File(...),
     right_photo: UploadFile = File(...),
@@ -1410,44 +1596,83 @@ async def register_multi_angle_face(
     name: str = Form(...),
 ):
     """
-    Register student with 3 photos (front, left, right) - generates 3 embeddings + average
+    ⚡ ASYNC Registration: Returns immediately after embedding generation
 
-    Returns embeddings for each angle so Flutter can save to Supabase
+    Pipeline (FAST - User sees success in 2-3 seconds):
+    1. Process 3 photos → Generate 512-D embeddings → Return response to app (2-3 sec) ✅
+    2. [BACKGROUND] Save to Supabase (happens silently, 5-10 sec) - User doesn't wait
+
+    Returns embeddings for each angle so Flutter can display success immediately
     """
     try:
+        start_time = time.time()
+        live_logger.stats['total_requests'] += 1
+        live_logger.stats['active_processing'] += 1
+
         face_service_instance = _ensure_face_service()
         if not face_service_instance.initialized:
             await face_service_instance.initialize()
 
-        logger.info(f"📱 Multi-angle registration for {roll_number} ({name})")
+        # Log to live dashboard
+        live_logger.add_log('info', f"📱 Multi-angle registration for {roll_number} ({name})")
 
         embeddings_result = {}
 
-        # Process 3 photos
+        # Process 3 photos (FAST - only embedding generation)
         for angle, photo_file in [("front", front_photo), ("left", left_photo), ("right", right_photo)]:
             image_data = await photo_file.read()
             if len(image_data) == 0:
+                live_logger.add_log('error', f"❌ Empty {angle} photo")
                 raise HTTPException(status_code=400, detail=f"Empty {angle} photo")
+
+            file_size_mb = len(image_data) / (1024 * 1024)
+            live_logger.add_log('info', f"  ✅ Received {angle} photo: {file_size_mb:.1f} MB")
 
             embedding = await face_service_instance.generate_embedding(image_data)
             if embedding is None:
+                live_logger.add_log('error', f"❌ No face detected in {angle} photo")
                 raise HTTPException(status_code=400, detail=f"No face detected in {angle} photo")
 
             embeddings_result[f"face_embedding_{angle}"] = embedding.tolist()
-            logger.info(f"  ✅ Generated embedding for {angle} angle (512-dim)")
+            live_logger.add_log('success', f"  ✅ Generated embedding for {angle} angle (512-dim)")
 
-        logger.info(f"✅ Multi-angle registration complete for {roll_number} (3 angles: front, left, right)")
+        embedding_time = time.time() - start_time
+        live_logger.add_log('success', f"✅ Embedding generation complete: {embedding_time:.2f}s")
+
+        # ⚡ RETURN IMMEDIATELY (don't wait for Supabase save)
+        # Schedule background task to save to Supabase (runs after response is sent)
+        background_tasks.add_task(
+            _save_registration_async,
+            student_id=student_id,
+            institute_id=institute_id,
+            roll_number=roll_number,
+            name=name,
+            embeddings_result=embeddings_result,
+        )
+
+        live_logger.add_log('success', f"⚡ FAST RESPONSE SENT: {embedding_time:.2f}s | Background save in progress...")
+        live_logger.stats['successful_requests'] += 1
+        live_logger.stats['active_processing'] = max(0, live_logger.stats['active_processing'] - 1)
 
         return {
             "success": True,
             "message": f"Face registered for {roll_number}",
-            "embeddings": embeddings_result,  # Return embeddings for Flutter to save to Supabase
+            "embeddings": embeddings_result,  # Return embeddings for Flutter to display immediately
+            "timing": {
+                "embedding_generation_sec": round(embedding_time, 2),
+                "note": "Supabase save happening in background (silent)"
+            }
         }
 
-    except HTTPException:
+    except HTTPException as e:
+        live_logger.stats['failed_requests'] += 1
+        live_logger.stats['active_processing'] = max(0, live_logger.stats['active_processing'] - 1)
+        live_logger.add_log('error', f"❌ Registration error: {e.detail}")
         raise
     except Exception as e:
-        logger.error(f"❌ Multi-angle registration error: {e}")
+        live_logger.stats['failed_requests'] += 1
+        live_logger.stats['active_processing'] = max(0, live_logger.stats['active_processing'] - 1)
+        live_logger.add_log('error', f"❌ Multi-angle registration error: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/api/v1/verify", response_model=VerifyResponse)
