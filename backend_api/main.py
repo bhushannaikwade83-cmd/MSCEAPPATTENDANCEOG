@@ -2421,6 +2421,75 @@ async def mark_attendance_auto(
             "record_type": None
         }
 
+@app.post("/api/upload-attendance-photo")
+async def upload_attendance_photo(
+    photo: UploadFile = File(...),
+    sr_no: str = Form(...),
+    student_name: str = Form(...),
+    institute_id: str = Form(...),
+    record_type: str = Form(...),
+    date: str = Form(...),
+):
+    """
+    ✅ Upload attendance photo to SERVER (not B2!)
+
+    Saves to: /home/digitrix/public_html/attendance-photos/{institute_id}/{date}/{filename}
+    Returns: Public URL for the photo
+    """
+    try:
+        upload_start = time.time()
+
+        print(f'📸 [UPLOAD] Photo for {student_name} ({sr_no}) - {record_type}')
+        print(f'   Date: {date}, Institute: {institute_id}')
+
+        # Create directory structure
+        base_dir = "/home/digitrix/public_html"
+        photo_dir = os.path.join(base_dir, "attendance-photos", institute_id, date)
+
+        os.makedirs(photo_dir, exist_ok=True)
+        print(f'   📁 Directory: {photo_dir}')
+
+        # Generate filename: SR123_entry_143022.jpg
+        time_str = datetime.now().strftime("%H%M%S")
+        filename = f"{sr_no}_{record_type}_{time_str}.jpg"
+        filepath = os.path.join(photo_dir, filename)
+
+        # Read and save photo
+        contents = await photo.read()
+        with open(filepath, "wb") as f:
+            f.write(contents)
+
+        file_size_kb = len(contents) / 1024
+        print(f'   ✅ Saved: {filename} ({file_size_kb:.1f}KB)')
+
+        # Generate public URL
+        # Pattern: https://api.digitrixmedia.com/attendance-photos/90999/2024-01-15/SR123_entry_143022.jpg
+        photo_url = f"https://api.digitrixmedia.com/attendance-photos/{institute_id}/{date}/{filename}"
+        print(f'   🌐 URL: {photo_url}')
+
+        upload_ms = (time.time() - upload_start) * 1000
+        print(f'   ⏱️  Upload complete in {upload_ms:.0f}ms')
+
+        return {
+            "success": True,
+            "photo_url": photo_url,
+            "filename": filename,
+            "sr_no": sr_no,
+            "record_type": record_type,
+            "date": date,
+            "file_size_kb": round(file_size_kb, 1),
+        }
+
+    except Exception as e:
+        print(f'❌ [UPLOAD] Error: {e}')
+        import traceback
+        print(traceback.format_exc())
+
+        return {
+            "success": False,
+            "error": str(e),
+        }
+
 @app.get("/api/debug/faiss-status")
 async def debug_faiss_status():
     """

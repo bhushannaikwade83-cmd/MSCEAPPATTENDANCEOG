@@ -1,13 +1,16 @@
 import 'dart:io';
 import 'dart:typed_data';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
+import 'package:intl/intl.dart';
 import 'package:image/image.dart' as img;
-import './b2b_storage_service.dart';
 
 class AttendancePhotoService {
-  // Backblaze B2 bucket structure: DEC-2026/GCC/ATTENDANCE/{institute_id}/{student_name}/
-  static const int MAX_SIZE_KB = 100;
+  // ✅ Upload to YOUR SERVER (not B2!)
+  static const String SERVER_URL = "https://api.digitrixmedia.com";
+  static const int MAX_SIZE_KB = 50; // Compress aggressively
 
-  /// Compress and upload attendance photo to B2 (using working B2B service)
+  /// Upload attendance photo to SERVER (free unlimited storage!)
   static Future<String?> uploadAttendancePhoto({
     required File photoFile,
     required String srNo,
@@ -16,42 +19,70 @@ class AttendancePhotoService {
     required String recordType, // 'entry' or 'exit'
   }) async {
     try {
-      print('📸 [PHOTO] Starting compression for $srNo ($recordType)...');
+      print('📸 [PHOTO] Starting upload for $srNo ($recordType)...');
 
-      // 1. Read original file
+      // 1. Read and compress
       final bytes = await photoFile.readAsBytes();
-      print('   Original size: ${(bytes.length / 1024).toStringAsFixed(1)} KB');
+      print('   Original: ${(bytes.length / 1024).toStringAsFixed(1)} KB');
 
-      // 2. Compress image
       final compressedBytes = await _compressImage(bytes);
-      final compressedKB = compressedBytes.length / 1024;
-      print('   Compressed size: ${compressedKB.toStringAsFixed(1)} KB');
+      print('   Compressed: ${(compressedBytes.length / 1024).toStringAsFixed(1)} KB');
 
-      if (compressedBytes.length > MAX_SIZE_KB * 1024) {
-        print('   ⚠️ Still over ${MAX_SIZE_KB}KB, compressing more...');
-        final ultraCompressed = await _compressImage(compressedBytes, quality: 60);
-        print('   Final size: ${(ultraCompressed.length / 1024).toStringAsFixed(1)} KB');
-      }
+      // 2. Upload to SERVER
+      print('   📤 Uploading to SERVER...');
+      final photoUploadStart = DateTime.now();
 
-      // 3. Upload to B2 using working B2BStorageService
-      // Path: DEC-2026/GCC/ATTENDANCE/{institute_id}/{student_name}/{entry/exit}_{sr_no}_{timestamp}.jpg
-      final fileName = _generateFileName(srNo, recordType);
-      final filePath = 'DEC-2026/GCC/ATTENDANCE/$instituteId/$studentName/$fileName';
-
-      print('   📤 Uploading to B2: $filePath');
-
-      final publicUrl = await B2BStorageService.uploadFile(
-        filePath,
-        compressedBytes,
-        contentType: 'image/jpeg',
+      var request = http.MultipartRequest(
+        'POST',
+        Uri.parse('$SERVER_URL/api/upload-attendance-photo'),
       );
 
-      print('   ✅ [PHOTO] Upload successful!');
-      print('   📷 URL: $publicUrl');
+      // Add metadata
+      request.fields['sr_no'] = srNo;
+      request.fields['student_name'] = studentName;
+      request.fields['institute_id'] = instituteId;
+      request.fields['record_type'] = recordType;
+      request.fields['date'] = DateFormat('yyyy-MM-dd').format(DateTime.now());
 
-      return publicUrl;
+      // Add compressed photo
+      request.files.add(
+        http.MultipartFile.fromBytes(
+          'photo',
+          compressedBytes,
+          filename: '${srNo}_${recordType}_${DateTime.now().millisecondsSinceEpoch}.jpg',
+        ),
+      );
+
+      // Send request
+      var response = await request.send().timeout(
+        const Duration(seconds: 30),
+        onTimeout: () => throw Exception('Upload timeout after 30s'),
+      );
+
+      final uploadMs = DateTime.now().difference(photoUploadStart).inMilliseconds;
+
+      if (response.statusCode != 200) {
+        var errorBody = await response.stream.bytesToString();
+        print('   ❌ Server error: ${response.statusCode}');
+        print('   $errorBody');
+        return null;
+      }
+
+      // Parse response
+      var responseData = await response.stream.toBytes();
+      var result = json.decode(utf8.decode(responseData));
+
+      if (result['success'] == true) {
+        final photoUrl = result['photo_url'] as String?;
+        print('   ✅ Uploaded in ${uploadMs}ms');
+        print('   📷 URL: $photoUrl');
+        return photoUrl;
+      } else {
+        print('   ❌ Upload failed: ${result['error']}');
+        return null;
+      }
     } catch (e) {
-      print('   ❌ [PHOTO] Upload failed: $e');
+      print('   ❌ Exception: $e');
       return null;
     }
   }
@@ -91,16 +122,11 @@ class AttendancePhotoService {
     return '${recordType}_${srNo}_$timestamp.jpg';
   }
 
-  /// Delete old attendance photos (use B2BStorageService.deleteAttendancePhoto instead)
+  /// Delete old attendance photos (server-based, no deletion needed)
   static Future<void> deletePhotoIfExists({
     required String objectPath,
   }) async {
-    try {
-      if (objectPath.isEmpty) return;
-      await B2BStorageService.deleteAttendancePhoto(objectPath);
-      print('🗑️ Deleted old photo: $objectPath');
-    } catch (e) {
-      print('⚠️ Could not delete photo: $e');
-    }
+    // Photos stored on server - no need to delete
+    print('ℹ️ Photos stored on server - no deletion needed');
   }
 }
