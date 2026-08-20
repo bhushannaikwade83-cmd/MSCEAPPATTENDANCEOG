@@ -581,37 +581,38 @@ class _LiveAntiSpoofCameraScreenState extends State<LiveAntiSpoofCameraScreen> {
         photoUrl = null;
       }
 
-      // 💾 STEP 2: Send to backend and WAIT for response
-      print('📋 [BACKEND] Sending attendance to backend...');
-      try {
-        // 🔧 Send UTC time to backend (convert IST back to UTC)
-        final nowUtc = DateTime.now().toUtc();
-        final backendStartTime = DateTime.now();
-        final backendResponse = await backendBatchService.queueAttendance(
-          srNo: srNo,
-          instituteId: widget.instituteId,
-          recordType: recordType,
-          markedTime: nowUtc.toIso8601String(),
-          remark: '',
-          photoUrl: photoUrl,
-          studentName: _matchedStudentName,
-          similarityScore: _similarityScore,
-        );
-        final backendElapsedMs = DateTime.now().difference(backendStartTime).inMilliseconds;
+      // 💾 STEP 2: Send to backend (NO WAIT - fire and forget!)
+      print('📋 [BACKEND] Queuing attendance in background (async)...');
 
-        // Check if successful
+      // 🔧 Send UTC time to backend (convert IST back to UTC)
+      final nowUtc = DateTime.now().toUtc();
+
+      // ⚡ RETURN IMMEDIATELY - don't wait for backend!
+      // The queueAttendance function now returns instantly with temp ID
+      final backendResponse = await backendBatchService.queueAttendance(
+        srNo: srNo,
+        instituteId: widget.instituteId,
+        recordType: recordType,
+        markedTime: nowUtc.toIso8601String(),
+        remark: '',
+        photoUrl: photoUrl,
+        studentName: _matchedStudentName,
+        similarityScore: _similarityScore,
+      );
+
+      try {
+        // Check if successful (should always be true since we return immediately)
         if (backendResponse['success'] == true) {
-          print('✅ [BACKEND] Attendance marked successfully! (${backendElapsedMs}ms network round-trip)');
-          print('   Attendance ID: ${backendResponse['attendance_id']}');
+          print('✅ [FRONTEND] Attendance queued successfully!');
+          print('   Attendance ID (temp): ${backendResponse['attendance_id']}');
           print('   SR No: $srNo');
           print('   Student: $_matchedStudentName');
           print('   Type: $recordType');
           print('   Date: $today');
-          print('   Time: ${backendResponse['marked_time']}');
-          print('   Face Confidence: ${backendResponse['face_confidence']}%');
           print('   Photo URL: $photoUrl');
+          print('   (Backend save happening in background...)');
 
-          // Extract timing data from backend
+          // Extract timing data if provided
           final timing = backendResponse['timing'] as Map<String, dynamic>?;
           String timingDisplay = '';
           if (timing != null) {
@@ -621,23 +622,21 @@ class _LiveAntiSpoofCameraScreenState extends State<LiveAntiSpoofCameraScreen> {
             final simMs = (timing['similarities'] as num?)?.toDouble() ?? 0;
             final prepareMs = (timing['prepare_matrix'] as num?)?.toDouble() ?? 0;
 
-            timingDisplay = '\n⏱️ Backend: ${totalMs.toStringAsFixed(2)}s\n'
+            timingDisplay = '\n⏱️ Backend (async): ${totalMs.toStringAsFixed(2)}s\n'
                 '  🧠 Embedding: ${embeddingMs.toStringAsFixed(2)}s\n'
                 '  📚 Load: ${loadMs.toStringAsFixed(2)}s\n'
                 '  🔢 Prepare: ${prepareMs.toStringAsFixed(2)}s\n'
-                '  🔍 Match: ${simMs.toStringAsFixed(3)}s\n'
-                '🌐 Network: ${(backendElapsedMs / 1000).toStringAsFixed(2)}s';
+                '  🔍 Match: ${simMs.toStringAsFixed(3)}s';
 
             print('');
             print('═══════════════════════════════════════════');
-            print('⏱️  COMPLETE TIMING BREAKDOWN');
+            print('⏱️  BACKEND TIMING (saved in background)');
             print('═══════════════════════════════════════════');
             print('📊 Backend Processing: ${totalMs.toStringAsFixed(2)}s');
             print('   🧠 Embedding: ${embeddingMs.toStringAsFixed(2)}s (${((embeddingMs / totalMs) * 100).toStringAsFixed(0)}%)');
             print('   📚 Load embeddings: ${loadMs.toStringAsFixed(2)}s (${((loadMs / totalMs) * 100).toStringAsFixed(0)}%)');
             print('   🔢 Prepare matrix: ${prepareMs.toStringAsFixed(2)}s (${((prepareMs / totalMs) * 100).toStringAsFixed(0)}%)');
             print('   🔍 Similarities: ${simMs.toStringAsFixed(3)}s');
-            print('🌐 Network round-trip: ${(backendElapsedMs / 1000).toStringAsFixed(2)}s');
             print('═══════════════════════════════════════════');
             print('');
           }
