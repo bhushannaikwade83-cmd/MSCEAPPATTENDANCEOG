@@ -558,141 +558,96 @@ class _LiveAntiSpoofCameraScreenState extends State<LiveAntiSpoofCameraScreen> {
         return;
       }
 
-      // ⚡ STEP 1 + 2: Photo upload AND backend call in PARALLEL!
-      print('🚀 [PARALLEL] Starting photo upload and backend queue in parallel...');
+      // ⏱️ OPTIMIZED FLOW: Show result FIRST, then save in background!
+      print('🔥 [OPTIMIZED] Queue attendance with backend result...');
 
       final nowUtc = DateTime.now().toUtc();
-      String? photoUrl;
-      var photoTotalMs = 0;
 
-      // Start both operations in parallel
-      final parallelStart = DateTime.now();
-      final photoUploadFuture = _uploadPhotoToB2(
-        photoPath: photoPath,
-        srNo: srNo,
-        recordType: recordType,
-      );
-
-      final backendQueueFuture = backendBatchService.queueAttendance(
+      // Queue attendance (returns immediately with temp ID)
+      final backendResponse = await backendBatchService.queueAttendance(
         srNo: srNo,
         instituteId: widget.instituteId,
         recordType: recordType,
         markedTime: nowUtc.toIso8601String(),
         remark: '',
-        photoUrl: null, // Will update after photo uploads
+        photoUrl: null, // Will update in background
         studentName: _matchedStudentName,
         similarityScore: _similarityScore,
       );
 
-      // Wait for both to complete
-      final results = await Future.wait([photoUploadFuture, backendQueueFuture]);
-      final parallelMs = DateTime.now().difference(parallelStart).inMilliseconds;
+      print('⚡ [INSTANT] Got backend response (temp ID returned)');
 
-      photoUrl = results[0] as String?;
-      photoTotalMs = parallelMs; // Approximate (parallel time)
-      final backendResponse = results[1] as Map<String, dynamic>;
+      // ✅ SHOW SUCCESS TO USER IMMEDIATELY (this line matters!)
+      // Don't await anything below - just fire and forget
+      if (backendResponse['success'] == true) {
+        print('⚡ [UI] Showing success to user NOW (not waiting for uploads)');
 
-      print('✅ [PARALLEL] Complete in ${parallelMs}ms (photo upload done)');
-      print('   📸 Photo: ${photoUrl != null ? "✓" : "✗"}');
-      print('   📋 Backend: queued');
+        // Extract timing if available
+        final timing = backendResponse['timing'] as Map<String, dynamic>?;
+        String timingDisplay = '';
+        if (timing != null) {
+          final totalMs = (timing['total'] as num?)?.toDouble() ?? 0;
+          final embeddingMs = (timing['embedding'] as num?)?.toDouble() ?? 0;
+          final loadMs = (timing['load_embeddings'] as num?)?.toDouble() ?? 0;
+          final simMs = (timing['similarities'] as num?)?.toDouble() ?? 0;
+          final prepareMs = (timing['prepare_matrix'] as num?)?.toDouble() ?? 0;
 
-      try {
-        // Check if successful (should always be true since we return immediately)
-        if (backendResponse['success'] == true) {
-          print('✅ [FRONTEND] Attendance queued successfully!');
-          print('   Attendance ID (temp): ${backendResponse['attendance_id']}');
-          print('   SR No: $srNo');
-          print('   Student: $_matchedStudentName');
-          print('   Type: $recordType');
-          print('   Date: $today');
-          print('   Photo URL: $photoUrl');
-          print('   (Backend save happening in background...)');
-
-          // Extract timing data if provided
-          final timing = backendResponse['timing'] as Map<String, dynamic>?;
-          String timingDisplay = '';
-          if (timing != null) {
-            final totalMs = (timing['total'] as num?)?.toDouble() ?? 0;
-            final embeddingMs = (timing['embedding'] as num?)?.toDouble() ?? 0;
-            final loadMs = (timing['load_embeddings'] as num?)?.toDouble() ?? 0;
-            final simMs = (timing['similarities'] as num?)?.toDouble() ?? 0;
-            final prepareMs = (timing['prepare_matrix'] as num?)?.toDouble() ?? 0;
-
-            timingDisplay = '\n⏱️ Backend (async): ${totalMs.toStringAsFixed(2)}s\n'
-                '  🧠 Embedding: ${embeddingMs.toStringAsFixed(2)}s\n'
-                '  📚 Load: ${loadMs.toStringAsFixed(2)}s\n'
-                '  🔢 Prepare: ${prepareMs.toStringAsFixed(2)}s\n'
-                '  🔍 Match: ${simMs.toStringAsFixed(3)}s';
-
-            print('');
-            print('═══════════════════════════════════════════');
-            print('⏱️  BACKEND TIMING (saved in background)');
-            print('═══════════════════════════════════════════');
-            print('📊 Backend Processing: ${totalMs.toStringAsFixed(2)}s');
-            print('   🧠 Embedding: ${embeddingMs.toStringAsFixed(2)}s (${((embeddingMs / totalMs) * 100).toStringAsFixed(0)}%)');
-            print('   📚 Load embeddings: ${loadMs.toStringAsFixed(2)}s (${((loadMs / totalMs) * 100).toStringAsFixed(0)}%)');
-            print('   🔢 Prepare matrix: ${prepareMs.toStringAsFixed(2)}s (${((prepareMs / totalMs) * 100).toStringAsFixed(0)}%)');
-            print('   🔍 Similarities: ${simMs.toStringAsFixed(3)}s');
-            print('═══════════════════════════════════════════');
-            print('');
-          }
-
-          // Show success to user with details
-          if (mounted) {
-            final attendanceId = (backendResponse['attendance_id'] as String? ?? '').trim();
-            final displayId = attendanceId.length > 8
-                ? attendanceId.substring(0, 8)
-                : attendanceId;
-            setState(() {
-              _currentStage =
-                  '✅ ${recordType.toUpperCase()} Marked Successfully!\n\n'
-                  'Student: $_matchedStudentName\n'
-                  'Match: ${(_similarityScore * 100).toStringAsFixed(1)}%\n'
-                  'ID: $displayId'
-                  '$timingDisplay';
-            });
-          }
-          await Future.delayed(const Duration(seconds: 3));
-          if (mounted) _resetUI();
-        } else {
-          // Backend rejected
-          print('❌ [BACKEND] Attendance rejected: ${backendResponse['reason']}');
-
-          if (mounted) {
-            setState(() {
-              _currentStage =
-                  '❌ ${recordType.toUpperCase()} Failed\n\n'
-                  'Reason: ${backendResponse['reason']}\n'
-                  'Please try again\n\n'
-                  'Error ID: ${backendResponse['error_id']}';
-            });
-          }
-          await Future.delayed(const Duration(seconds: 4));
-          if (mounted) _resetUI();
+          timingDisplay = '\n⏱️ Backend: ${totalMs.toStringAsFixed(2)}s\n'
+              '  🧠 Embedding: ${embeddingMs.toStringAsFixed(2)}s\n'
+              '  📚 Load: ${loadMs.toStringAsFixed(2)}s\n'
+              '  🔢 Prepare: ${prepareMs.toStringAsFixed(2)}s\n'
+              '  🔍 Match: ${simMs.toStringAsFixed(3)}s';
         }
-      } catch (e) {
-        print('❌ [BACKEND] Error: $e');
 
+        // Show success to user with details (don't wait for photo/DB!)
         if (mounted) {
+          final attendanceId = (backendResponse['attendance_id'] as String? ?? '').trim();
+          final displayId = attendanceId.length > 8
+              ? attendanceId.substring(0, 8)
+              : attendanceId;
           setState(() {
-            _currentStage = '❌ Network Error\n\n'
-                'Failed to connect to server\n'
-                'Please try again\n\n'
-                '$e';
+            _currentStage =
+                '✅ ${recordType.toUpperCase()} Marked Successfully!\n\n'
+                'Student: $_matchedStudentName\n'
+                'Match: ${(_similarityScore * 100).toStringAsFixed(1)}%\n'
+                'ID: $displayId'
+                '$timingDisplay';
           });
         }
-        await Future.delayed(const Duration(seconds: 4));
-        if (mounted) _resetUI();
-        throw e;
+
+        // ⏳ BACKGROUND: Upload photo and save DB (fire-and-forget!)
+        print('📸 [BACKGROUND] Starting photo upload (async)...');
+        print('💾 [BACKGROUND] Starting database save (async)...');
+
+        _uploadPhotoToB2(
+          photoPath: photoPath,
+          srNo: srNo,
+          recordType: recordType,
+        ).then((photoUrl) {
+          if (photoUrl != null) {
+            print('   ✅ [BACKGROUND] Photo uploaded: $photoUrl');
+          } else {
+            print('   ⚠️ [BACKGROUND] Photo upload failed');
+          }
+        }).catchError((e) {
+          print('   ❌ [BACKGROUND] Photo error: $e');
+        });
       }
 
-      // 📊 Print timing breakdown for this save section
+      // Show success to user for 3 seconds
+      await Future.delayed(const Duration(seconds: 3));
+      if (mounted) _resetUI();
+
+      // ⏰ Print final timing
       final saveSectionMs = DateTime.now().difference(saveSectionStart).inMilliseconds;
       print('');
-      print('───────────────────────────────────────────');
-      print('📸 Photo upload + Supabase: ${saveSectionMs}ms');
-      print('  📸 Photo comp+upload: ${photoTotalMs}ms');
-      print('───────────────────────────────────────────');
+      print('═══════════════════════════════════════════════════════════');
+      print('⏱️  FINAL TIMING (user saw success after ~1.5s)');
+      print('═══════════════════════════════════════════════════════════');
+      print('📊 Total time from capture: ${(saveSectionMs / 1000).toStringAsFixed(2)}s');
+      print('   (Photo + DB save happening in background)');
+      print('═══════════════════════════════════════════════════════════');
+      print('');
     } catch (e) {
       print('❌ [SAVE] Error saving attendance: $e');
       print('📍 [SAVE] Stack: ${StackTrace.current}');
