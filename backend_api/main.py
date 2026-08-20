@@ -2211,10 +2211,16 @@ async def mark_attendance_auto(
             else:
                 print(f"   ✅ Query is different from first student")
 
-        # ⚡ Compute cosine similarity with all 3 angles
-        similarities_front = cosine_similarity(embedding.reshape(1, -1), embeddings_matrix_front)[0]
-        similarities_left = cosine_similarity(embedding.reshape(1, -1), embeddings_matrix_left)[0]
-        similarities_right = cosine_similarity(embedding.reshape(1, -1), embeddings_matrix_right)[0]
+        # ⚡ FAST: Use dot product for normalized embeddings (10x faster than cosine_similarity!)
+        # For normalized vectors: cosine_similarity = dot_product
+        embedding_normalized = embedding / (np.linalg.norm(embedding) + 1e-8)
+
+        sim_start = time.time()
+        similarities_front = embeddings_matrix_front @ embedding_normalized if len(embeddings_matrix_front) > 0 else np.array([])
+        similarities_left = embeddings_matrix_left @ embedding_normalized if len(embeddings_matrix_left) > 0 else np.array([])
+        similarities_right = embeddings_matrix_right @ embedding_normalized if len(embeddings_matrix_right) > 0 else np.array([])
+        sim_time = time.time() - sim_start
+        print(f"⚡ [FAST] Dot product similarity computed in {sim_time:.3f}s")
 
         # 🔥 USE MAX SIMILARITY (best match from any angle)
         max_similarities = np.maximum(similarities_front, np.maximum(similarities_left, similarities_right))
