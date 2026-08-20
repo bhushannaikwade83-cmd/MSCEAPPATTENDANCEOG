@@ -191,7 +191,7 @@ class AntiSpoofApiService {
         Uri.parse('https://digitrixmedia.com/upload_registration.php'),
       );
 
-      request.fields['sr_no'] = studentId;
+      request.fields['sr_no'] = studentId;  // Use student UUID as folder name
       request.fields['institute_id'] = instituteId;
       request.fields['angle'] = angle;
 
