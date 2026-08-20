@@ -161,65 +161,25 @@ class FaceRecognitionService:
             Face object with bounding box, landmarks, and embedding, or None if no face detected
         """
         try:
-            # RetinaFace detection + ArcFace embedding in one call
-            # InsightFace's get() method uses RetinaFace for detection
             faces = self.app.get(image_rgb)
 
-            print(f"🔍 [DETECTION DEBUG] Faces found: {len(faces)}")
-
             if len(faces) == 0:
-                print("❌ No faces detected!")
                 return None
 
-            # Return the largest face (by bounding box area)
             if len(faces) > 1:
-                logger.warning(f"⚠️ Multiple faces detected ({len(faces)}), using largest face")
-                # Sort by bounding box area (largest first)
                 faces = sorted(faces, key=lambda f: (f.bbox[2] - f.bbox[0]) * (f.bbox[3] - f.bbox[1]), reverse=True)
 
-            selected_face = faces[0]
-            print(f"🔍 [DETECTION DEBUG] Selected face:")
-            print(f"   BBox: {selected_face.bbox}")
-            print(f"   Landmarks: {len(selected_face.landmark_2d_106) if hasattr(selected_face, 'landmark_2d_106') and selected_face.landmark_2d_106 is not None else 0}")
-            print(f"   Embedding shape: {selected_face.embedding.shape}")
-            print(f"   Embedding norm (raw): {np.linalg.norm(selected_face.embedding):.6f}")
-
-            return selected_face
+            return faces[0]
         except Exception as e:
             logger.error(f"❌ RetinaFace detection error: {e}")
             return None
     
     def _extract_embedding_arcface(self, face: object) -> Optional[np.ndarray]:
-        """
-        Step 2: Extract 512-dimensional embedding using ArcFace
-
-        Args:
-            face: Face object from RetinaFace detection (contains pre-computed ArcFace embedding)
-
-        Returns:
-            512-dimensional numpy array (L2-normalized embedding) or None
-        """
+        """Extract 512-dimensional embedding using ArcFace (already computed by RetinaFace)"""
         try:
-            # ArcFace embedding is already computed during RetinaFace detection
-            # InsightFace computes both detection and embedding together for efficiency
-            embedding = face.embedding  # Already 512-dim from ArcFace R100
-
-            # Debug: Show raw embedding before normalization
-            print(f"🔍 [ARCFACE DEBUG] Raw embedding before normalization:")
-            print(f"   Shape: {embedding.shape}")
-            print(f"   Norm: {np.linalg.norm(embedding):.6f}")
-            print(f"   Min/Max: {np.min(embedding):.6f} / {np.max(embedding):.6f}")
-            print(f"   First 10: {embedding[:10]}")
-            print(f"   FULL: {embedding}")
-
+            embedding = face.embedding
             # L2 normalize embedding (required for cosine similarity in FAISS)
             embedding = embedding / np.linalg.norm(embedding)
-
-            print(f"🔍 [ARCFACE DEBUG] After L2 normalization:")
-            print(f"   Norm: {np.linalg.norm(embedding):.6f}")
-            print(f"   First 10: {embedding[:10]}")
-
-            logger.info(f"✅ ArcFace embedding extracted: shape={embedding.shape}, norm={np.linalg.norm(embedding):.4f}")
             return embedding
         except Exception as e:
             logger.error(f"❌ ArcFace embedding extraction error: {e}")
@@ -257,112 +217,25 @@ class FaceRecognitionService:
             
             logger.info(f"📦 Received image data: {len(image_data)} bytes")
 
-            # 🔥 DEBUG: Image hash to verify different images
-            import hashlib
-            image_hash = hashlib.sha256(image_data).hexdigest()[:16]
-            print(f"📸 [IMAGE HASH] {image_hash} (size: {len(image_data)} bytes)")
-
-            # 🔥 STEP 2: Decode image using OpenCV (CORRECT METHOD)
-            # This is the correct way to decode base64 image bytes
+            # Decode image using OpenCV
             np_arr = np.frombuffer(image_data, np.uint8)
             image = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
-            
+
             if image is None:
-                logger.warning("⚠️ OpenCV decode failed, trying PIL...")
-                # Fallback to PIL if OpenCV fails
-                try:
-                    pil_image = Image.open(io.BytesIO(image_data))
-                    # Convert PIL to OpenCV format (RGB -> BGR)
-                    image = cv2.cvtColor(np.array(pil_image), cv2.COLOR_RGB2BGR)
-                    if image is None:
-                        error_msg = "Image decoding failed with both OpenCV and PIL"
-                        logger.error(f"❌ {error_msg}")
-                        raise ValueError(error_msg)
-                except Exception as e:
-                    error_msg = f"Image decoding failed: {str(e)}"
-                    logger.error(f"❌ {error_msg}")
-                    raise ValueError(error_msg) from e
-            
-            # 🔥 STEP 3: Debug prints BEFORE face detection
-            print("=" * 50)
-            print("🔍 DEBUG: Image received and decoded")
-            print(f"Image type: {type(image)}")
-            print(f"Image shape: {image.shape}")
-            print(f"Image dtype: {image.dtype}")
-            print(f"Image min/max: {image.min()}/{image.max()}")
-            print("=" * 50)
-            
-            # 🔥 STEP 4: Save debug image
-            try:
-                import tempfile
-                debug_dir = os.path.join(tempfile.gettempdir(), "debug_images")
-                os.makedirs(debug_dir, exist_ok=True)
-                debug_path = os.path.join(debug_dir, "debug_received.jpg")
-                cv2.imwrite(debug_path, image)
-                logger.info(f"💾 Debug image saved: {debug_path}")
-                print(f"💾 Debug image saved: {debug_path}")
-                print("   → Check if image is clear, face visible, and not sideways!")
-            except Exception as e:
-                logger.warning(f"⚠️ Could not save debug image: {e}")
-            
-            # 🔥 STEP 5: Check if image is too small
-            height, width = image.shape[:2]
-            print(f"📏 Image dimensions: {width}x{height}")
-            
-            if width < 160 or height < 160:
-                logger.warning(f"⚠️ Image too small: {width}x{height} (minimum 160x160)")
-                print(f"⚠️ Image too small: {width}x{height} - Resizing to 640x640")
-                image = cv2.resize(image, (640, 640))
-                print(f"✅ Resized to: {image.shape[1]}x{image.shape[0]}")
-            
-            # 🔥 STEP 6: Handle rotation (MOST COMMON FLUTTER ISSUE)
-            original_image = image.copy()
-            
-            # 🔥 STEP 7: Convert BGR to RGB (InsightFace expects RGB)
+                raise ValueError("Image decoding failed")
+
+            # Convert BGR to RGB (InsightFace expects RGB)
             image_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-            print(f"✅ Converted BGR to RGB")
-            
-            # 🔥 STEP 8: Resize if too small
-            if image_rgb.shape[0] < 320 or image_rgb.shape[1] < 320:
-                print(f"⚠️ Image still small after initial resize: {image_rgb.shape}")
+
+            # Resize if too small
+            height, width = image_rgb.shape[:2]
+            if width < 160 or height < 160:
                 image_rgb = cv2.resize(image_rgb, (640, 640))
-                print(f"✅ Resized to: {image_rgb.shape}")
-            
-            # 🔥 STEP 9: RetinaFace Detection
-            print("🔍 Step 1: RetinaFace face detection...")
+            elif image_rgb.shape[0] < 320 or image_rgb.shape[1] < 320:
+                image_rgb = cv2.resize(image_rgb, (640, 640))
+
+            # RetinaFace Detection - NO rotation attempts for registration
             face = self._detect_face_retinaface(image_rgb)
-
-            if face is None:
-                logger.warning("⚠️ RetinaFace: No face detected with original orientation")
-                print("⚠️ RetinaFace: No face detected - trying rotations (common Flutter camera issue)...")
-
-                # Try rotations if no face detected
-                rotations_to_try = [
-                    (cv2.ROTATE_90_CLOCKWISE, "90° clockwise"),
-                    (cv2.ROTATE_90_COUNTERCLOCKWISE, "90° counter-clockwise"),
-                    (cv2.ROTATE_180, "180°")
-                ]
-
-                for rotation_code, rotation_name in rotations_to_try:
-                    try:
-                        print(f"🔄 RetinaFace: Trying rotation {rotation_name}...")
-                        rotated_image = cv2.rotate(original_image, rotation_code)
-                        rotated_rgb = cv2.cvtColor(rotated_image, cv2.COLOR_BGR2RGB)
-
-                        # Resize if needed
-                        if rotated_rgb.shape[0] < 320 or rotated_rgb.shape[1] < 320:
-                            rotated_rgb = cv2.resize(rotated_rgb, (640, 640))
-
-                        # Try RetinaFace detection with rotated image
-                        face = self._detect_face_retinaface(rotated_rgb)
-                        if face is not None:
-                            logger.info(f"✅ RetinaFace: Face detected after {rotation_name} rotation")
-                            print(f"✅ RetinaFace: Face detected after {rotation_name} rotation!")
-                            image_rgb = rotated_rgb
-                            break
-                    except Exception as e:
-                        logger.debug(f"⚠️ Rotation {rotation_name} failed: {e}")
-                        continue
 
             if face is None:
                 error_msg = "RetinaFace: No face detected in image. Please ensure:\n" \
@@ -375,26 +248,18 @@ class FaceRecognitionService:
                 print("❌ RetinaFace: No face detected - check debug_received.jpg")
                 raise ValueError(error_msg)
 
-            # 🔥 STEP 10: Face Alignment
-            print("🔍 Step 1.5: Face alignment...")
+            # Face Alignment
             aligned_face = self._align_face(face, image_rgb)
 
             if aligned_face is None:
-                error_msg = "❌ Face alignment failed - rejecting face"
-                logger.error(error_msg)
-                raise ValueError(error_msg)
+                raise ValueError("Face alignment failed")
 
-            # 🔥 STEP 11: ArcFace Embedding Extraction (on aligned face)
-            print("🔍 Step 2: ArcFace embedding extraction (on aligned face)...")
+            # Extract ArcFace Embedding (already computed by RetinaFace detection)
             embedding = self._extract_embedding_arcface(face)
-            
+
             if embedding is None:
-                error_msg = "ArcFace: Failed to extract embedding from detected face"
-                logger.error(f"❌ {error_msg}")
-                raise ValueError(error_msg)
-            
-            logger.info("✅ Pipeline complete: RetinaFace → ArcFace → 512-dim embedding (L2-normalized)")
-            print(f"✅ ArcFace embedding: shape={embedding.shape}, norm={np.linalg.norm(embedding):.4f}")
+                raise ValueError("ArcFace: Failed to extract embedding")
+
             return embedding
             
         except Exception as e:
