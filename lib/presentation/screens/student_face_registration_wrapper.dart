@@ -170,6 +170,11 @@ class _StudentFaceRegistrationWrapperState
         return;
       }
 
+      final regStartTime = DateTime.now();
+      print('');
+      print('═══════════════════════════════════════════════════════════');
+      print('🔥 REGISTRATION STARTED');
+      print('═══════════════════════════════════════════════════════════');
       print('✅ Got 3 photos from camera');
       print('📸 Front: ${photos[0].path}');
       print('📸 Left: ${photos[1].path}');
@@ -195,6 +200,7 @@ class _StudentFaceRegistrationWrapperState
       );
 
       print('📤 Sending 3 photos to backend for ArcFace processing...');
+      final backendStart = DateTime.now();
       final result = await AntiSpoofApiService.registerStudentFace(
         studentId: widget.studentId,
         studentName: widget.studentName,
@@ -203,6 +209,7 @@ class _StudentFaceRegistrationWrapperState
         rightPhoto: File(photos[2].path),
         instituteId: widget.instituteId,
       );
+      final backendTime = DateTime.now().difference(backendStart).inMilliseconds;
 
       if (!mounted) {
         Navigator.pop(context);
@@ -215,7 +222,8 @@ class _StudentFaceRegistrationWrapperState
         throw Exception(result['message'] ?? 'Backend registration failed');
       }
 
-      print('✅ Backend generated 512-D embeddings');
+      print('✅ Backend generated 512-D embeddings (${backendTime}ms)');
+      print('📊 [STEP 1] Backend ArcFace processing: ${backendTime}ms');
       final embeddings = result['embeddings'] as Map<String, dynamic>?;
       if (embeddings == null) {
         throw Exception('No embeddings in response');
@@ -243,13 +251,16 @@ class _StudentFaceRegistrationWrapperState
 
       try {
         // Compress each photo first
+        final compressStart = DateTime.now();
         final frontBytes = await PhotoCompressionService.compressPhoto(photos[0].path);
         final leftBytes = await PhotoCompressionService.compressPhoto(photos[1].path);
         final rightBytes = await PhotoCompressionService.compressPhoto(photos[2].path);
+        final compressTime = DateTime.now().difference(compressStart).inMilliseconds;
 
         print('  ✅ Front: ${(frontBytes.length / 1024).toStringAsFixed(1)}KB');
         print('  ✅ Left: ${(leftBytes.length / 1024).toStringAsFixed(1)}KB');
         print('  ✅ Right: ${(rightBytes.length / 1024).toStringAsFixed(1)}KB');
+        print('📊 [STEP 2] Photo compression: ${compressTime}ms');
 
         // Generate path: DEC-2026/GCC/REGISTRATION/{institute_id}/{student_name}/
         final timestamp = DateTime.now().toIso8601String().replaceAll(':', '-');
@@ -320,6 +331,13 @@ class _StudentFaceRegistrationWrapperState
 
       // ⏳ BACKGROUND: Save to database (don't wait!)
       // User already sees success, so we don't block on DB save
+      final dbSaveStart = DateTime.now();
+      final userFacingTime = DateTime.now().difference(regStartTime).inMilliseconds;
+      print('');
+      print('═══════════════════════════════════════════════════════════');
+      print('⚡ USER SEES SUCCESS AFTER: ${userFacingTime}ms');
+      print('═══════════════════════════════════════════════════════════');
+
       appDb.from('students').update({
         'face_embedding_front': jsonEncode(frontEmbedding),
         'face_embedding_left': jsonEncode(leftEmbedding),
@@ -329,7 +347,11 @@ class _StudentFaceRegistrationWrapperState
         'is_face_real': true,
         'face_registered_at': DateTime.now().toIso8601String(),
       }).eq('id', widget.studentId).then((_) {
-        print('✅ [BACKGROUND] 512-D ArcFace embeddings (3 angles) saved to Supabase!');
+        final dbTime = DateTime.now().difference(dbSaveStart).inMilliseconds;
+        final totalTime = DateTime.now().difference(regStartTime).inMilliseconds;
+        print('✅ [BACKGROUND] Database saved (${dbTime}ms)');
+        print('📊 TOTAL REGISTRATION TIME: ${totalTime}ms');
+        print('═══════════════════════════════════════════════════════════');
       }).catchError((e) {
         print('❌ [BACKGROUND] Database save error: $e');
         // Log error but don't crash - photos already uploaded

@@ -12,7 +12,9 @@ class AttendanceMarkingService {
   }) async {
     try {
       final startTime = DateTime.now();
-      debugPrint('🔍 Matching face embedding against registered students...');
+      debugPrint('═══════════════════════════════════════════════════════════');
+      debugPrint('🔍 ATTENDANCE MATCHING: Starting face embedding comparison');
+      debugPrint('═══════════════════════════════════════════════════════════');
 
       // Fetch all registered students for this institute (all 3 angles)
       final dbQueryStart = DateTime.now();
@@ -34,21 +36,27 @@ class AttendanceMarkingService {
 
       final dbQueryEnd = DateTime.now();
       final dbQueryMs = dbQueryEnd.difference(dbQueryStart).inMilliseconds;
-      debugPrint('⏱️  DB Query took: ${dbQueryMs}ms');
-      debugPrint('📊 Checking ${students.length} registered students (with 3-angle embeddings)...');
+      debugPrint('📊 [STEP 1] Database fetch: ${dbQueryMs}ms');
+      debugPrint('📊 [STEP 1] Student count: ${students.length} registered students')
 
       double bestScore = 0;
       Map<String, dynamic>? bestMatch;
 
       // Compare with each registered student (using MAX of 3 angles)
       final comparisonStart = DateTime.now();
+      int successfulComparisons = 0;
+      int failedComparisons = 0;
+
       for (final student in students) {
         try {
+          final compareStepStart = DateTime.now();
+
           final frontEmb = student['face_embedding_front'] as String?;
           final leftEmb = student['face_embedding_left'] as String?;
           final rightEmb = student['face_embedding_right'] as String?;
 
           // Parse embeddings
+          final parseStart = DateTime.now();
           List<double>? frontList, leftList, rightList;
           if (frontEmb != null && frontEmb.isNotEmpty) {
             frontList = List<double>.from(jsonDecode(frontEmb).map((x) => (x as num).toDouble()));
@@ -59,33 +67,41 @@ class AttendanceMarkingService {
           if (rightEmb != null && rightEmb.isNotEmpty) {
             rightList = List<double>.from(jsonDecode(rightEmb).map((x) => (x as num).toDouble()));
           }
+          final parseMs = DateTime.now().difference(parseStart).inMilliseconds;
 
           // Calculate similarities with all 3 angles
+          final similarityStart = DateTime.now();
           double simFront = frontList != null ? _cosineSimilarity(embedding, frontList) : 0.0;
           double simLeft = leftList != null ? _cosineSimilarity(embedding, leftList) : 0.0;
           double simRight = rightList != null ? _cosineSimilarity(embedding, rightList) : 0.0;
+          final similarityMs = DateTime.now().difference(similarityStart).inMilliseconds;
 
           // Use MAX of 3 angles (best match)
           double similarity = [simFront, simLeft, simRight].reduce((a, b) => a > b ? a : b);
 
-          debugPrint('  📌 ${student['sr_no']}: MAX=${(similarity * 100).toStringAsFixed(1)}% (F:${(simFront * 100).toStringAsFixed(0)}% L:${(simLeft * 100).toStringAsFixed(0)}% R:${(simRight * 100).toStringAsFixed(0)}%)');
+          final compareStepMs = DateTime.now().difference(compareStepStart).inMilliseconds;
+          debugPrint('  📌 ${student['sr_no']}: MAX=${(similarity * 100).toStringAsFixed(1)}% (F:${(simFront * 100).toStringAsFixed(0)}% L:${(simLeft * 100).toStringAsFixed(0)}% R:${(simRight * 100).toStringAsFixed(0)}%) | Parse:${parseMs}ms Sim:${similarityMs}ms Total:${compareStepMs}ms');
 
           // Keep track of best match
           if (similarity > bestScore) {
             bestScore = similarity;
             bestMatch = student;
           }
+          successfulComparisons++;
         } catch (e) {
           debugPrint('  ⚠️ Error comparing ${student['sr_no']}: $e');
+          failedComparisons++;
           continue;
         }
       }
 
       final comparisonEnd = DateTime.now();
       final comparisonMs = comparisonEnd.difference(comparisonStart).inMilliseconds;
-      debugPrint('⏱️  Embedding comparison took: ${comparisonMs}ms');
+      debugPrint('📊 [STEP 2] Embedding comparison: ${comparisonMs}ms');
+      debugPrint('📊 [STEP 2] Success: $successfulComparisons, Failed: $failedComparisons');
 
       // Load threshold from app_settings (dynamic) or use default 0.70
+      final thresholdStart = DateTime.now();
       double MATCH_THRESHOLD = 0.70;
       try {
         final settings = await appDb
@@ -96,11 +112,12 @@ class AttendanceMarkingService {
 
         if (settings != null && settings['value'] != null) {
           MATCH_THRESHOLD = double.tryParse(settings['value'].toString()) ?? 0.70;
-          debugPrint('📊 Loaded threshold from app_settings: $MATCH_THRESHOLD');
         }
       } catch (e) {
         debugPrint('⚠️ Could not load threshold from app_settings, using default 0.70: $e');
       }
+      final thresholdMs = DateTime.now().difference(thresholdStart).inMilliseconds;
+      debugPrint('📊 [STEP 3] Threshold loaded: $MATCH_THRESHOLD (${thresholdMs}ms)');
 
       if (bestScore < MATCH_THRESHOLD) {
         // Generate helpful error message based on similarity score
@@ -142,7 +159,12 @@ class AttendanceMarkingService {
       final studentName =
           '$fname ${mname.isNotEmpty ? '$mname ' : ''}$lname'.trim();
 
-      debugPrint('✅ MATCHED: ${bestMatch['sr_no']} ($studentName) - ${(bestScore * 100).toStringAsFixed(1)}%');
+      final totalTime = DateTime.now().difference(startTime).inMilliseconds;
+      debugPrint('✅ [RESULT] MATCHED: ${bestMatch['sr_no']} ($studentName)');
+      debugPrint('✅ [RESULT] Similarity: ${(bestScore * 100).toStringAsFixed(1)}% (Threshold: ${(MATCH_THRESHOLD * 100).toStringAsFixed(0)}%)');
+      debugPrint('═══════════════════════════════════════════════════════════');
+      debugPrint('⏱️  TOTAL MATCHING TIME: ${totalTime}ms');
+      debugPrint('═══════════════════════════════════════════════════════════');
 
       return {
         'success': true,
@@ -222,6 +244,7 @@ class AttendanceMarkingService {
     required DateTime timestamp,
     required String recordType, // 'entry' or 'exit'
   }) async {
+    final markStart = DateTime.now();
     try {
       final attendanceDate = timestamp.toIso8601String().split('T')[0]; // YYYY-MM-DD
 
@@ -230,10 +253,13 @@ class AttendanceMarkingService {
 
       // ⚡ INSTANT RESPONSE: Return success immediately!
       final emoji = recordType == 'entry' ? '🚪➡️' : '🚪⬅️';
-      debugPrint('$emoji $recordType marked for $srNo at ${timestamp.hour}:${timestamp.minute}');
-      debugPrint('⚡ Returning success immediately (DB save in background)...');
+      debugPrint('');
+      debugPrint('═══════════════════════════════════════════════════════════');
+      debugPrint('$emoji [MARKING] $recordType for $srNo at ${timestamp.hour}:${timestamp.minute}');
+      debugPrint('═══════════════════════════════════════════════════════════');
 
       // ⏳ BACKGROUND: Save to database (fire-and-forget, don't wait!)
+      final bgSaveStart = DateTime.now();
       appDb.from('attendance').upsert({
         'student_id': studentId,
         'institute_id': instituteId,
@@ -247,17 +273,24 @@ class AttendanceMarkingService {
         'similarity_score': similarityScore,
         'status': 'present',
       }).then((_) {
-        debugPrint('✅ [BACKGROUND] $recordType attendance saved to Supabase');
+        final bgTime = DateTime.now().difference(bgSaveStart).inMilliseconds;
+        debugPrint('✅ [BACKGROUND] $recordType saved to Supabase (${bgTime}ms)');
       }).catchError((e) {
         debugPrint('❌ [BACKGROUND] Attendance save error: $e');
       });
 
       // Return success IMMEDIATELY (user doesn't wait for DB)
+      final immediateTime = DateTime.now().difference(markStart).inMilliseconds;
+      debugPrint('⚡ [IMMEDIATE] Returning to user after ${immediateTime}ms (DB save in background)');
+      debugPrint('═══════════════════════════════════════════════════════════');
+      debugPrint('');
+
       return {
         'success': true,
         'message': '$recordType marked: $studentName',
         'attendance_id': tempId,  // Temporary ID
         'record_type': recordType,
+        'response_time_ms': immediateTime,
       };
     } catch (e) {
       debugPrint('❌ Attendance save error: $e');
