@@ -1661,11 +1661,11 @@ async def register_multi_angle_face(
         live_logger.stats['successful_requests'] += 1
         live_logger.stats['active_processing'] = max(0, live_logger.stats['active_processing'] - 1)
 
-        # Generate photo URLs (served via backend endpoint with proper display headers)
+        # Generate photo URLs (direct web access)
         photo_urls = {
-            "front": f"https://api.digitrixmedia.com/registration-photos/{institute_id}/{roll_number}/front.jpg",
-            "left": f"https://api.digitrixmedia.com/registration-photos/{institute_id}/{roll_number}/left.jpg",
-            "right": f"https://api.digitrixmedia.com/registration-photos/{institute_id}/{roll_number}/right.jpg",
+            "front": f"https://digitrixmedia.com/registration-photos/{institute_id}/{student_id}/front.jpg",
+            "left": f"https://digitrixmedia.com/registration-photos/{institute_id}/{student_id}/left.jpg",
+            "right": f"https://digitrixmedia.com/registration-photos/{institute_id}/{student_id}/right.jpg",
         }
 
         return {
