@@ -37,7 +37,7 @@ class AttendanceMarkingService {
       final dbQueryEnd = DateTime.now();
       final dbQueryMs = dbQueryEnd.difference(dbQueryStart).inMilliseconds;
       debugPrint('📊 [STEP 1] Database fetch: ${dbQueryMs}ms');
-      debugPrint('📊 [STEP 1] Student count: ${students.length} registered students')
+      debugPrint('📊 [STEP 1] Student count: ${students.length} registered students');
 
       double bestScore = 0;
       Map<String, dynamic>? bestMatch;
