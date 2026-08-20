@@ -89,7 +89,7 @@ class AntiSpoofApiService {
     }
   }
 
-  /// Register student with 3-angle face photos (OPTIMIZED FOR SPEED)
+  /// Register student with 3-angle face photos (SAVE TO SERVER FIRST)
   /// Returns: {success, message, embeddings}
   static Future<Map<String, dynamic>> registerStudentFace({
     required String studentId,
@@ -103,15 +103,19 @@ class AntiSpoofApiService {
       print('🚀 [FAST MODE] Starting 3-angle registration...');
       final startTime = DateTime.now();
 
-      // 🔥 Compress photos in PARALLEL for faster upload
-      print('📦 Compressing 3 photos in parallel...');
-      final compressedPhotos = await Future.wait([
-        _compressPhoto(frontPhoto),
-        _compressPhoto(leftPhoto),
-        _compressPhoto(rightPhoto),
+      // ✅ STEP 1: Upload 3 photos to PHP (in parallel)
+      print('📤 Uploading 3 photos to server (in parallel)...');
+      final uploadResults = await Future.wait([
+        _uploadRegistrationPhoto(frontPhoto, studentId, instituteId ?? 'default', 'front'),
+        _uploadRegistrationPhoto(leftPhoto, studentId, instituteId ?? 'default', 'left'),
+        _uploadRegistrationPhoto(rightPhoto, studentId, instituteId ?? 'default', 'right'),
       ]);
-      print('✅ Compressed in ${DateTime.now().difference(startTime).inMilliseconds}ms');
 
+      final uploadTime = DateTime.now().difference(startTime).inMilliseconds;
+      print('✅ Photos uploaded in ${uploadTime}ms');
+
+      // ✅ STEP 2: Send to backend for embedding generation
+      print('📡 Sending to backend for embedding generation...');
       var request = http.MultipartRequest(
         'POST',
         Uri.parse('$API_URL/api/v1/register-multi-angle'),
@@ -125,38 +129,31 @@ class AntiSpoofApiService {
 
       // Add compressed photos
       request.files.add(
-        http.MultipartFile(
+        http.MultipartFile.fromBytes(
           'front_photo',
-          Stream.value(compressedPhotos[0]),
-          compressedPhotos[0].length,
+          await frontPhoto.readAsBytes(),
           filename: 'front.jpg',
         ),
       );
       request.files.add(
-        http.MultipartFile(
+        http.MultipartFile.fromBytes(
           'left_photo',
-          Stream.value(compressedPhotos[1]),
-          compressedPhotos[1].length,
+          await leftPhoto.readAsBytes(),
           filename: 'left.jpg',
         ),
       );
       request.files.add(
-        http.MultipartFile(
+        http.MultipartFile.fromBytes(
           'right_photo',
-          Stream.value(compressedPhotos[2]),
-          compressedPhotos[2].length,
+          await rightPhoto.readAsBytes(),
           filename: 'right.jpg',
         ),
       );
 
-      print('📤 Uploading 3 compressed photos...');
       var response = await request.send().timeout(
         const Duration(seconds: 180),  // 🔥 3 minutes - allow full model load + processing
         onTimeout: () => throw Exception('Registration timeout after 180s'),
       );
-
-      final uploadTime = DateTime.now().difference(startTime).inMilliseconds;
-      print('✅ Upload complete in ${uploadTime}ms');
 
       if (response.statusCode != 200) {
         final errorBody = await response.stream.bytesToString();
@@ -168,6 +165,7 @@ class AntiSpoofApiService {
 
       final totalTime = DateTime.now().difference(startTime).inMilliseconds;
       print('🎯 Total registration time: ${totalTime}ms (~${(totalTime / 1000).toStringAsFixed(1)}s)');
+      print('   Photos saved to: /registration-photos/');
 
       return result;
     } catch (e) {
@@ -176,6 +174,43 @@ class AntiSpoofApiService {
         "success": false,
         "message": "Registration error: ${e.toString()}",
       };
+    }
+  }
+
+  /// Upload single registration photo to PHP
+  static Future<String?> _uploadRegistrationPhoto(
+    File photoFile,
+    String studentId,
+    String instituteId,
+    String angle,
+  ) async {
+    try {
+      var request = http.MultipartRequest(
+        'POST',
+        Uri.parse('https://digitrixmedia.com/upload_registration.php'),
+      );
+
+      request.fields['sr_no'] = studentId;
+      request.fields['institute_id'] = instituteId;
+      request.fields['angle'] = angle;
+
+      request.files.add(
+        await http.MultipartFile.fromPath('photo', photoFile.path),
+      );
+
+      var response = await request.send().timeout(const Duration(seconds: 30));
+
+      if (response.statusCode == 200) {
+        var result = json.decode(await response.stream.bytesToString());
+        if (result['success'] == true) {
+          print('   ✅ Uploaded $angle');
+          return result['photo_url'];
+        }
+      }
+      return null;
+    } catch (e) {
+      print('   ⚠️ Upload $angle failed: $e');
+      return null;
     }
   }
 
