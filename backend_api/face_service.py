@@ -123,13 +123,15 @@ class FaceRecognitionService:
             landmarks = face.landmark_2d_106  # 106 facial landmarks from InsightFace
 
             # Define reference landmarks for alignment (standard face template)
-            # Using 5 key landmarks for alignment: left_eye, right_eye, nose, left_mouth, right_mouth
+            # Using 3 key landmarks for alignment: left_eye, right_eye, nose
+            # RetinaFace 106-landmark indices (NOT MediaPipe 468!)
             if len(landmarks) >= 106:
-                # Key landmarks indices: left_eye=33, right_eye=263, nose=1, left_mouth=61, right_mouth=291
+                # ✅ CORRECT RetinaFace indices:
+                # left_eye=33, right_eye=34, nose=1
                 src_pts = np.float32([
-                    landmarks[33],      # left eye
-                    landmarks[263],     # right eye
-                    landmarks[1]        # nose
+                    landmarks[33],      # left eye (RetinaFace index)
+                    landmarks[34],      # right eye (RetinaFace index - NOT 263!)
+                    landmarks[1]        # nose (RetinaFace index)
                 ])
 
                 # Reference points for aligned face (112x112)
@@ -152,8 +154,9 @@ class FaceRecognitionService:
                 return image_rgb
 
         except Exception as e:
-            logger.warning(f"⚠️ Face alignment error: {e}, using original image")
-            return image_rgb
+            logger.error(f"❌ Face alignment error: {e}")
+            print(f"❌ Face alignment FAILED - rejecting face (not using fallback)")
+            return None  # Reject - don't fallback to original!
 
     def _detect_face_retinaface(self, image_rgb: np.ndarray) -> Optional[object]:
         """
@@ -383,6 +386,11 @@ class FaceRecognitionService:
             # 🔥 STEP 10: Face Alignment
             print("🔍 Step 1.5: Face alignment...")
             aligned_face = self._align_face(face, image_rgb)
+
+            if aligned_face is None:
+                error_msg = "❌ Face alignment failed - rejecting face"
+                logger.error(error_msg)
+                raise ValueError(error_msg)
 
             # 🔥 STEP 11: ArcFace Embedding Extraction (on aligned face)
             print("🔍 Step 2: ArcFace embedding extraction (on aligned face)...")
