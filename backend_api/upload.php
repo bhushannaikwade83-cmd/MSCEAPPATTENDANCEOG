@@ -25,13 +25,19 @@ error_reporting(E_ALL);
 ini_set('display_errors', 0);
 
 // Log to file instead
-$log_file = '/home/digitrix/public_html/attendance-photos/upload.log';
+$base_dir = "/home/digitrix/public_html/attendance-photos";
+$log_file = "$base_dir/upload.log";
+
+// Ensure base directory exists
+if (!is_dir($base_dir)) {
+    mkdir($base_dir, 0777, true);
+}
 
 function log_debug($message) {
     global $log_file;
     $timestamp = date('Y-m-d H:i:s');
     $log_entry = "[$timestamp] $message\n";
-    file_put_contents($log_file, $log_entry, FILE_APPEND);
+    @file_put_contents($log_file, $log_entry, FILE_APPEND);
     // Don't echo - breaks JSON response!
 }
 
