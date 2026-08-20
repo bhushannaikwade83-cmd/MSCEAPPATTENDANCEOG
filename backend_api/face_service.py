@@ -101,62 +101,54 @@ class FaceRecognitionService:
         
     def _align_face(self, face: object, image_rgb: np.ndarray) -> Optional[np.ndarray]:
         """
-        Step 1.5: Align face for better embedding generation
+        Step 1.5: Align face using InsightFace's official method
+
+        Uses face.kps (5-point keypoints):
+        - Left eye, Right eye, Nose, Left mouth, Right mouth
+
+        This is the OFFICIAL InsightFace approach for ArcFace alignment.
+        ✅ Not 106 landmarks - just 5 keypoints!
+        ✅ Uses InsightFace's norm_crop() which ArcFace expects
 
         Args:
-            face: Face object with landmarks
+            face: Face object with kps (5-point keypoints)
             image_rgb: RGB image
 
         Returns:
-            Aligned face image as numpy array
+            Aligned 112×112 face image, or None if alignment fails
         """
         try:
-            import cv2
-            from skimage import transform as skimage_transform
+            from insightface.utils import face_align
 
-            if not hasattr(face, 'landmark_2d_106') or face.landmark_2d_106 is None:
-                # If no landmarks, return original
-                print("⚠️ No landmarks for alignment, using original face")
-                return image_rgb
+            # ✅ USE face.kps (5-point keypoints), NOT face.landmark_2d_106!
+            if not hasattr(face, 'kps') or face.kps is None:
+                logger.error("❌ Face has no 5-point keypoints (kps)")
+                return None
 
-            # Extract landmarks
-            landmarks = face.landmark_2d_106  # 106 facial landmarks from InsightFace
+            # Debug: Check kps shape
+            print(f"🔍 [DEBUG] face.kps shape: {face.kps.shape}")
+            if face.kps.shape != (5, 2):
+                logger.error(f"❌ Expected kps shape (5, 2), got {face.kps.shape}")
+                return None
 
-            # Define reference landmarks for alignment (standard face template)
-            # Using 3 key landmarks for alignment: left_eye, right_eye, nose
-            # RetinaFace 106-landmark indices (NOT MediaPipe 468!)
-            if len(landmarks) >= 106:
-                # ✅ CORRECT RetinaFace indices:
-                # left_eye=33, right_eye=34, nose=1
-                src_pts = np.float32([
-                    landmarks[33],      # left eye (RetinaFace index)
-                    landmarks[34],      # right eye (RetinaFace index - NOT 263!)
-                    landmarks[1]        # nose (RetinaFace index)
-                ])
+            # ✅ Use InsightFace's official alignment method
+            # This is exactly what ArcFace ONNX model uses internally
+            aligned_face = face_align.norm_crop(
+                image_rgb,
+                landmark=face.kps,  # 5-point keypoints
+                image_size=112,
+                mode='arcface'
+            )
 
-                # Reference points for aligned face (112x112)
-                dst_pts = np.float32([
-                    [30.29459953, 51.6963877],      # left eye
-                    [65.53179932, 51.50139999],     # right eye
-                    [48.02519989, 71.73660278]      # nose
-                ])
-
-                # Get affine transformation
-                M = cv2.getAffineTransform(src_pts, dst_pts)
-
-                # Align face to standard pose
-                aligned_face = cv2.warpAffine(image_rgb, M, (112, 112))
-
-                print(f"✅ [ALIGN] Face aligned to 112x112 standard pose")
-                return aligned_face
-            else:
-                print("⚠️ Not enough landmarks for alignment")
-                return image_rgb
+            print(f"✅ [ALIGN] Face aligned to 112×112 using InsightFace norm_crop()")
+            print(f"   Shape: {aligned_face.shape}, dtype: {aligned_face.dtype}")
+            return aligned_face
 
         except Exception as e:
             logger.error(f"❌ Face alignment error: {e}")
-            print(f"❌ Face alignment FAILED - rejecting face (not using fallback)")
-            return None  # Reject - don't fallback to original!
+            print(f"❌ Face alignment FAILED - rejecting face")
+            print(f"   Error details: {type(e).__name__}: {str(e)}")
+            return None  # Reject - NO fallback to original!
 
     def _detect_face_retinaface(self, image_rgb: np.ndarray) -> Optional[object]:
         """
