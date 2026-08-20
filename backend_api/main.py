@@ -2443,8 +2443,26 @@ async def upload_attendance_photo(
         print(f'   Date: {date}, Institute: {institute_id}')
 
         # Create directory structure
-        base_dir = "/home/digitrix/public_html"
-        photo_dir = os.path.join(base_dir, "attendance-photos", institute_id, date)
+        # Use /app as base (works in Docker container)
+        # Also save to public_html if it exists (for backup)
+
+        # Try multiple paths (container or local)
+        possible_dirs = [
+            "/home/digitrix/public_html/attendance-photos",
+            "/app/attendance-photos",
+            "./attendance-photos",
+        ]
+
+        base_dir = None
+        for possible_dir in possible_dirs:
+            if os.path.exists(os.path.dirname(possible_dir)) or possible_dir.startswith("."):
+                base_dir = possible_dir
+                break
+
+        if base_dir is None:
+            base_dir = "/app/attendance-photos"  # Fallback for container
+
+        photo_dir = os.path.join(base_dir, institute_id, date)
 
         # Create directories with error checking
         try:
@@ -2544,15 +2562,25 @@ async def serve_attendance_photo(institute_id: str, date: str, filename: str):
     Example: /attendance-photos/99099/2026-08-20/990_entry_182836.jpg
     """
     try:
-        filepath = f"/home/digitrix/public_html/attendance-photos/{institute_id}/{date}/{filename}"
+        # Try multiple possible locations
+        possible_paths = [
+            f"/app/attendance-photos/{institute_id}/{date}/{filename}",
+            f"/home/digitrix/public_html/attendance-photos/{institute_id}/{date}/{filename}",
+            f"./attendance-photos/{institute_id}/{date}/{filename}",
+        ]
 
-        print(f'📸 [SERVE] Requesting: {filename}')
-        print(f'   Path: {filepath}')
+        filepath = None
+        for path in possible_paths:
+            if os.path.exists(path):
+                filepath = path
+                break
 
-        # Check if file exists
-        if not os.path.exists(filepath):
-            print(f'   ❌ File not found: {filepath}')
+        if filepath is None:
+            print(f'❌ [SERVE] File not found in any location: {filename}')
+            print(f'   Tried: {possible_paths}')
             raise HTTPException(status_code=404, detail="Photo not found")
+
+        print(f'📸 [SERVE] Found at: {filepath}')
 
         # Check file size
         file_size = os.path.getsize(filepath)
