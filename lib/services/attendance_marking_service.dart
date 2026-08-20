@@ -26,7 +26,9 @@ class AttendanceMarkingService {
       if (students.isEmpty) {
         return {
           'success': false,
-          'message': 'No registered students found in this institute',
+          'message': '❌ No registered students found',
+          'reason': 'No students with face registrations in this institute',
+          'suggestion': '✓ Complete 3-photo face registration for all students\n✓ Ask students to register faces first\n✓ Check if students are added to this institute',
         };
       }
 
@@ -101,10 +103,35 @@ class AttendanceMarkingService {
       }
 
       if (bestScore < MATCH_THRESHOLD) {
+        // Generate helpful error message based on similarity score
+        String userMessage = 'Face not recognized';
+        String reason = '';
+        String suggestion = '';
+
+        final simPercent = (bestScore * 100).toStringAsFixed(1);
+        final threshPercent = (MATCH_THRESHOLD * 100).toStringAsFixed(1);
+
+        if (bestScore < 0.40) {
+          // Very low score - likely wrong person or bad photo
+          userMessage = '❌ Face doesn\'t match any registered student';
+          reason = 'Similarity too low ($simPercent%)';
+          suggestion = '✓ Make sure photo quality is good\n✓ Face should be clearly visible\n✓ Check lighting is adequate';
+        } else if (bestScore < MATCH_THRESHOLD) {
+          // Close but below threshold
+          userMessage = '⚠️ Face similar but below threshold';
+          reason = 'Score: $simPercent% (need $threshPercent%)';
+          suggestion = '✓ Try better lighting or angle\n✓ Ensure full face is visible\n✓ Remove glasses/mask if possible';
+        }
+
+        debugPrint('$userMessage | $reason');
+
         return {
           'success': false,
-          'message': 'Face not recognized (similarity: ${(bestScore * 100).toStringAsFixed(1)}%, threshold: ${(MATCH_THRESHOLD * 100).toStringAsFixed(1)}%)',
+          'message': userMessage,
+          'reason': reason,
+          'suggestion': suggestion,
           'similarity': bestScore,
+          'threshold': MATCH_THRESHOLD,
         };
       }
 
@@ -127,9 +154,36 @@ class AttendanceMarkingService {
       };
     } catch (e) {
       debugPrint('❌ Face matching error: $e');
+
+      // Generate helpful error message based on error type
+      String userMessage = '❌ Could not process face';
+      String reason = '';
+      String suggestion = '';
+
+      if (e.toString().contains('alignment')) {
+        userMessage = '⚠️ Face alignment failed';
+        reason = 'Cannot align face from photo';
+        suggestion = '✓ Ensure full face is visible\n✓ Try different angle\n✓ Improve lighting';
+      } else if (e.toString().contains('embedding')) {
+        userMessage = '⚠️ Could not extract face features';
+        reason = 'Face recognition module issue';
+        suggestion = '✓ Try clearer photo\n✓ Good lighting needed\n✓ Face should fill frame';
+      } else if (e.toString().contains('database') || e.toString().contains('students')) {
+        userMessage = '❌ No registered students found';
+        reason = 'Database connection issue';
+        suggestion = '✓ Check internet connection\n✓ Make sure students are registered\n✓ Try again in a moment';
+      } else {
+        userMessage = '❌ Face matching failed';
+        reason = 'System error occurred';
+        suggestion = '✓ Try again\n✓ Check device storage\n✓ Restart app if problem continues';
+      }
+
       return {
         'success': false,
-        'message': 'Face matching failed: $e',
+        'message': userMessage,
+        'reason': reason,
+        'suggestion': suggestion,
+        'error': e.toString(),
       };
     }
   }

@@ -86,7 +86,7 @@ class ProductionFacePipelineService {
 
     if (api['success'] != true || api['match'] == null) {
       return ProductionFacePipelineResult.fail(
-        'Face not recognized',
+        '❌ Face doesn\'t match any registered student — Make sure your photo quality is good and face is clearly visible',
         started: started,
         pipeline: ProductionPipelineMode.insightFaceApi,
         livenessPassed: api['liveness_passed'] as bool? ?? true,
@@ -101,7 +101,7 @@ class ProductionFacePipelineService {
     if (similarity <
         ProductionFaceRecognitionConstants.recognitionConfidenceThreshold) {
       return ProductionFacePipelineResult.fail(
-        'Recognition confidence too low (${(similarity * 100).toStringAsFixed(1)}%)',
+        '⚠️ Face similar but score is low (${(similarity * 100).toStringAsFixed(1)}%) — Try better lighting or angle, ensure full face is visible',
         started: started,
         pipeline: ProductionPipelineMode.insightFaceApi,
         similarity: similarity,
@@ -175,7 +175,7 @@ class ProductionFacePipelineService {
 
       if (AntiSpoofService.shouldRejectAutoScanCapture(pad)) {
         return ProductionFacePipelineResult.fail(
-          'Liveness check failed — use a live face, not a photo or screen',
+          '🛡️ Spoof detection failed — Use a live face, not a photo/video/screen (Confidence: ${(pad.confidence * 100).toStringAsFixed(0)}%)',
           started: started,
           pipeline: ProductionPipelineMode.onDevice,
           livenessPassed: false,
@@ -188,7 +188,7 @@ class ProductionFacePipelineService {
     final face = await FaceRecognitionService.detectFaceForPipeline(workPath);
     if (face == null) {
       return ProductionFacePipelineResult.fail(
-        'Face quality check failed — center your face in the frame',
+        '📷 Face quality check failed — Center your face in the frame, ensure good lighting, and look at the camera',
         started: started,
         pipeline: ProductionPipelineMode.onDevice,
         livenessPassed: true,
@@ -200,7 +200,7 @@ class ProductionFacePipelineService {
         await FaceRecognitionService.extractEmbeddingForPipeline(workPath, face);
     if (embedding == null || embedding.isEmpty) {
       return ProductionFacePipelineResult.fail(
-        'Could not extract face features',
+        '⚠️ Could not extract face features — Try with clearer photo and better lighting',
         started: started,
         pipeline: ProductionPipelineMode.onDevice,
         livenessPassed: true,
@@ -219,8 +219,8 @@ class ProductionFacePipelineService {
         instituteId,
       );
       final message = enrolled.isEmpty
-          ? 'No students with registered faces in this institute. Complete 3-photo face registration first.'
-          : 'Face not recognized — use the same person who registered, good light, and hold the phone at ~3 ft.';
+          ? '❌ No students with registered faces found — Complete 3-photo face registration first before marking attendance'
+          : '⚠️ Face not recognized (Score: ${(0.0 * 100).toStringAsFixed(1)}%) — Use the same person who registered, ensure good light, hold phone at ~3 ft, and center your face';
       return ProductionFacePipelineResult.fail(
         message,
         started: started,
