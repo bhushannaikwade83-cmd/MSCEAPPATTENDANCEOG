@@ -13,11 +13,13 @@ class MultiAngleFaceRegistrationScreen extends StatefulWidget {
 
   final String studentId;
   final String studentName;
+  final String srNo;
 
   const MultiAngleFaceRegistrationScreen({
     super.key,
     required this.studentId,
     required this.studentName,
+    required this.srNo,
   });
 
   @override
@@ -424,6 +426,7 @@ Future<void> _initializeCamera() async {
       final result = await AntiSpoofApiService.registerStudentFace(
         studentId: widget.studentId,
         studentName: widget.studentName,
+        srNo: widget.srNo,
         frontPhoto: File(_capturedPhotos[1]!.path),
         leftPhoto: File(_capturedPhotos[2]!.path),
         rightPhoto: File(_capturedPhotos[3]!.path),
