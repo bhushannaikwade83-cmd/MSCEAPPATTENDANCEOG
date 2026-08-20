@@ -2442,27 +2442,28 @@ async def upload_attendance_photo(
         print(f'📸 [UPLOAD] Photo for {student_name} ({sr_no}) - {record_type}')
         print(f'   Date: {date}, Institute: {institute_id}')
 
-        # Create directory structure
-        # Use /app as base (works in Docker container)
-        # Also save to public_html if it exists (for backup)
+        # Create directory structure: attendance-photos/{institute}/{sr_no}/{date}/
+        # Organize by: Institute → Student → Date
+        # Example: attendance-photos/99099/990/2026-08-21/entry_183349.jpg
 
-        # Try multiple paths (container or local)
-        possible_dirs = [
+        # Try multiple base paths (container or local)
+        possible_bases = [
             "/home/digitrix/public_html/attendance-photos",
             "/app/attendance-photos",
             "./attendance-photos",
         ]
 
         base_dir = None
-        for possible_dir in possible_dirs:
-            if os.path.exists(os.path.dirname(possible_dir)) or possible_dir.startswith("."):
-                base_dir = possible_dir
+        for possible_base in possible_bases:
+            if os.path.exists(os.path.dirname(possible_base)) or possible_base.startswith("."):
+                base_dir = possible_base
                 break
 
         if base_dir is None:
-            base_dir = "/app/attendance-photos"  # Fallback for container
+            base_dir = "/home/digitrix/public_html/attendance-photos"
 
-        photo_dir = os.path.join(base_dir, institute_id, date)
+        # Full path: attendance-photos/{institute_id}/{sr_no}/{date}/
+        photo_dir = os.path.join(base_dir, institute_id, sr_no, date)
 
         # Create directories with error checking
         try:
@@ -2489,11 +2490,12 @@ async def upload_attendance_photo(
             print(f'   ❌ Directory creation failed: {dir_err}')
             raise
 
-        # Generate filename: SR123_entry_143022.jpg
+        # Generate filename: entry_143022.jpg (sr_no is in folder path)
         time_str = datetime.now().strftime("%H%M%S")
-        filename = f"{sr_no}_{record_type}_{time_str}.jpg"
+        filename = f"{record_type}_{time_str}.jpg"
         filepath = os.path.join(photo_dir, filename)
 
+        print(f'   📝 Filename: {filename}')
         print(f'   📝 Full path: {filepath}')
 
         # Read and save photo
@@ -2524,8 +2526,8 @@ async def upload_attendance_photo(
         print(f'   📋 Directory now has {len(dir_contents)} files')
 
         # Generate public URL
-        # Pattern: https://api.digitrixmedia.com/attendance-photos/90999/2024-01-15/SR123_entry_143022.jpg
-        photo_url = f"https://api.digitrixmedia.com/attendance-photos/{institute_id}/{date}/{filename}"
+        # Pattern: https://digitrixmedia.com/attendance-photos/99099/990/2026-08-21/entry_143022.jpg
+        photo_url = f"https://digitrixmedia.com/attendance-photos/{institute_id}/{sr_no}/{date}/{filename}"
         print(f'   🌐 URL: {photo_url}')
 
         upload_ms = (time.time() - upload_start) * 1000
@@ -2553,20 +2555,23 @@ async def upload_attendance_photo(
             "traceback": error_trace,
         }
 
-@app.get("/attendance-photos/{institute_id}/{date}/{filename}")
-async def serve_attendance_photo(institute_id: str, date: str, filename: str):
+@app.get("/attendance-photos/{institute_id}/{sr_no}/{date}/{filename}")
+async def serve_attendance_photo(institute_id: str, sr_no: str, date: str, filename: str):
     """
-    ✅ Serve attendance photos directly from backend (DISPLAY, not download!)
+    ✅ Serve attendance photos directly from web server
 
-    Path: /attendance-photos/{institute_id}/{date}/{filename}
-    Example: /attendance-photos/99099/2026-08-20/990_entry_182836.jpg
+    Path: /attendance-photos/{institute_id}/{sr_no}/{date}/{filename}
+    Example: /attendance-photos/99099/990/2026-08-21/entry_183349.jpg
+
+    This endpoint is for API fallback. Normally accessed directly via web:
+    https://digitrixmedia.com/attendance-photos/99099/990/2026-08-21/entry_183349.jpg
     """
     try:
         # Try multiple possible locations
         possible_paths = [
-            f"/app/attendance-photos/{institute_id}/{date}/{filename}",
-            f"/home/digitrix/public_html/attendance-photos/{institute_id}/{date}/{filename}",
-            f"./attendance-photos/{institute_id}/{date}/{filename}",
+            f"/home/digitrix/public_html/attendance-photos/{institute_id}/{sr_no}/{date}/{filename}",
+            f"/app/attendance-photos/{institute_id}/{sr_no}/{date}/{filename}",
+            f"./attendance-photos/{institute_id}/{sr_no}/{date}/{filename}",
         ]
 
         filepath = None
@@ -2576,8 +2581,7 @@ async def serve_attendance_photo(institute_id: str, date: str, filename: str):
                 break
 
         if filepath is None:
-            print(f'❌ [SERVE] File not found in any location: {filename}')
-            print(f'   Tried: {possible_paths}')
+            print(f'❌ [SERVE] File not found: {filename}')
             raise HTTPException(status_code=404, detail="Photo not found")
 
         print(f'📸 [SERVE] Found at: {filepath}')
