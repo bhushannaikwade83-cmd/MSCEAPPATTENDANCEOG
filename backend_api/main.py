@@ -2446,20 +2446,37 @@ async def upload_attendance_photo(
         base_dir = "/home/digitrix/public_html"
         photo_dir = os.path.join(base_dir, "attendance-photos", institute_id, date)
 
-        os.makedirs(photo_dir, exist_ok=True)
-        print(f'   📁 Directory: {photo_dir}')
+        # Create directories with error checking
+        try:
+            os.makedirs(photo_dir, exist_ok=True)
+            print(f'   📁 Directory: {photo_dir}')
+            print(f'   ✅ Directory exists/created')
+        except Exception as dir_err:
+            print(f'   ❌ Directory creation failed: {dir_err}')
+            raise
 
         # Generate filename: SR123_entry_143022.jpg
         time_str = datetime.now().strftime("%H%M%S")
         filename = f"{sr_no}_{record_type}_{time_str}.jpg"
         filepath = os.path.join(photo_dir, filename)
 
+        print(f'   📝 Saving to: {filepath}')
+
         # Read and save photo
         contents = await photo.read()
-        with open(filepath, "wb") as f:
-            f.write(contents)
-
         file_size_kb = len(contents) / 1024
+        print(f'   📦 File size: {file_size_kb:.1f}KB')
+
+        with open(filepath, "wb") as f:
+            bytes_written = f.write(contents)
+            print(f'   ✍️  Wrote {bytes_written} bytes')
+
+        # Verify file exists
+        if not os.path.exists(filepath):
+            raise Exception(f'File not saved! Path: {filepath}')
+
+        file_stat = os.stat(filepath)
+        print(f'   ✅ File verified: {file_stat.st_size} bytes on disk')
         print(f'   ✅ Saved: {filename} ({file_size_kb:.1f}KB)')
 
         # Generate public URL
@@ -2483,11 +2500,13 @@ async def upload_attendance_photo(
     except Exception as e:
         print(f'❌ [UPLOAD] Error: {e}')
         import traceback
-        print(traceback.format_exc())
+        error_trace = traceback.format_exc()
+        print(error_trace)
 
         return {
             "success": False,
             "error": str(e),
+            "traceback": error_trace,
         }
 
 @app.get("/api/debug/faiss-status")
