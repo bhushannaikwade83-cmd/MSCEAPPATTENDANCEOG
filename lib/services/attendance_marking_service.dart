@@ -154,9 +154,9 @@ class AttendanceMarkingService {
     return dotProduct / denominator;
   }
 
-  /// Save attendance record to database (SEPARATE entry/exit records)
+  /// Save attendance record to database (ASYNC - don't wait!)
   /// recordType: 'entry' or 'exit'
-  /// Returns: {success, message, attendance_id}
+  /// Returns: {success, message} IMMEDIATELY (before DB save completes)
   static Future<Map<String, dynamic>> markAttendance({
     required String studentId,
     required String instituteId,
@@ -169,40 +169,40 @@ class AttendanceMarkingService {
     required String recordType, // 'entry' or 'exit'
   }) async {
     try {
-      final saveStart = DateTime.now();
-      debugPrint('💾 Saving $recordType record for $studentName...');
-
       final attendanceDate = timestamp.toIso8601String().split('T')[0]; // YYYY-MM-DD
 
-      final result = await appDb.from('attendance').upsert({
+      // Generate temporary ID for UI (until DB save completes)
+      final tempId = '${DateTime.now().millisecondsSinceEpoch}';
+
+      // ⚡ INSTANT RESPONSE: Return success immediately!
+      final emoji = recordType == 'entry' ? '🚪➡️' : '🚪⬅️';
+      debugPrint('$emoji $recordType marked for $srNo at ${timestamp.hour}:${timestamp.minute}');
+      debugPrint('⚡ Returning success immediately (DB save in background)...');
+
+      // ⏳ BACKGROUND: Save to database (fire-and-forget, don't wait!)
+      appDb.from('attendance').upsert({
         'student_id': studentId,
         'institute_id': instituteId,
         'sr_no': srNo,
         'student_name': studentName,
         'attendance_date': attendanceDate,
         'record_type': recordType,  // 'entry' or 'exit'
-        'marked_time': timestamp.toUtc().toIso8601String(), // store UTC so display .toLocal() is correct
+        'marked_time': timestamp.toUtc().toIso8601String(),
         'photo_url': photoUrl,
         'embedding': jsonEncode(embedding),
         'similarity_score': similarityScore,
         'status': 'present',
-      }).select();
+      }).then((_) {
+        debugPrint('✅ [BACKGROUND] $recordType attendance saved to Supabase');
+      }).catchError((e) {
+        debugPrint('❌ [BACKGROUND] Attendance save error: $e');
+      });
 
-      if (result.isEmpty) {
-        throw Exception('Failed to create attendance record');
-      }
-
-      final saveEnd = DateTime.now();
-      final saveMs = saveEnd.difference(saveStart).inMilliseconds;
-      debugPrint('⏱️  Database save took: ${saveMs}ms');
-
-      final emoji = recordType == 'entry' ? '🚪➡️' : '🚪⬅️';
-      debugPrint('✅ $emoji $recordType marked for ${result[0]['sr_no']} at ${timestamp.hour}:${timestamp.minute}');
-
+      // Return success IMMEDIATELY (user doesn't wait for DB)
       return {
         'success': true,
         'message': '$recordType marked: $studentName',
-        'attendance_id': result[0]['id'],
+        'attendance_id': tempId,  // Temporary ID
         'record_type': recordType,
       };
     } catch (e) {
