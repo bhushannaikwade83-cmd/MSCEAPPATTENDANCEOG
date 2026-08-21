@@ -2322,7 +2322,7 @@ async def mark_attendance_auto(
             supabase = _get_supabase_client()
             today_response = supabase.table('attendance').select(
                 'record_type'
-            ).eq('sr_no', sr_no).eq('attendance_date', today).execute()
+            ).eq('sr_no', sr_no).eq('institute_id', institute_id).eq('attendance_date', today).execute()
 
             marked_types = {row.get('record_type') for row in (today_response.data or [])}
             step7_time = time.time() - step7_start
