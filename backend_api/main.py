@@ -460,7 +460,7 @@ class VerifyRequest(BaseModel):
     image_base64: str
     institute_id: str
     roll_number: str
-    threshold: float = 0.70
+    threshold: float = 0.65
 
 class VerifyResponse(BaseModel):
     success: bool
@@ -1432,7 +1432,7 @@ async def verify_face_info():
             "image_base64": "string (base64 encoded image)",
             "institute_id": "string",
             "roll_number": "string",
-            "threshold": "float (0.0-1.0, default: 0.70)"
+            "threshold": "float (0.0-1.0, default: 0.65)"
         },
         "response": {
             "success": "boolean",
@@ -2141,7 +2141,7 @@ async def mark_attendance_auto(
         step5_start = time.time()
         from sklearn.metrics.pairwise import cosine_similarity
 
-        SIMILARITY_THRESHOLD = get_setting('similarity_threshold', 0.70)
+        SIMILARITY_THRESHOLD = get_setting('similarity_threshold', 0.65)
         valid_students = []
         embeddings_matrix_front = []
         embeddings_matrix_left = []
