@@ -404,13 +404,7 @@ class _LiveAntiSpoofCameraScreenState extends State<LiveAntiSpoofCameraScreen> {
         print('📊 [API] Result: $result');
 
         if (mounted) {
-          if (result.containsKey('error')) {
-            print('❌ [API] Error in response: ${result['error']}');
-            setState(() {
-              _currentStage = '❌ No Match Found';
-            });
-            await Future.delayed(const Duration(seconds: 6));
-          } else {
+          if (result['success'] == true) {
             _matchedStudentName = result['student_name'] ?? 'Unknown';
             _similarityScore = result['similarity'] ?? 0.0;
             _srNo = result['sr_no'] ?? 'N/A';
@@ -477,6 +471,13 @@ class _LiveAntiSpoofCameraScreenState extends State<LiveAntiSpoofCameraScreen> {
 
               await Future.delayed(const Duration(seconds: 6));
             }
+          } else {
+            // No match found
+            print('❌ [API] No match: ${result['error'] ?? result['status']}');
+            setState(() {
+              _currentStage = '❌ ${result['error'] ?? "No Match Found"}';
+            });
+            await Future.delayed(const Duration(seconds: 6));
           }
         }
       }
