@@ -244,17 +244,17 @@ class _StudentFaceRegistrationWrapperState
       print('✅ Left: ${leftEmbedding.length}-D');
       print('✅ Right: ${rightEmbedding.length}-D');
 
-      // ✅ Photos already uploaded to server via PHP endpoint (from registerStudentFace)
-      // Extract photo URLs from backend response
+      // ✅ Photos MUST be uploaded to server via PHP endpoint
+      // Extract photo URLs from backend response - NO FALLBACK!
       final photoUrls = result['photo_urls'] as Map<String, dynamic>?;
-      final facePhotoUrl = photoUrls?['front'] ??
-        'https://digitrixmedia.com/registration-photos/${widget.instituteId}/${widget.srNo}/front.jpg';
+      final facePhotoUrl = photoUrls?['front'];
 
-      print('📸 Photos already saved to server');
+      print('📸 Photos uploaded to server');
       print('✅ Front photo: $facePhotoUrl');
 
+      // ❌ STRICT: No fallback URL construction - upload must succeed
       if (facePhotoUrl == null || facePhotoUrl.isEmpty) {
-        throw Exception('No photo URL returned from backend');
+        throw Exception('❌ Photo upload failed - no URL returned from backend. Check if PHP upload endpoints are working.');
       }
 
       // ⚡ ASYNC DATABASE SAVE: Show success immediately, save in background!
