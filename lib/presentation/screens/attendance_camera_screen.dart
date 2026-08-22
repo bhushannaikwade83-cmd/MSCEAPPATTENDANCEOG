@@ -101,7 +101,7 @@ class _AttendanceCameraScreenState extends State<AttendanceCameraScreen>
       _isRegistration ? _registrationLivenessHint : _attendanceLivenessHint;
 
   String _poseInstruction(String pose) => switch (pose) {
-    'front' => 'Look straight — blink 2 times (auto capture)',
+    'front' => 'Look straight — blink once (auto capture)',
     'left'  => 'Now glance LEFT — hold for a moment',
     'right' => 'Now glance RIGHT — hold for a moment',
     _       => 'Hold still at ~3 ft',
@@ -140,7 +140,7 @@ class _AttendanceCameraScreenState extends State<AttendanceCameraScreen>
     }
 
     final isSidePose = pose == 'left' || pose == 'right';
-    final blinks = isSidePose ? 0 : (_isRegistration ? 2 : _requiredBlinks);
+    final blinks = isSidePose ? 0 : (_isRegistration ? 1 : _requiredBlinks);
     final requireBlink = isSidePose ? false : (_isRegistration ? true : _requireBlink);
 
     return PreCaptureLivenessTracker(
