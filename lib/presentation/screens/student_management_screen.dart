@@ -78,7 +78,7 @@ class _StudentManagementScreenState extends State<StudentManagementScreen>
 
   /// Omit `face_embedding` / `photo_thumbnail` — they are large JSON and slow every list page.
   static const String _studentSelectCols =
-      'id,sr_no,fname,lname,mname,sub1,sub2,sub3,sub4,sub5,sub6,sub7,sub8,form_serial_no,mother_nm,ctcd,identy_no,face_photo_url,face_embedding_front,face_embedding_left,face_embedding_right,face_registered_at,face_registration_status,is_face_real,status,created_at,updated_at';
+      'id,sr_no,fname,lname,mname,sub1,sub2,sub3,sub4,sub5,sub6,sub7,sub8,form_serial_no,mother_nm,ctcd,identy_no,face_photo_url,face_embedding_front,face_embedding_left,face_embedding_right,face_registered_at,face_registration_status,is_face_real,status,face_photo_change_count,face_photo_change_disabled,created_at,updated_at';
 
   /// Today's entry/exit UI state keyed by [students.id] only (avoids roll/userId collisions).
   Map<String, Map<String, dynamic>> _todayPayloadByStudentId = {};
@@ -1059,6 +1059,9 @@ class _StudentManagementScreenState extends State<StudentManagementScreen>
       'is_face_real': row['is_face_real'] ?? false,
       'form_serial_no': row['form_serial_no'] ?? '',
       'status': row['status'] ?? 1,  // 💳 Payment status: 1=can register, 2=blocked
+      // ✅ NEW: Face photo change tracking
+      'face_photo_change_count': row['face_photo_change_count'] ?? 0,
+      'face_photo_change_disabled': row['face_photo_change_disabled'] ?? false,
     };
   }
 
@@ -2141,6 +2144,15 @@ class _StudentManagementScreenState extends State<StudentManagementScreen>
     final averageFaceQuality = 0.0; // Column not in DB yet, default to 0
     final formSerialNo = data['form_serial_no'] ?? '';
 
+    // ✅ NEW: Face photo change tracking
+    final facePhotoChangeCount = (data['face_photo_change_count'] as int?) ?? 0;
+    final facePhotoChangeDisabled = (data['face_photo_change_disabled'] as bool?) ?? false;
+    final canChangePhoto = hasPhoto && !facePhotoChangeDisabled && facePhotoChangeCount < 3;
+    final changePhotoButtonText = facePhotoChangeCount < 3
+        ? 'Change Photo (${facePhotoChangeCount + 1}/3)'
+        : 'Change Photo (3/3)';
+    final changePhotoUsesRemaining = 3 - facePhotoChangeCount;
+
     // Payment status: 1 = can register, 2 = payment pending
     final paymentStatus = data['status'] as int? ?? 1;
     final isPaymentPending = paymentStatus == 2;
@@ -2720,6 +2732,161 @@ class _StudentManagementScreenState extends State<StudentManagementScreen>
                 ),
               ],
               SizedBox(height: 14.h),
+              // ✅ NEW: Change Photo Once Button (between timer and divider)
+              if (hasPhoto)
+                Padding(
+                  padding: EdgeInsets.only(bottom: 12.h),
+                  child: Material(
+                    color: Colors.transparent,
+                    child: InkWell(
+                      onTap: canChangePhoto
+                          ? () async {
+                              if (!context.mounted || _instituteId == null) return;
+
+                              // Navigate to registration screen
+                              await Navigator.of(context).push(
+                                MaterialPageRoute(
+                                  builder: (_) => StudentFaceRegistrationWrapper(
+                                    studentId: studentId,
+                                    studentName: name,
+                                    srNo: _formatSrDisplay(srNo),
+                                    instituteId: _instituteId!,
+                                    changePhotoOnce: true,
+                                    onRegistrationSuccess: () async {
+                                      if (!mounted) return;
+
+                                      // Update counter in database
+                                      try {
+                                        final newCount = facePhotoChangeCount + 1;
+                                        final shouldDisable = newCount >= 3;
+
+                                        await appDb
+                                            .from('students')
+                                            .update({
+                                              'face_photo_change_count': newCount,
+                                              'face_photo_change_disabled': shouldDisable,
+                                            })
+                                            .eq('id', studentId);
+
+                                        if (kDebugMode) {
+                                          debugPrint('✅ Photo change counter updated: $newCount/3, disabled: $shouldDisable');
+                                        }
+
+                                        // Refresh student list
+                                        _bootstrapStudentList();
+
+                                        ScaffoldMessenger.of(context).showSnackBar(
+                                          SnackBar(
+                                            content: Text(
+                                              shouldDisable
+                                                  ? '✅ Photo changed! (3/3 uses done)'
+                                                  : '✅ Photo changed! (${3 - newCount} uses left)',
+                                            ),
+                                            backgroundColor: AppTheme.primaryGreen,
+                                            duration: const Duration(seconds: 2),
+                                          ),
+                                        );
+                                      } catch (e) {
+                                        if (kDebugMode) debugPrint('❌ Error updating photo change count: $e');
+                                        ScaffoldMessenger.of(context).showSnackBar(
+                                          const SnackBar(
+                                            content: Text('⚠️ Photo changed but counter update failed'),
+                                            backgroundColor: Colors.orange,
+                                          ),
+                                        );
+                                      }
+                                    },
+                                  ),
+                                ),
+                              );
+                            }
+                          : () {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text('❌ You have used all 3 changes available'),
+                                  backgroundColor: Colors.red,
+                                  duration: Duration(seconds: 2),
+                                ),
+                              );
+                            },
+                      borderRadius: BorderRadius.circular(12.r),
+                      child: Container(
+                        padding: EdgeInsets.all(12.w),
+                        decoration: BoxDecoration(
+                          color: canChangePhoto
+                              ? AppTheme.primaryBlue.withValues(alpha: 0.12)
+                              : Colors.grey.withValues(alpha: 0.08),
+                          borderRadius: BorderRadius.circular(12.r),
+                          border: Border.all(
+                            color: canChangePhoto
+                                ? AppTheme.primaryBlue.withValues(alpha: 0.3)
+                                : Colors.grey.withValues(alpha: 0.2),
+                            width: 1.5,
+                          ),
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(
+                              Icons.photo_camera,
+                              color: canChangePhoto ? AppTheme.primaryBlue : Colors.grey,
+                              size: 20.sp,
+                            ),
+                            SizedBox(width: 10.w),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Text(
+                                    'Change Photo',
+                                    style: TextStyle(
+                                      fontSize: 13.sp,
+                                      fontWeight: FontWeight.w700,
+                                      color: canChangePhoto ? AppTheme.primaryBlue : Colors.grey,
+                                      letterSpacing: 0.2,
+                                    ),
+                                  ),
+                                  SizedBox(height: 2.h),
+                                  Text(
+                                    canChangePhoto
+                                        ? '${changePhotoUsesRemaining} use${changePhotoUsesRemaining == 1 ? '' : 's'} remaining'
+                                        : 'Limit reached',
+                                    style: TextStyle(
+                                      fontSize: 11.sp,
+                                      color: canChangePhoto
+                                          ? AppTheme.textGray
+                                          : Colors.grey.withValues(alpha: 0.6),
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            SizedBox(width: 8.w),
+                            Container(
+                              padding: EdgeInsets.symmetric(horizontal: 10.w, vertical: 6.h),
+                              decoration: BoxDecoration(
+                                color: canChangePhoto
+                                    ? AppTheme.primaryBlue
+                                    : Colors.grey.withValues(alpha: 0.3),
+                                borderRadius: BorderRadius.circular(8.r),
+                              ),
+                              child: Text(
+                                changePhotoButtonText,
+                                style: TextStyle(
+                                  fontSize: 10.sp,
+                                  fontWeight: FontWeight.w700,
+                                  color: canChangePhoto ? Colors.white : Colors.grey,
+                                  letterSpacing: 0.2,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
               // Divider before action buttons
               Container(
                 height: 1,
