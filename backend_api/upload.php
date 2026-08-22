@@ -23,9 +23,11 @@ header('Access-Control-Allow-Methods: POST, GET, OPTIONS');
 // Enable error reporting
 error_reporting(E_ALL);
 ini_set('display_errors', 0);
+ini_set('log_errors', 1);
+ini_set('error_log', '/home/digitrix/public_html/msceattendanceapp/attendance-photos/php_errors.log');
 
 // Log to file instead
-$base_dir = "/home/digitrix/public_html/attendance-photos";
+$base_dir = "/home/digitrix/public_html/msceattendanceapp/attendance-photos";
 $log_file = "$base_dir/upload.log";
 
 // Ensure base directory exists
@@ -72,7 +74,7 @@ try {
     }
 
     // Create directory structure
-    $base_dir = "/home/digitrix/public_html/attendance-photos";
+    $base_dir = "/home/digitrix/public_html/msceattendanceapp/attendance-photos";
     $photo_dir = "$base_dir/$institute_id/$sr_no/$date";
 
     log_debug("Directory: $photo_dir");
@@ -91,9 +93,9 @@ try {
         log_debug("✅ Directory created");
     }
 
-    // Generate filename
-    $time_str = date('His');
-    $filename = "{$record_type}_{$time_str}.jpg";
+    // Generate filename with timestamp: entry_2026-08-22_14-30-45.jpg
+    $timestamp = date('Y-m-d_H-i-s');
+    $filename = "{$record_type}_{$timestamp}.jpg";
     $filepath = "$photo_dir/$filename";
 
     log_debug("Filename: $filename");
@@ -118,7 +120,7 @@ try {
     log_debug("Directory now has " . count($dir_contents) . " items");
 
     // Generate URL
-    $photo_url = "https://digitrixmedia.com/attendance-photos/$institute_id/$sr_no/$date/$filename";
+    $photo_url = "https://digitrixmedia.com/msceattendanceapp/attendance-photos/$institute_id/$sr_no/$date/$filename";
 
     log_debug("URL: $photo_url");
     log_debug("=== UPLOAD SUCCESS ===");
@@ -136,12 +138,21 @@ try {
 
 } catch (Exception $e) {
     log_debug("❌ ERROR: " . $e->getMessage());
+    log_debug("Stack: " . $e->getTraceAsString());
     log_debug("=== UPLOAD FAILED ===");
 
     http_response_code(400);
     echo json_encode([
         'success' => false,
-        'error' => $e->getMessage()
+        'error' => $e->getMessage(),
+        'type' => get_class($e),
+        'line' => $e->getLine(),
+        'file' => $e->getFile(),
+        'timestamp' => date('Y-m-d H:i:s UTC'),
+        'debug_info' => [
+            'base_dir_exists' => is_dir($base_dir ?? 'N/A'),
+            'photo_dir_exists' => isset($photo_dir) ? is_dir($photo_dir) : false,
+        ]
     ]);
 }
 ?>

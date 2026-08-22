@@ -23,8 +23,10 @@ header('Access-Control-Allow-Methods: POST, GET, OPTIONS');
 
 error_reporting(E_ALL);
 ini_set('display_errors', 0);
+ini_set('log_errors', 1);
+ini_set('error_log', '/home/digitrix/public_html/msceattendanceapp/registration-photos/php_errors.log');
 
-$base_dir = "/home/digitrix/public_html/registration-photos";
+$base_dir = "/home/digitrix/public_html/msceattendanceapp/registration-photos";
 $log_file = "$base_dir/upload.log";
 
 // Ensure base directory exists
@@ -68,8 +70,8 @@ try {
         throw new Exception("Upload error: {$file['error']}");
     }
 
-    // Create directory structure: registration-photos/{institute_id}/{sr_no}/
-    $base_dir = "/home/digitrix/public_html/registration-photos";
+    // Create directory structure: registration-photos/{student_id}/
+    $base_dir = "/home/digitrix/public_html/msceattendanceapp/registration-photos";
     $photo_dir = "$base_dir/$institute_id/$sr_no";
 
     log_debug("Directory: $photo_dir");
@@ -88,8 +90,9 @@ try {
         log_debug("✅ Directory created");
     }
 
-    // Generate filename: front.jpg, left.jpg, right.jpg
-    $filename = "$angle.jpg";
+    // Generate filename with timestamp: front_2026-08-22_14-30-45.jpg
+    $timestamp = date('Y-m-d_H-i-s');
+    $filename = "{$angle}_{$timestamp}.jpg";
     $filepath = "$photo_dir/$filename";
 
     log_debug("Filename: $filename");
@@ -110,7 +113,7 @@ try {
     log_debug("✅ File saved: $file_size bytes");
 
     // Generate URL
-    $photo_url = "https://digitrixmedia.com/registration-photos/$institute_id/$sr_no/$filename";
+    $photo_url = "https://digitrixmedia.com/msceattendanceapp/registration-photos/$institute_id/$sr_no/$filename";
 
     log_debug("URL: $photo_url");
     log_debug("=== REGISTRATION UPLOAD SUCCESS ===");
@@ -128,12 +131,24 @@ try {
 
 } catch (Exception $e) {
     log_debug("❌ ERROR: " . $e->getMessage());
+    log_debug("Stack: " . $e->getTraceAsString());
     log_debug("=== REGISTRATION UPLOAD FAILED ===");
 
     http_response_code(400);
     echo json_encode([
         'success' => false,
-        'error' => $e->getMessage()
+        'error' => $e->getMessage(),
+        'type' => get_class($e),
+        'line' => $e->getLine(),
+        'file' => $e->getFile(),
+        'timestamp' => date('Y-m-d H:i:s UTC'),
+        'debug_info' => [
+            'base_dir_exists' => is_dir($base_dir ?? 'N/A'),
+            'photo_dir_exists' => isset($photo_dir) ? is_dir($photo_dir) : false,
+            'institute_id' => $_POST['institute_id'] ?? 'N/A',
+            'sr_no' => $_POST['sr_no'] ?? 'N/A',
+            'angle' => $_POST['angle'] ?? 'N/A',
+        ]
     ]);
 }
 ?>
