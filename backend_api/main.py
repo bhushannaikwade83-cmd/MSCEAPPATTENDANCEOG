@@ -1594,6 +1594,9 @@ async def register_multi_angle_face(
     student_id: str = Form(...),
     roll_number: str = Form(...),
     name: str = Form(...),
+    front_photo_url: str = Form(default=''),
+    left_photo_url: str = Form(default=''),
+    right_photo_url: str = Form(default=''),
 ):
     """
     ⚡ ASYNC Registration: Returns immediately after embedding generation
@@ -1661,18 +1664,18 @@ async def register_multi_angle_face(
         live_logger.stats['successful_requests'] += 1
         live_logger.stats['active_processing'] = max(0, live_logger.stats['active_processing'] - 1)
 
-        # Generate photo URLs (direct web access)
+        # 🔥 USE ACTUAL photo URLs from PHP (with timestamps!)
         photo_urls = {
-            "front": f"https://digitrixmedia.com/registration-photos/{institute_id}/{student_id}/front.jpg",
-            "left": f"https://digitrixmedia.com/registration-photos/{institute_id}/{student_id}/left.jpg",
-            "right": f"https://digitrixmedia.com/registration-photos/{institute_id}/{student_id}/right.jpg",
+            "front": front_photo_url or f"https://digitrixmedia.com/msceattendanceapp/registration-photos/{institute_id}/{student_id}/front.jpg",
+            "left": left_photo_url or f"https://digitrixmedia.com/msceattendanceapp/registration-photos/{institute_id}/{student_id}/left.jpg",
+            "right": right_photo_url or f"https://digitrixmedia.com/msceattendanceapp/registration-photos/{institute_id}/{student_id}/right.jpg",
         }
 
         return {
             "success": True,
             "message": f"Face registered for {roll_number}",
             "embeddings": embeddings_result,  # Return embeddings for Flutter to display immediately
-            "photo_urls": photo_urls,  # Photo URLs already saved by PHP
+            "photo_urls": photo_urls,  # Photo URLs from PHP (with timestamps for actual files)
             "timing": {
                 "embedding_generation_sec": round(embedding_time, 2),
                 "note": "Supabase save happening in background (silent)"
@@ -2523,8 +2526,8 @@ async def upload_attendance_photo(
         print(f'🔍 [DEBUG] SAVE COMPLETE ✅')
 
         # Generate public URL
-        # Pattern: https://digitrixmedia.com/attendance-photos/99099/990/2026-08-21/entry_143022.jpg
-        photo_url = f"https://digitrixmedia.com/attendance-photos/{institute_id}/{sr_no}/{date}/{filename}"
+        # Pattern: https://digitrixmedia.com/msceattendanceapp/attendance-photos/99099/990/2026-08-21/entry_143022.jpg
+        photo_url = f"https://digitrixmedia.com/msceattendanceapp/attendance-photos/{institute_id}/{sr_no}/{date}/{filename}"
         print(f'   🌐 URL: {photo_url}')
 
         upload_ms = (time.time() - upload_start) * 1000
@@ -2606,7 +2609,7 @@ async def serve_registration_photo(institute_id: str, sr_no: str, filename: str)
     """
     try:
         # Construct file path
-        filepath = f"/home/digitrix/public_html/registration-photos/{institute_id}/{sr_no}/{filename}"
+        filepath = f"/home/digitrix/public_html/msceattendanceapp/registration-photos/{institute_id}/{sr_no}/{filename}"
 
         print(f'📸 [SERVE-REG] Looking for: {filename}')
         print(f'   Path: {filepath}')

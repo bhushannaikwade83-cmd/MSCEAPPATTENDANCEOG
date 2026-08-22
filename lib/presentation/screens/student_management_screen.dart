@@ -2144,6 +2144,18 @@ class _StudentManagementScreenState extends State<StudentManagementScreen>
     final averageFaceQuality = 0.0; // Column not in DB yet, default to 0
     final formSerialNo = data['form_serial_no'] ?? '';
 
+    // Registration timestamp
+    final faceRegisteredAtRaw = data['face_registered_at'];
+    String faceRegisteredAtDisplay = '';
+    if (faceRegisteredAtRaw != null) {
+      try {
+        final registeredTime = parseAnyTimestamp(faceRegisteredAtRaw);
+        if (registeredTime != null) {
+          faceRegisteredAtDisplay = DateFormat('dd-MMM-yyyy HH:mm').format(registeredTime.toLocal());
+        }
+      } catch (_) {}
+    }
+
     // ✅ NEW: Face photo change tracking
     final facePhotoChangeCount = (data['face_photo_change_count'] as int?) ?? 0;
     final facePhotoChangeDisabled = (data['face_photo_change_disabled'] as bool?) ?? false;
@@ -2399,6 +2411,28 @@ class _StudentManagementScreenState extends State<StudentManagementScreen>
                             ),
                           ],
                         ),
+                        // ✅ Registration timestamp
+                        if (isFaceRegistered && faceRegisteredAtDisplay.isNotEmpty) ...[
+                          SizedBox(height: 6.h),
+                          Row(
+                            children: [
+                              Icon(Icons.calendar_today, size: 12.sp, color: statusColor.withValues(alpha: 0.5)),
+                              SizedBox(width: 4.w),
+                              Expanded(
+                                child: Text(
+                                  'Registered: $faceRegisteredAtDisplay',
+                                  style: TextStyle(
+                                    color: isDark ? Colors.white60 : AppTheme.textGray,
+                                    fontSize: 11.sp,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
                         SizedBox(height: 8.h),
                         // SR NO
                         Row(
@@ -2743,62 +2777,80 @@ class _StudentManagementScreenState extends State<StudentManagementScreen>
                           ? () async {
                               if (!context.mounted || _instituteId == null) return;
 
-                              // Navigate to registration screen
-                              await Navigator.of(context).push(
-                                MaterialPageRoute(
-                                  builder: (_) => StudentFaceRegistrationWrapper(
-                                    studentId: studentId,
-                                    studentName: name,
-                                    srNo: _formatSrDisplay(srNo),
-                                    instituteId: _instituteId!,
-                                    changePhotoOnce: true,
-                                    onRegistrationSuccess: () async {
-                                      if (!mounted) return;
-
-                                      // Update counter in database
-                                      try {
-                                        final newCount = facePhotoChangeCount + 1;
-                                        final shouldDisable = newCount >= 3;
-
-                                        await appDb
-                                            .from('students')
-                                            .update({
-                                              'face_photo_change_count': newCount,
-                                              'face_photo_change_disabled': shouldDisable,
-                                            })
-                                            .eq('id', studentId);
-
-                                        if (kDebugMode) {
-                                          debugPrint('✅ Photo change counter updated: $newCount/3, disabled: $shouldDisable');
-                                        }
-
-                                        // Refresh student list
-                                        _bootstrapStudentList();
-
-                                        ScaffoldMessenger.of(context).showSnackBar(
-                                          SnackBar(
-                                            content: Text(
-                                              shouldDisable
-                                                  ? '✅ Photo changed! (3/3 uses done)'
-                                                  : '✅ Photo changed! (${3 - newCount} uses left)',
-                                            ),
-                                            backgroundColor: AppTheme.primaryGreen,
-                                            duration: const Duration(seconds: 2),
-                                          ),
-                                        );
-                                      } catch (e) {
-                                        if (kDebugMode) debugPrint('❌ Error updating photo change count: $e');
-                                        ScaffoldMessenger.of(context).showSnackBar(
-                                          const SnackBar(
-                                            content: Text('⚠️ Photo changed but counter update failed'),
-                                            backgroundColor: Colors.orange,
-                                          ),
-                                        );
-                                      }
-                                    },
+                              // 🎯 CONFIRMATION DIALOG
+                              final confirmed = await showDialog<bool>(
+                                context: context,
+                                builder: (_) => AlertDialog(
+                                  title: const Text('Clear Photo?'),
+                                  content: const Text(
+                                    'This will remove the current face photo.\n\n'
+                                    'You will need to do full face registration again using the Register button.\n\n'
+                                    'Continue?',
                                   ),
+                                  actions: [
+                                    TextButton(
+                                      onPressed: () => Navigator.pop(context, false),
+                                      child: const Text('Cancel'),
+                                    ),
+                                    TextButton(
+                                      onPressed: () => Navigator.pop(context, true),
+                                      child: const Text('Clear Photo'),
+                                    ),
+                                  ],
                                 ),
-                              );
+                              ) ?? false;
+
+                              if (!confirmed) return;
+
+                              try {
+                                final newCount = facePhotoChangeCount + 1;
+                                final shouldDisable = newCount >= 3;
+
+                                // 🔥 CLEAR PHOTO & RESET REGISTRATION
+                                await appDb
+                                    .from('students')
+                                    .update({
+                                      'face_photo_url': null, // ✅ CLEAR PHOTO
+                                      'face_registration_status': 'pending', // ✅ RESET STATUS
+                                      'face_embedding_front': null, // ✅ CLEAR EMBEDDINGS
+                                      'face_embedding_left': null,
+                                      'face_embedding_right': null,
+                                      'face_photo_change_count': newCount, // ✅ INCREMENT COUNTER
+                                      'face_photo_change_disabled': shouldDisable, // ✅ AUTO-DISABLE AT 3
+                                    })
+                                    .eq('id', studentId);
+
+                                if (kDebugMode) {
+                                  debugPrint('✅ Photo cleared! Counter: $newCount/3, Disabled: $shouldDisable');
+                                }
+
+                                // Refresh UI
+                                _bootstrapStudentList();
+
+                                if (mounted) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                      content: Text(
+                                        shouldDisable
+                                            ? '✅ Photo cleared! (3/3 uses done) - Click Register to re-register'
+                                            : '✅ Photo cleared! (${3 - newCount} uses left) - Click Register to re-register',
+                                      ),
+                                      backgroundColor: AppTheme.primaryGreen,
+                                      duration: const Duration(seconds: 3),
+                                    ),
+                                  );
+                                }
+                              } catch (e) {
+                                if (kDebugMode) debugPrint('❌ Error clearing photo: $e');
+                                if (mounted) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                      content: Text('❌ Error: $e'),
+                                      backgroundColor: Colors.red,
+                                    ),
+                                  );
+                                }
+                              }
                             }
                           : () {
                               ScaffoldMessenger.of(context).showSnackBar(

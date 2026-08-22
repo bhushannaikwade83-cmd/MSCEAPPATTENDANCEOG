@@ -293,15 +293,20 @@ class _StudentFaceRegistrationWrapperState
         'face_registration_status': 'registered',
         'is_face_real': true,
         'face_registered_at': DateTime.now().toIso8601String(),
-      }).eq('id', widget.studentId).then((_) {
+      }).eq('id', widget.studentId).select().then((result) {
         final dbTime = DateTime.now().difference(dbSaveStart).inMilliseconds;
         final totalTime = DateTime.now().difference(regStartTime).inMilliseconds;
         print('✅ [BACKGROUND] Database saved (${dbTime}ms)');
+        print('📊 Update result rows: ${result.length}');
         print('📊 TOTAL REGISTRATION TIME: ${totalTime}ms');
         print('═══════════════════════════════════════════════════════════');
       }).catchError((e) {
-        print('❌ [BACKGROUND] Database save error: $e');
-        // Log error but don't crash - photos already uploaded
+        print('❌ [BACKGROUND] Database save FAILED: $e');
+        print('❌ Type: ${e.runtimeType}');
+        if (e is PostgrestException) {
+          print('❌ Code: ${e.code}');
+          print('❌ Message: ${e.message}');
+        }
       });
     } catch (e) {
       if (kDebugMode) debugPrint('❌ Registration error: $e');
@@ -402,20 +407,32 @@ class _StudentFaceRegistrationWrapperState
 
       photoBytes = await PhotoCompressionService.compressPhotoBytes(photoBytes);
 
-      final timestamp = DateTime.now().millisecondsSinceEpoch.toString();
-      final photoPath =
-          'registrations/${widget.instituteId}/${widget.studentId}_$timestamp.jpg';
-      final photoUrl = await B2BStorageService.uploadFile(
-        photoPath,
-        photoBytes,
-        contentType: 'image/jpeg',
+      // 🔥 Upload via PHP endpoint (NEW SERVER-BASED STORAGE)
+      final tempFile = File(workPath);
+      final photoUrl = await AntiSpoofApiService.uploadRegistrationPhoto(
+        tempFile,
+        widget.studentId,
+        widget.instituteId,
+        'front',
       );
+
+      if (photoUrl == null || photoUrl.isEmpty) {
+        print('❌ PHP Upload Error: photoUrl is null/empty');
+        throw Exception(
+          '❌ Photo upload to server failed!\n\n'
+          'The PHP endpoint returned null.\n\n'
+          'Check: /public_html/msceattendanceapp/api/upload_registration.php\n\n'
+          'Try: Take photo again or contact admin'
+        );
+      }
+
+      final photoPath = photoUrl; // Use the returned URL as path
 
       // Increment photo version to bust cache
       final currentStudent = await appDb
           .from('students')
           .select(
-            'photo_version, face_photo_url, registration_photo_path, face_photo_changed_once, face_embedding',
+            'photo_version, face_photo_url, registration_photo_path, face_photo_changed_once, face_embedding, face_photo_change_count, face_photo_change_disabled',
           )
           .eq('id', widget.studentId)
           .maybeSingle();
@@ -522,6 +539,16 @@ class _StudentFaceRegistrationWrapperState
       updatePayload['face_photo_changed_once'] = true;
       updatePayload['face_photo_changed_at'] =
           DateTime.now().toUtc().toIso8601String();
+
+      // 🔥 INCREMENT face_photo_change_count
+      final currentCount = (currentStudent?['face_photo_change_count'] as int?) ?? 0;
+      final newCount = currentCount + 1;
+      updatePayload['face_photo_change_count'] = newCount;
+
+      // ✅ DISABLE after 3 uses
+      if (newCount >= 3) {
+        updatePayload['face_photo_change_disabled'] = true;
+      }
     }
 
     await appDb.from('students').update(updatePayload).eq('id', widget.studentId);

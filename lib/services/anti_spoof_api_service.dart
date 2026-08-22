@@ -106,13 +106,18 @@ class AntiSpoofApiService {
       // ✅ STEP 1: Upload 3 photos to PHP (in parallel)
       print('📤 Uploading 3 photos to server (in parallel)...');
       final uploadResults = await Future.wait([
-        _uploadRegistrationPhoto(frontPhoto, studentId, instituteId ?? 'default', 'front'),
-        _uploadRegistrationPhoto(leftPhoto, studentId, instituteId ?? 'default', 'left'),
-        _uploadRegistrationPhoto(rightPhoto, studentId, instituteId ?? 'default', 'right'),
+        uploadRegistrationPhoto(frontPhoto, studentId, instituteId ?? 'default', 'front'),
+        uploadRegistrationPhoto(leftPhoto, studentId, instituteId ?? 'default', 'left'),
+        uploadRegistrationPhoto(rightPhoto, studentId, instituteId ?? 'default', 'right'),
       ]);
 
       final uploadTime = DateTime.now().difference(startTime).inMilliseconds;
       print('✅ Photos uploaded in ${uploadTime}ms');
+
+      // Extract actual photo URLs from PHP responses (with timestamps)
+      final frontUrl = uploadResults[0];
+      final leftUrl = uploadResults[1];
+      final rightUrl = uploadResults[2];
 
       // ✅ STEP 2: Send to backend for embedding generation
       print('📡 Sending to backend for embedding generation...');
@@ -126,6 +131,11 @@ class AntiSpoofApiService {
       request.fields['name'] = studentName;
       request.fields['roll_number'] = studentId;  // Use student ID (UUID)
       request.fields['institute_id'] = instituteId ?? 'default';
+
+      // 🔥 ACTUAL photo URLs from PHP (with timestamps!)
+      request.fields['front_photo_url'] = frontUrl ?? '';
+      request.fields['left_photo_url'] = leftUrl ?? '';
+      request.fields['right_photo_url'] = rightUrl ?? '';
 
       // Add compressed photos
       request.files.add(
@@ -165,7 +175,7 @@ class AntiSpoofApiService {
 
       final totalTime = DateTime.now().difference(startTime).inMilliseconds;
       print('🎯 Total registration time: ${totalTime}ms (~${(totalTime / 1000).toStringAsFixed(1)}s)');
-      print('   Photos saved to: /registration-photos/');
+      print('   Photos saved to: /msceattendanceapp/registration-photos/');
 
       return result;
     } catch (e) {
@@ -178,19 +188,24 @@ class AntiSpoofApiService {
   }
 
   /// Upload single registration photo to PHP
-  static Future<String?> _uploadRegistrationPhoto(
+  static Future<String?> uploadRegistrationPhoto(
     File photoFile,
     String studentId,
     String instituteId,
     String angle,
   ) async {
     try {
+      print('📤 Uploading $angle photo...');
+      print('   File: ${photoFile.path}');
+      print('   Size: ${(await photoFile.length()) / 1024} KB');
+      print('   URL: https://digitrixmedia.com/msceattendanceapp/api/upload_registration.php');
+
       var request = http.MultipartRequest(
         'POST',
         Uri.parse('https://digitrixmedia.com/msceattendanceapp/api/upload_registration.php'),
       );
 
-      request.fields['sr_no'] = studentId;  // Use student UUID as folder name
+      request.fields['sr_no'] = studentId;
       request.fields['institute_id'] = instituteId;
       request.fields['angle'] = angle;
 
@@ -199,17 +214,40 @@ class AntiSpoofApiService {
       );
 
       var response = await request.send().timeout(const Duration(seconds: 30));
+      var responseBody = await response.stream.bytesToString();
 
-      if (response.statusCode == 200) {
-        var result = json.decode(await response.stream.bytesToString());
-        if (result['success'] == true) {
-          print('   ✅ Uploaded $angle');
-          return result['photo_url'];
-        }
+      print('   ✅ Response status: ${response.statusCode}');
+      print('   Response body: $responseBody');
+
+      // Check for HTML error (404, 500, etc)
+      if (responseBody.contains('<!doctype html') || responseBody.contains('<html')) {
+        print('   ❌ Server returned HTML instead of JSON!');
+        print('   This means: PHP file not found or server error');
+        return null;
       }
-      return null;
+
+      if (response.statusCode != 200) {
+        print('   ❌ HTTP Error: ${response.statusCode}');
+        return null;
+      }
+
+      try {
+        var result = json.decode(responseBody);
+        if (result['success'] == true) {
+          print('   ✅ Upload success! URL: ${result['photo_url']}');
+          return result['photo_url'];
+        } else {
+          print('   ❌ PHP Error: ${result['error']}');
+          print('   Debug: ${result['debug_info']}');
+          return null;
+        }
+      } catch (e) {
+        print('   ❌ JSON decode failed: $e');
+        print('   Body was: $responseBody');
+        return null;
+      }
     } catch (e) {
-      print('   ⚠️ Upload $angle failed: $e');
+      print('   ⚠️ Upload failed: $e');
       return null;
     }
   }
