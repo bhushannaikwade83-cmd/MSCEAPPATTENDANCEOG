@@ -133,6 +133,11 @@ class AntiSpoofApiService {
       request.fields['institute_id'] = instituteId ?? 'default';
 
       // 🔥 ACTUAL photo URLs from PHP (with timestamps!)
+      print('🔥 SENDING URLs TO BACKEND:');
+      print('  front_photo_url: $frontUrl');
+      print('  left_photo_url: $leftUrl');
+      print('  right_photo_url: $rightUrl');
+
       request.fields['front_photo_url'] = frontUrl ?? '';
       request.fields['left_photo_url'] = leftUrl ?? '';
       request.fields['right_photo_url'] = rightUrl ?? '';

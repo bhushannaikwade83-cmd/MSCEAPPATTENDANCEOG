@@ -1665,11 +1665,19 @@ async def register_multi_angle_face(
         live_logger.stats['active_processing'] = max(0, live_logger.stats['active_processing'] - 1)
 
         # 🔥 USE ACTUAL photo URLs from PHP (with timestamps!)
+        print(f'DEBUG: Received photo URLs from Flutter:')
+        print(f'  front_photo_url: {front_photo_url}')
+        print(f'  left_photo_url: {left_photo_url}')
+        print(f'  right_photo_url: {right_photo_url}')
+
         photo_urls = {
             "front": front_photo_url or f"https://digitrixmedia.com/msceattendanceapp/registration-photos/{institute_id}/{student_id}/front.jpg",
             "left": left_photo_url or f"https://digitrixmedia.com/msceattendanceapp/registration-photos/{institute_id}/{student_id}/left.jpg",
             "right": right_photo_url or f"https://digitrixmedia.com/msceattendanceapp/registration-photos/{institute_id}/{student_id}/right.jpg",
         }
+
+        print(f'DEBUG: Final photo URLs being returned:')
+        print(f'  {photo_urls}')
 
         return {
             "success": True,
