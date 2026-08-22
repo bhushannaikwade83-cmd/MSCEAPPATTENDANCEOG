@@ -34,7 +34,7 @@ class AttendancePhotoService {
 
       var request = http.MultipartRequest(
         'POST',
-        Uri.parse('https://digitrixmedia.com/upload.php'),
+        Uri.parse('https://digitrixmedia.com/msceattendanceapp/api/upload.php'),
       );
 
       // Add metadata

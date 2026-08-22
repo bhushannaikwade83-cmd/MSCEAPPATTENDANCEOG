@@ -187,7 +187,7 @@ class AntiSpoofApiService {
     try {
       var request = http.MultipartRequest(
         'POST',
-        Uri.parse('https://digitrixmedia.com/upload_registration.php'),
+        Uri.parse('https://digitrixmedia.com/msceattendanceapp/api/upload_registration.php'),
       );
 
       request.fields['sr_no'] = studentId;  // Use student UUID as folder name
