@@ -1,4 +1,4 @@
-import 'dart:async' show unawaited;
+import 'dart:async' show unawaited, Timer;
 import 'dart:ui' show Rect, Size;
 import 'package:flutter/foundation.dart';
 import 'package:camera/camera.dart';
@@ -85,6 +85,11 @@ class _AttendanceCameraScreenState extends State<AttendanceCameraScreen>
   final FaceTrackingHelper _faceTracking = FaceTrackingHelper();
   bool _padInFlight = false;
   int _padFrameTick = 0;
+
+  // ✅ NEW: 2-second delay after blink detection for eyes to open
+  bool _blinkJustCompleted = false;
+  Timer? _postBlinkDelayTimer;
+  int _blinkCountdownSeconds = 2;
 
   String get _registrationLivenessHint => _poseInstruction(_currentPose);
 
@@ -496,6 +501,30 @@ class _AttendanceCameraScreenState extends State<AttendanceCameraScreen>
 
         if (boxState == LiveFaceBoxState.spoof || live.spoofBlocked) return;
 
+        // ✅ NEW: Check if blink just completed - start 2-second delay
+        if (_autoCapture &&
+            _requireBlink &&
+            !_blinkJustCompleted &&
+            _livenessTracker.blinksDetected >= _livenessTracker.requiredBlinks &&
+            boxState == LiveFaceBoxState.live &&
+            distanceLocked) {
+          _blinkJustCompleted = true;
+          _blinkCountdownSeconds = 2;
+          if (kDebugMode) debugPrint('✅ Blink detected! Waiting 2 seconds for eyes to open...');
+
+          _postBlinkDelayTimer?.cancel();
+          _postBlinkDelayTimer = Timer.periodic(Duration(seconds: 1), (timer) {
+            _blinkCountdownSeconds--;
+            if (mounted) setState(() {});
+
+            if (_blinkCountdownSeconds <= 0) {
+              timer.cancel();
+              if (kDebugMode) debugPrint('⏱️ 2-second delay complete, ready to capture');
+            }
+          });
+          return;
+        }
+
         if (_autoCapture &&
             !_captureSessionLocked &&
             !_isCapturing &&
@@ -504,12 +533,14 @@ class _AttendanceCameraScreenState extends State<AttendanceCameraScreen>
             _canCapture &&
             _livenessTracker.mayCaptureNow &&
             distanceLocked &&
-            effectiveStatus == DistanceStatus.perfect) {
+            effectiveStatus == DistanceStatus.perfect &&
+            (!_requireBlink || !_blinkJustCompleted || _blinkCountdownSeconds <= 0)) {  // ✅ Wait for 2-sec delay
           _captureSessionLocked = true;
           final liveOk =
               await _livenessTracker.verifyFrameIsLive(image, faceRect);
           if (!liveOk) {
             _captureSessionLocked = false;
+            _blinkJustCompleted = false;  // Reset for next attempt
             _livenessTracker.lockSpoofMessageForHold(
               'Photo or screen spoof detected — use your live face only',
             );
@@ -524,6 +555,7 @@ class _AttendanceCameraScreenState extends State<AttendanceCameraScreen>
             return;
           }
           if (kDebugMode) debugPrint('⚡️ Camera — auto capture');
+          _blinkJustCompleted = false;  // Reset after capture
           await _finishCaptureWithLiveCheck(image, faceRect);
           return;
         }
@@ -677,6 +709,8 @@ class _AttendanceCameraScreenState extends State<AttendanceCameraScreen>
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    // ✅ Cancel post-blink delay timer
+    _postBlinkDelayTimer?.cancel();
     if (_isStreaming) {
       _isStreaming = false;
       unawaited(_cameraController.stopImageStream());
@@ -868,16 +902,20 @@ class _AttendanceCameraScreenState extends State<AttendanceCameraScreen>
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         Text(
-                          _livenessTracker.blinksDetected >=
-                                  _livenessTracker.requiredBlinks
-                              ? '✅ Capturing... $_livenessMessage'
-                              : '📏 Distance OK! Blinks: ${_livenessTracker.blinksDetected}/${_livenessTracker.requiredBlinks}',
+                          _blinkJustCompleted && _blinkCountdownSeconds > 0
+                              ? '⏱️ Capturing in $_blinkCountdownSeconds second${_blinkCountdownSeconds == 1 ? '' : 's'}...'
+                              : _livenessTracker.blinksDetected >=
+                                      _livenessTracker.requiredBlinks
+                                  ? '✅ Capturing... $_livenessMessage'
+                                  : '📏 Distance OK! Blinks: ${_livenessTracker.blinksDetected}/${_livenessTracker.requiredBlinks}',
                           textAlign: TextAlign.center,
                           style: TextStyle(
-                            color: _livenessTracker.blinksDetected >=
-                                    _livenessTracker.requiredBlinks
-                                ? Colors.greenAccent
-                                : Colors.orangeAccent,
+                            color: _blinkJustCompleted && _blinkCountdownSeconds > 0
+                                ? Colors.blueAccent
+                                : _livenessTracker.blinksDetected >=
+                                        _livenessTracker.requiredBlinks
+                                    ? Colors.greenAccent
+                                    : Colors.orangeAccent,
                             fontSize: 13,
                             fontWeight: FontWeight.bold,
                           ),
