@@ -11,6 +11,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:smart_attendance_app/l10n/app_localizations.dart';
 import '../../services/locale_service.dart';
 import '../../services/auth_service.dart';
+import '../../services/app_update_service.dart';
 import '../../services/error_handler.dart';
 import '../../services/biometric_service.dart';
 import '../../services/geofence_service.dart';
@@ -219,6 +220,13 @@ class _LoginScreenState extends State<LoginScreen>
     _generateCaptcha();
     _setupAnimations();
 
+    // Check for app updates
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (mounted) {
+        await _checkForUpdates();
+      }
+    });
+
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       final args = ModalRoute.of(context)?.settings.arguments;
       String? routeInstituteId;
@@ -260,6 +268,14 @@ class _LoginScreenState extends State<LoginScreen>
       if (!mounted) return;
       _checkBiometricStatus();
     });
+  }
+
+  Future<void> _checkForUpdates() async {
+    try {
+      await AppUpdateService.showUpdateDialog(context);
+    } catch (e) {
+      print('⚠️ Update check failed: $e');
+    }
   }
 
   Future<void> _loadForgotPasswordCooldown() async {

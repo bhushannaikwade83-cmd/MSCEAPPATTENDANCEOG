@@ -1,111 +1,84 @@
-import 'package:flutter/material.dart';
-import 'package:url_launcher/url_launcher.dart';
 import 'package:package_info_plus/package_info_plus.dart';
+import 'package:url_launcher/url_launcher.dart';
 
-/// 📲 App Update Service - Notify users about new version on Google Play
 class AppUpdateService {
-  static const String GOOGLE_PLAY_URL =
-      'https://play.google.com/store/apps/details?id=com.msce.msceappattendance';
+  // Latest version available on PlayStore
+  static const String LATEST_VERSION = '2.2.0';
+  static const String PLAYSTORE_URL = 'https://play.google.com/store/apps/details?id=com.gcctbc.attendanceapp';
 
-  // Minimum version that requires update
-  static const String LATEST_VERSION = '2.1.0';
-
-  /// 🔍 Check if update is available
+  /// Check if update available
   static Future<bool> isUpdateAvailable() async {
     try {
       final packageInfo = await PackageInfo.fromPlatform();
-      final currentVersion = packageInfo.version; // e.g., "2.0.0"
+      final currentVersion = packageInfo.version; // e.g., "2.1.0"
 
-      print('🔄 [UPDATE] Current version: $currentVersion');
-      print('🔄 [UPDATE] Latest version: $LATEST_VERSION');
+      print('📱 [UPDATE] Current: $currentVersion, Latest: $LATEST_VERSION');
 
       // Simple version comparison
-      final isOlder = _isVersionOlder(currentVersion, LATEST_VERSION);
-
-      if (isOlder) {
-        print('⚠️ [UPDATE] New version available: $LATEST_VERSION');
-        return true;
-      }
-
-      print('✅ [UPDATE] App is up to date');
-      return false;
+      return _compareVersions(currentVersion, LATEST_VERSION) < 0;
     } catch (e) {
-      print('❌ [UPDATE] Error checking version: $e');
+      print('⚠️ [UPDATE] Error checking version: $e');
       return false;
     }
   }
 
-  /// 📱 Show update dialog
-  static void showUpdateDialog(BuildContext context) {
-    showDialog(
-      context: context,
-      barrierDismissible: false, // Force user to update
-      builder: (ctx) => AlertDialog(
-        title: const Text('🎉 New Version Available!'),
-        content: const Text(
-          '📲 MSCE Attendance v2.1.0\n\n'
-          '✨ NEW FEATURES:\n'
-          '• Geofencing (25m radius)\n'
-          '• GPS-verified login\n'
-          '• Location tracking\n'
-          '• Instructor management\n\n'
-          '🔒 SECURITY:\n'
-          '• Fake GPS detection\n'
-          '• Enhanced privacy\n\n'
-          'Please update to enjoy new features!',
+  /// Show update dialog
+  static Future<void> showUpdateDialog(context) async {
+    if (await isUpdateAvailable()) {
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => AlertDialog(
+          title: const Text('📲 New Version Available'),
+          content: const Text('A new version of MSCE Attendance App is available.\n\n'
+              '✨ Faster performance\n'
+              '🎯 Better face matching\n'
+              '🐛 Bug fixes'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Later'),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                Navigator.pop(context);
+                _openPlayStore();
+              },
+              child: const Text('Update Now'),
+            ),
+          ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Later'),
-          ),
-          TextButton(
-            onPressed: () async {
-              Navigator.pop(ctx);
-              await _openGooglePlay();
-            },
-            style: TextButton.styleFrom(foregroundColor: Colors.blue),
-            child: const Text('Update Now'),
-          ),
-        ],
-      ),
-    );
+      );
+    }
   }
 
-  /// 🛒 Open Google Play Store to update
-  static Future<void> _openGooglePlay() async {
+  /// Open PlayStore
+  static Future<void> _openPlayStore() async {
     try {
-      if (await canLaunchUrl(Uri.parse(GOOGLE_PLAY_URL))) {
+      if (await canLaunchUrl(Uri.parse(PLAYSTORE_URL))) {
         await launchUrl(
-          Uri.parse(GOOGLE_PLAY_URL),
+          Uri.parse(PLAYSTORE_URL),
           mode: LaunchMode.externalApplication,
         );
-      } else {
-        print('❌ [UPDATE] Could not open Google Play');
       }
     } catch (e) {
-      print('❌ [UPDATE] Error opening Google Play: $e');
+      print('❌ [UPDATE] Could not open PlayStore: $e');
     }
   }
 
-  /// 🔢 Compare version strings (e.g., "2.0.0" vs "2.1.0")
-  static bool _isVersionOlder(String current, String latest) {
-    try {
-      final currentParts = current.split('.').map(int.parse).toList();
-      final latestParts = latest.split('.').map(int.parse).toList();
+  /// Compare semantic versions
+  /// Returns: -1 if v1 < v2, 0 if equal, 1 if v1 > v2
+  static int _compareVersions(String v1, String v2) {
+    final parts1 = v1.split('.').map(int.parse).toList();
+    final parts2 = v2.split('.').map(int.parse).toList();
 
-      for (int i = 0; i < 3; i++) {
-        final currPart = i < currentParts.length ? currentParts[i] : 0;
-        final latestPart = i < latestParts.length ? latestParts[i] : 0;
+    for (int i = 0; i < 3; i++) {
+      final p1 = i < parts1.length ? parts1[i] : 0;
+      final p2 = i < parts2.length ? parts2[i] : 0;
 
-        if (currPart < latestPart) return true;
-        if (currPart > latestPart) return false;
-      }
-
-      return false; // Same version
-    } catch (e) {
-      print('❌ [UPDATE] Error comparing versions: $e');
-      return false;
+      if (p1 < p2) return -1;
+      if (p1 > p2) return 1;
     }
+    return 0;
   }
 }

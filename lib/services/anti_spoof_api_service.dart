@@ -94,7 +94,6 @@ class AntiSpoofApiService {
   static Future<Map<String, dynamic>> registerStudentFace({
     required String studentId,
     required String studentName,
-    required String srNo,
     required File frontPhoto,
     required File leftPhoto,
     required File rightPhoto,
@@ -125,7 +124,7 @@ class AntiSpoofApiService {
       // Required fields
       request.fields['student_id'] = studentId;
       request.fields['name'] = studentName;
-      request.fields['roll_number'] = srNo;  // ✅ Use sr_no, not student_id!
+      request.fields['roll_number'] = studentId;  // Use student ID (UUID)
       request.fields['institute_id'] = instituteId ?? 'default';
 
       // Add compressed photos
