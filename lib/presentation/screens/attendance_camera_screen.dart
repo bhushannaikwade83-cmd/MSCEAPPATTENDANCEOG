@@ -479,9 +479,7 @@ class _AttendanceCameraScreenState extends State<AttendanceCameraScreen>
                 _livenessTracker.mayCaptureNow) {
               _livenessMessage = 'Ready — tap Capture below';
             } else if (AntiSpoofService.captureTimePadOnly && !_autoCapture) {
-              _livenessMessage = _requireBlink
-                  ? 'Phone at 3 ft — blink once, then tap Capture'
-                  : 'Phone at 3 ft — tap Capture';
+              _livenessMessage = 'Phone at 3 ft — tap Capture';
             } else {
               _livenessMessage = live.livenessMessage;
             }
