@@ -191,7 +191,10 @@ class _AttendanceCameraScreenState extends State<AttendanceCameraScreen>
       _requireBlink = widget.requireBlink;
       _requiredBlinks = _requireBlink ? 1 : 0;
     }
-    _autoCapture = isRegistration || widget.autoCaptureWhenReady;
+    // Manual capture for front pose, auto-capture for left/right poses
+    final pose = widget.registrationPose?.trim().toLowerCase();
+    final isSidePose = pose == 'left' || pose == 'right';
+    _autoCapture = (isRegistration && isSidePose) || widget.autoCaptureWhenReady;
     _isRegistration = isRegistration;
     _distanceProfile =
         isRegistration ? DistanceProfile.registration : DistanceProfile.attendance;
@@ -679,6 +682,9 @@ class _AttendanceCameraScreenState extends State<AttendanceCameraScreen>
         // Advance to next pose.
         setState(() {
           _multiPoseIndex++;
+          final nextPose = _multiPoses[_multiPoseIndex].toLowerCase();
+          final isSidePose = nextPose == 'left' || nextPose == 'right';
+          _autoCapture = isSidePose; // Auto-capture for left/right, manual for front
           _livenessMessage = _poseInstruction(_multiPoses[_multiPoseIndex]);
           _faceBoxState = LiveFaceBoxState.none;
           _canCapture = false;
