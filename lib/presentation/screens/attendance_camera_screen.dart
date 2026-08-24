@@ -62,7 +62,7 @@ class AttendanceCameraScreen extends StatefulWidget {
 class _AttendanceCameraScreenState extends State<AttendanceCameraScreen>
     with WidgetsBindingObserver {
   late PreCaptureLivenessTracker _livenessTracker;
-  late final bool _autoCapture;
+  late bool _autoCapture;
   late final bool _requireBlink;
   late final int _requiredBlinks;
   late final bool _isRegistration;
