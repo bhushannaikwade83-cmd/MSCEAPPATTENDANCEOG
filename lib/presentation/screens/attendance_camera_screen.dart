@@ -152,17 +152,16 @@ class _AttendanceCameraScreenState extends State<AttendanceCameraScreen>
       requiredBlinks: blinks,
       requireBlink: requireBlink,
       minMicroMotionEvents: 0,
-      minCleanLiveFramesBeforeCapture:
-          DevicePerformanceService.minCleanLiveFramesBeforeCapture,
-      minPadLiveStreak: 2,
+      minCleanLiveFramesBeforeCapture: isSidePose && _isRegistration
+          ? 3  // Fewer frames needed for side pose auto-capture
+          : DevicePerformanceService.minCleanLiveFramesBeforeCapture,
+      minPadLiveStreak: _isRegistration && !isSidePose ? 0 : 2,  // No PAD streak for manual front capture
       enableStreamScreenSpoof: false,
-      enableStreamPad: _isRegistration
-          ? DevicePerformanceService.enableStreamPadOnRegistration
-          : DevicePerformanceService.enableStreamPadOnLivePreview,
+      enableStreamPad: false,  // Disable PAD for registration manual capture
       requireLiveFaceBeforeLiveness: true,
       require3DPoseEvidence: false,
       blockVideoReplay: false,
-      strictAutoScanPad: true,
+      strictAutoScanPad: false,  // Relax strict PAD for registration
       inlinePadOnly: true,
       randomHeadTurnChallenge: headTurn,
       // Detection uses the mirrored challenge above, but the on-screen text
