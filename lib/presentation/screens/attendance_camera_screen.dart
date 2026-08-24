@@ -337,7 +337,6 @@ class _AttendanceCameraScreenState extends State<AttendanceCameraScreen>
         minGap: DevicePerformanceService.streamFrameMinGap,
         pipelineBusy: (_isCapturing && !_capturePending) ||
             _isProcessingFrame ||
-            _capturePending ||
             _padInFlight,
       )) {
         return;
