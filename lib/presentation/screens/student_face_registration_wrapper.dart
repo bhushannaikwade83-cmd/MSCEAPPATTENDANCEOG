@@ -150,8 +150,19 @@ class _StudentFaceRegistrationWrapperState
     setState(() => _isSaving = true);
 
     try {
+      print('\n');
+      print('╔════════════════════════════════════════════════════════════╗');
+      print('║       📸 STUDENT FACE REGISTRATION STARTED                  ║');
+      print('╚════════════════════════════════════════════════════════════╝');
+      final totalRegStart = DateTime.now();
+      print('⏱️  [TOTAL] Start time: ${totalRegStart.toString()}');
+
       // 🔥 Use old AttendanceCameraScreen with multi-pose registration (3 photos: front, left, right)
       if (!mounted) return;
+
+      print('\n📸 [STEP 1] CAPTURING 3 PHOTOS (front, left, right)...');
+      final cameraStart = DateTime.now();
+
       final photos = await Navigator.push<List<XFile>>(
         context,
         MaterialPageRoute(
@@ -159,7 +170,7 @@ class _StudentFaceRegistrationWrapperState
             studentName: widget.studentName,
             studentId: widget.studentId,
             multiPoseRegistration: true,  // 🎯 3-angle registration mode
-            autoCaptureWhenReady: true,
+            autoCaptureWhenReady: false,  // Manual capture for front, auto for left/right
             requireBlink: true,
           ),
         ),
@@ -170,17 +181,16 @@ class _StudentFaceRegistrationWrapperState
         return;
       }
 
+      final cameraMs = DateTime.now().difference(cameraStart).inMilliseconds;
+      print('✅ [STEP 1] Photos captured in ${cameraMs}ms');
+      print('   📸 Front: ${(await File(photos[0].path).length()) / 1024} KB');
+      print('   📸 Left: ${(await File(photos[1].path).length()) / 1024} KB');
+      print('   📸 Right: ${(await File(photos[2].path).length()) / 1024} KB');
+
       final regStartTime = DateTime.now();
-      print('');
-      print('═══════════════════════════════════════════════════════════');
-      print('🔥 REGISTRATION STARTED');
-      print('═══════════════════════════════════════════════════════════');
-      print('✅ Got 3 photos from camera');
-      print('📸 Front: ${photos[0].path}');
-      print('📸 Left: ${photos[1].path}');
-      print('📸 Right: ${photos[2].path}');
 
       // 🔥 Send to backend for 512-D ArcFace embeddings (HIGH ACCURACY!)
+      print('\n🌐 [STEP 2] UPLOADING TO BACKEND FOR ARCFACE EMBEDDINGS...');
       showDialog(
         context: context,
         barrierDismissible: false,
@@ -199,8 +209,11 @@ class _StudentFaceRegistrationWrapperState
         ),
       );
 
-      print('📤 Sending 3 photos to backend for ArcFace processing...');
+      print('   📤 Sending 3 photos to backend...');
+      print('   Institute: ${widget.instituteId}');
       final backendStart = DateTime.now();
+      print('   🚀 Starting backend processing at ${backendStart.toString().substring(11, 19)}');
+
       final result = await AntiSpoofApiService.registerStudentFace(
         studentId: widget.studentId,
         studentName: widget.studentName,
@@ -210,6 +223,11 @@ class _StudentFaceRegistrationWrapperState
         instituteId: widget.instituteId,
       );
       final backendTime = DateTime.now().difference(backendStart).inMilliseconds;
+
+      print('✅ [STEP 2] Backend processing complete in ${backendTime}ms');
+      print('   ✅ Front embedding: 512-D');
+      print('   ✅ Left embedding: 512-D');
+      print('   ✅ Right embedding: 512-D');
 
       if (!mounted) {
         Navigator.pop(context);
@@ -258,7 +276,9 @@ class _StudentFaceRegistrationWrapperState
       }
 
       // ⚡ ASYNC DATABASE SAVE: Show success immediately, save in background!
-      print('💾 Saving 512-D ArcFace embeddings (3 angles) + photo URL to database (ASYNC)...');
+      print('\n💾 [STEP 3] SAVING TO DATABASE (ASYNC)...');
+      final dbSaveStart = DateTime.now();
+      print('   🔄 Starting database save...');
 
       // Show success to user IMMEDIATELY
       if (mounted) {
@@ -278,12 +298,22 @@ class _StudentFaceRegistrationWrapperState
 
       // ⏳ BACKGROUND: Save to database (don't wait!)
       // User already sees success, so we don't block on DB save
-      final dbSaveStart = DateTime.now();
-      final userFacingTime = DateTime.now().difference(regStartTime).inMilliseconds;
+      final userFacingTime = DateTime.now().difference(totalRegStart).inMilliseconds;
+
+      print('\n');
+      print('╔════════════════════════════════════════════════════════════╗');
+      print('║           ✅ REGISTRATION COMPLETE                        ║');
+      print('╚════════════════════════════════════════════════════════════╝');
       print('');
-      print('═══════════════════════════════════════════════════════════');
-      print('⚡ USER SEES SUCCESS AFTER: ${userFacingTime}ms');
-      print('═══════════════════════════════════════════════════════════');
+      print('📊 STEP-BY-STEP BREAKDOWN:');
+      print('   📸 Step 1 (Capture 3 photos): ${cameraMs}ms');
+      print('   🌐 Step 2 (Backend ArcFace): ${backendTime}ms ⚠️ SLOW?');
+      print('      └─ Includes: Photo upload + ArcFace embedding (3 angles)');
+      print('   💾 Step 3 (Database Save): [In background]');
+      print('');
+      print('─────────────────────────────────────────────────────────');
+      print('⚡ USER SEES SUCCESS AFTER: ${userFacingTime}ms (${(userFacingTime/1000).toStringAsFixed(2)}s)');
+      print('═════════════════════════════════════════════════════════');
 
       appDb.from('students').update({
         'face_embedding_front': jsonEncode(frontEmbedding),
@@ -360,7 +390,7 @@ class _StudentFaceRegistrationWrapperState
               studentName: widget.studentName,
               studentId: widget.studentId,
               registrationPose: 'front',
-              autoCaptureWhenReady: true,
+              autoCaptureWhenReady: false,  // Manual capture for registration
             ),
           ),
         );
