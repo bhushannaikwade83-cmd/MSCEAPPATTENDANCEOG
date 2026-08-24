@@ -145,8 +145,8 @@ class _AttendanceCameraScreenState extends State<AttendanceCameraScreen>
     }
 
     final isSidePose = pose == 'left' || pose == 'right';
-    final blinks = isSidePose ? 0 : (_isRegistration ? 1 : _requiredBlinks);
-    final requireBlink = isSidePose ? false : (_isRegistration ? true : _requireBlink);
+    final blinks = isSidePose ? 0 : (_isRegistration ? 0 : _requiredBlinks);
+    final requireBlink = isSidePose ? false : (_isRegistration ? false : _requireBlink);
 
     return PreCaptureLivenessTracker(
       requiredBlinks: blinks,
