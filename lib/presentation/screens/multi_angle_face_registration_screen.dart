@@ -4,7 +4,6 @@ import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 import 'package:google_mlkit_face_detection/google_mlkit_face_detection.dart';
 import 'package:image_picker/image_picker.dart';
-import '../../core/streaming_blink_detector.dart';
 import '../../services/anti_spoof_api_service.dart';
 import '../../services/student_api_service.dart';
 
@@ -43,13 +42,6 @@ class _MultiAngleFaceRegistrationScreenState
   String _instruction = 'Initializing camera...';
   Timer? _captureTimer;
   bool _isRegistered = false; // Track if registration is complete
-
-  // Blink detection with StreamingBlinkDetector
-  late final StreamingBlinkDetector _blinkDetector = StreamingBlinkDetector(
-    closedFramesRequired: 2,
-    openFramesRequired: 2,
-    minOpenClosedSwing: 0.20,
-  );
 
   @override
   void initState() {
@@ -111,7 +103,7 @@ Future<void> _initializeCamera() async {
 
   void _updateInstructions() {
     final instructions = {
-      1: '👀 Look Straight & Blink\nFace camera and blink once',
+      1: '👀 Look Straight\nFace camera and tap Capture',
       2: '⬅️ Turn Left\nSlowly turn head left',
       3: '➡️ Turn Right\nSlowly turn head right',
     };
@@ -151,64 +143,6 @@ Future<void> _initializeCamera() async {
       } else {
         print('✅ Face detected! Count: ${faces.length}');
         setState(() => _faceDetected = true);
-
-        // Step 1 (Front): Require blink
-        if (_currentStep == 1) {
-          final face = faces.first;
-          final blinkDetected = _blinkDetector.processFrame(face);
-
-          if (blinkDetected) {
-            print('🎯 ✅ BLINK + FACE DETECTED! Auto-capturing Step 1...');
-            setState(() {
-              _capturedPhotos[1] = XFile(picture.path);
-              _isRealFace[1] = true;
-              _setInstruction('✅ Captured!');
-            });
-
-            await Future.delayed(const Duration(milliseconds: 600));
-            if (mounted) {
-              print('➡️ Moving to Step 2 (Left)');
-              _advanceStep();
-            }
-          } else {
-            print('⏳ Waiting for blink... Eye probs: L=${face.leftEyeOpenProbability}, R=${face.rightEyeOpenProbability}');
-            setState(() => _faceDetected = true);
-          }
-        } else {
-          // Step 2 & 3: Require head turn (left for step 2, right for step 3)
-          final face = faces.first;
-          final yaw = face.headEulerAngleY ?? 0.0; // Negative = left turn, Positive = right turn
-
-          print('🎯 Head yaw: ${yaw.toStringAsFixed(1)}°');
-
-          bool isCorrectHeadTurn = false;
-          if (_currentStep == 2) {
-            // Step 2 (Left): Require left turn (yaw < -15°)
-            isCorrectHeadTurn = yaw < -15.0;
-            print('⬅️ Step 2 (Left): yaw=$yaw, need yaw < -15° → ${isCorrectHeadTurn ? '✅' : '⏳'}');
-          } else if (_currentStep == 3) {
-            // Step 3 (Right): Require right turn (yaw > 15°)
-            isCorrectHeadTurn = yaw > 15.0;
-            print('➡️ Step 3 (Right): yaw=$yaw, need yaw > 15° → ${isCorrectHeadTurn ? '✅' : '⏳'}');
-          }
-
-          if (isCorrectHeadTurn) {
-            print('🎯 ✅ CORRECT HEAD TURN! Auto-capturing Step $_currentStep...');
-            setState(() {
-              _capturedPhotos[_currentStep] = XFile(picture.path);
-              _isRealFace[_currentStep] = true;
-              _setInstruction('✅ Captured!');
-            });
-
-            await Future.delayed(const Duration(milliseconds: 600));
-            if (mounted) {
-              print('➡️ Moving to Step ${_currentStep + 1}');
-              _advanceStep();
-            }
-          } else {
-            setState(() => _faceDetected = true);
-          }
-        }
       }
 
       await imageFile.delete();
@@ -709,20 +643,19 @@ Future<void> _initializeCamera() async {
                       backgroundColor: Colors.red,
                     ),
                   ),
-                  // Manual capture button for Step 1 (fallback for blink detection)
-                  if (_currentStep == 1 && _capturedPhotos[1] == null && _faceDetected)
+                  // Manual capture button for all steps
+                  if (_capturedPhotos[_currentStep] == null && _faceDetected)
                     ElevatedButton.icon(
                       onPressed: () async {
                         _captureTimer?.cancel();
                         final picture = await _cameraController.takePicture();
                         setState(() {
-                          _capturedPhotos[1] = picture;
-                          _isRealFace[1] = true;
+                          _capturedPhotos[_currentStep] = picture;
+                          _isRealFace[_currentStep] = true;
                           _setInstruction('✅ Captured!');
                         });
                         await Future.delayed(const Duration(milliseconds: 600));
                         if (mounted) {
-                          print('➡️ Moving to Step 2 (Left)');
                           _advanceStep();
                         }
                       },
