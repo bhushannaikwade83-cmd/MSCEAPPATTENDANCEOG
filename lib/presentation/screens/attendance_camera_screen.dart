@@ -896,20 +896,23 @@ class _AttendanceCameraScreenState extends State<AttendanceCameraScreen>
                   const SizedBox(height: 8),
                   // Manual Capture button for Step 1 (Front) Registration
                   if (_isRegistration &&
-                      _currentPose.toLowerCase() == 'front' &&
-                      _distanceStatus == DistanceStatus.perfect &&
-                      _livenessTracker.isDistanceLocked)
+                      _currentPose.toLowerCase() == 'front')
                     SizedBox(
                       width: double.infinity,
                       child: ElevatedButton.icon(
-                        onPressed: _canCapture && !_isCapturing && !_capturePending
+                        onPressed: _distanceStatus == DistanceStatus.perfect &&
+                                _livenessTracker.isDistanceLocked &&
+                                !_isCapturing &&
+                                !_capturePending
                             ? _capturePhoto
                             : null,
                         icon: const Icon(Icons.camera_alt),
                         label: const Text('Tap to Capture'),
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.blue,
-                          disabledBackgroundColor: Colors.grey,
+                          backgroundColor: _distanceStatus == DistanceStatus.perfect &&
+                                  _livenessTracker.isDistanceLocked
+                              ? Colors.blue
+                              : Colors.grey,
                           padding: const EdgeInsets.symmetric(vertical: 12),
                         ),
                       ),
