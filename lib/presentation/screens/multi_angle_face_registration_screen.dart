@@ -143,6 +143,40 @@ Future<void> _initializeCamera() async {
       } else {
         print('✅ Face detected! Count: ${faces.length}');
         setState(() => _faceDetected = true);
+
+        // Step 2 & 3: Auto-capture on correct head turn (left for step 2, right for step 3)
+        if (_currentStep > 1) {
+          final face = faces.first;
+          final yaw = face.headEulerAngleY ?? 0.0; // Negative = left turn, Positive = right turn
+
+          print('🎯 Head yaw: ${yaw.toStringAsFixed(1)}°');
+
+          bool isCorrectHeadTurn = false;
+          if (_currentStep == 2) {
+            // Step 2 (Left): Require left turn (yaw < -15°)
+            isCorrectHeadTurn = yaw < -15.0;
+            print('⬅️ Step 2 (Left): yaw=$yaw, need yaw < -15° → ${isCorrectHeadTurn ? '✅' : '⏳'}');
+          } else if (_currentStep == 3) {
+            // Step 3 (Right): Require right turn (yaw > 15°)
+            isCorrectHeadTurn = yaw > 15.0;
+            print('➡️ Step 3 (Right): yaw=$yaw, need yaw > 15° → ${isCorrectHeadTurn ? '✅' : '⏳'}');
+          }
+
+          if (isCorrectHeadTurn) {
+            print('🎯 ✅ CORRECT HEAD TURN! Auto-capturing Step $_currentStep...');
+            setState(() {
+              _capturedPhotos[_currentStep] = XFile(picture.path);
+              _isRealFace[_currentStep] = true;
+              _setInstruction('✅ Captured!');
+            });
+
+            await Future.delayed(const Duration(milliseconds: 600));
+            if (mounted) {
+              print('➡️ Moving to Step ${_currentStep + 1}');
+              _advanceStep();
+            }
+          }
+        }
       }
 
       await imageFile.delete();
@@ -643,15 +677,15 @@ Future<void> _initializeCamera() async {
                       backgroundColor: Colors.red,
                     ),
                   ),
-                  // Manual capture button for all steps
-                  if (_capturedPhotos[_currentStep] == null && _faceDetected)
+                  // Manual capture button for Step 1 only
+                  if (_currentStep == 1 && _capturedPhotos[1] == null && _faceDetected)
                     ElevatedButton.icon(
                       onPressed: () async {
                         _captureTimer?.cancel();
                         final picture = await _cameraController.takePicture();
                         setState(() {
-                          _capturedPhotos[_currentStep] = picture;
-                          _isRealFace[_currentStep] = true;
+                          _capturedPhotos[1] = picture;
+                          _isRealFace[1] = true;
                           _setInstruction('✅ Captured!');
                         });
                         await Future.delayed(const Duration(milliseconds: 600));
