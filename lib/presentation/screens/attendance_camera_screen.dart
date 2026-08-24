@@ -192,8 +192,7 @@ class _AttendanceCameraScreenState extends State<AttendanceCameraScreen>
       _requiredBlinks = _requireBlink ? 1 : 0;
     }
     // Manual capture for front pose, auto-capture for left/right poses
-    final pose = widget.registrationPose?.trim().toLowerCase();
-    final isSidePose = pose == 'left' || pose == 'right';
+    final isSidePose = pose != null && (pose == 'left' || pose == 'right');
     _autoCapture = (isRegistration && isSidePose) || widget.autoCaptureWhenReady;
     _isRegistration = isRegistration;
     _distanceProfile =
