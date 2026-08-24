@@ -794,7 +794,7 @@ class _AttendanceCameraScreenState extends State<AttendanceCameraScreen>
               ),
             ),
 
-          if (!_autoCapture)
+          if (!_autoCapture && !_isRegistration)
             Positioned(
               bottom: 30,
               left: 0,
