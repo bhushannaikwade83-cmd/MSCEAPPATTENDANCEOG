@@ -414,8 +414,11 @@ class _AttendanceCameraScreenState extends State<AttendanceCameraScreen>
         if (_capturePending &&
             !_isCapturing &&
             _livenessTracker.mayCaptureNow) {
+          debugPrint('✅ [STREAM] Capture pending + mayCaptureNow, calling _finishCaptureWithLiveCheck');
           await _finishCaptureWithLiveCheck(image, faceRect);
           return;
+        } else if (_capturePending) {
+          debugPrint('⚠️ [STREAM] Capture pending but blocked: isCapturing=$_isCapturing, mayCaptureNow=${_livenessTracker.mayCaptureNow}');
         }
 
         final live = _livenessTracker.evaluate(
@@ -578,8 +581,10 @@ class _AttendanceCameraScreenState extends State<AttendanceCameraScreen>
   }
 
   Future<void> _capturePhoto() async {
+    debugPrint('📷 [CAPTURE] Button tapped');
     if (!DistanceCheckService.allowsCapture(_distanceStatus) ||
         !_livenessTracker.isDistanceLocked) {
+      debugPrint('❌ [CAPTURE] Distance not OK: status=$_distanceStatus, locked=${_livenessTracker.isDistanceLocked}');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -593,6 +598,7 @@ class _AttendanceCameraScreenState extends State<AttendanceCameraScreen>
       return;
     }
     if (!_livenessTracker.mayCaptureNow) {
+      debugPrint('❌ [CAPTURE] mayCaptureNow=false');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -608,6 +614,7 @@ class _AttendanceCameraScreenState extends State<AttendanceCameraScreen>
     }
     if (_faceBoxState == LiveFaceBoxState.spoof ||
         _livenessTracker.padMarkedFake) {
+      debugPrint('❌ [CAPTURE] Spoof detected or PAD marked fake');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -618,9 +625,11 @@ class _AttendanceCameraScreenState extends State<AttendanceCameraScreen>
       return;
     }
     if (!_canCapture || _isCapturing || _capturePending || _captureSessionLocked) {
+      debugPrint('❌ [CAPTURE] State check failed: canCapture=$_canCapture, isCapturing=$_isCapturing, capturePending=$_capturePending, sessionLocked=$_captureSessionLocked');
       return;
     }
 
+    debugPrint('✅ [CAPTURE] Setting capturePending=true');
     setState(() => _capturePending = true);
   }
 
