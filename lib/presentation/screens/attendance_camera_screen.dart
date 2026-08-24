@@ -106,7 +106,7 @@ class _AttendanceCameraScreenState extends State<AttendanceCameraScreen>
       _isRegistration ? _registrationLivenessHint : _attendanceLivenessHint;
 
   String _poseInstruction(String pose) => switch (pose) {
-    'front' => 'Look straight — blink once (auto capture)',
+    'front' => 'Look straight — tap Capture',
     'left'  => 'Now glance LEFT — hold for a moment',
     'right' => 'Now glance RIGHT — hold for a moment',
     _       => 'Hold still at ~3 ft',
@@ -185,8 +185,8 @@ class _AttendanceCameraScreenState extends State<AttendanceCameraScreen>
     final isRegistration =
         widget.multiPoseRegistration || (pose != null && pose.isNotEmpty);
     if (isRegistration) {
-      _requireBlink = true;
-      _requiredBlinks = 2;
+      _requireBlink = false;
+      _requiredBlinks = 0;
     } else {
       _requireBlink = widget.requireBlink;
       _requiredBlinks = _requireBlink ? 1 : 0;
