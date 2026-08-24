@@ -109,7 +109,7 @@ class DistanceCheckService {
   }
 
   static String phoneAtThreeFeetReadyMessage() =>
-      'Phone at 3 ft ✓ — blink once, then we capture';
+      'Phone at 3 ft ✓ — ready';
 
   /// Reject phone/photo pressed against camera (face dominates frame).
   static const double MAX_RATIO = 0.52;
