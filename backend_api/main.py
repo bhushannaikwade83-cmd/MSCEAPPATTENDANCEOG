@@ -2076,7 +2076,13 @@ async def _process_face_recognition_async(attendance_id: str, image_data: bytes,
         # ⏱️ STEP 2: Generate embedding
         step2_start = time.time()
         logger.info("🔍 Generating face embedding...")
+
+        # Sub-timing for embedding generation
+        emb_start = time.time()
         embedding = await face_service_instance.generate_embedding(image_data)
+        emb_time = time.time() - emb_start
+        print(f"   └─ Face detection + embedding: {emb_time:.3f}s")
+
         if embedding is None:
             logger.warning("❌ No face detected in image")
             _attendance_results[attendance_id] = {
@@ -2094,7 +2100,13 @@ async def _process_face_recognition_async(attendance_id: str, image_data: bytes,
         # ⏱️ STEP 3: Load embeddings from cache
         logger.info(f"🔎 Loading embeddings for institute {institute_id}...")
         step3_start = time.time()
+
+        # Time the Supabase query separately
+        db_start = time.time()
         students = await _get_embeddings_for_institute(institute_id)
+        db_time = time.time() - db_start
+        print(f"   └─ Supabase query: {db_time:.3f}s ({len(students)} students)")
+
         step3_time = time.time() - step3_start
         print(f"⏱️  WORKER STEP 3 (Load Embeddings): {step3_time:.3f}s")
 
