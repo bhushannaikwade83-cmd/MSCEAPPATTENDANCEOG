@@ -2232,7 +2232,7 @@ async def check_attendance_result(attendance_id: str):
 async def mark_attendance_auto(
     image: UploadFile = File(...),
     institute_id: str = Form(...),
-    sync: bool = Form(False),  # Old APK sends sync=true, new APK doesn't set it
+    sync: bool = Form(True),  # Default True for old APK compatibility (old APK doesn't send this param)
 ):
     """
     ⚡ ASYNC (Default): Returns 202 Accepted + attendance_id
