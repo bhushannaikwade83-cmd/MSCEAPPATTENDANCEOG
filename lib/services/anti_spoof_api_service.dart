@@ -232,11 +232,12 @@ class AntiSpoofApiService {
         await http.MultipartFile.fromPath('photo', photoFile.path),
       );
 
+      print('   📋 Sending fields: sr_no=$studentId, institute_id=$instituteId, angle=$angle');
       var response = await request.send().timeout(const Duration(seconds: 30));
       var responseBody = await response.stream.bytesToString();
 
       print('   ✅ Response status: ${response.statusCode}');
-      print('   Response body: $responseBody');
+      print('   📥 Response body: $responseBody');
 
       // Check for HTML error (404, 500, etc)
       if (responseBody.contains('<!doctype html') || responseBody.contains('<html')) {
@@ -252,17 +253,20 @@ class AntiSpoofApiService {
 
       try {
         var result = json.decode(responseBody);
+        print('   📝 PHP Response: $result');
         if (result['success'] == true) {
           print('   ✅ Upload success! URL: ${result['photo_url']}');
           return result['photo_url'];
         } else {
           print('   ❌ PHP Error: ${result['error']}');
-          print('   Debug: ${result['debug_info']}');
+          print('   ❌ Debug: ${result['debug_info']}');
+          print('   ❌ Full response: $result');
           return null;
         }
       } catch (e) {
         print('   ❌ JSON decode failed: $e');
         print('   Body was: $responseBody');
+        print('   ❌ Response likely HTML error or malformed JSON');
         return null;
       }
     } catch (e) {
