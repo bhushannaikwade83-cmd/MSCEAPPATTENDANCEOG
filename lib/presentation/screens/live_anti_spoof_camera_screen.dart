@@ -404,7 +404,7 @@ class _LiveAntiSpoofCameraScreenState extends State<LiveAntiSpoofCameraScreen> {
         print('📊 [API] Result: $result');
 
         if (mounted) {
-          if (result['success'] == true) {
+          if (result['student_name'] != null) {
             _matchedStudentName = result['student_name'] ?? 'Unknown';
             _similarityScore = result['similarity'] ?? 0.0;
             _srNo = result['sr_no'] ?? 'N/A';
