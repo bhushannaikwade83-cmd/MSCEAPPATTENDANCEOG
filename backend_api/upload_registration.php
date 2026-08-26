@@ -81,13 +81,13 @@ try {
         throw new Exception("Base directory not found");
     }
 
-    // Create directories
+    // Create directories (with error suppression for race conditions)
     if (!is_dir($photo_dir)) {
         log_debug("Creating directory: $photo_dir");
-        if (!mkdir($photo_dir, 0777, true)) {
+        if (!@mkdir($photo_dir, 0777, true) && !is_dir($photo_dir)) {
             throw new Exception("Failed to create directory: $photo_dir");
         }
-        log_debug("✅ Directory created");
+        log_debug("✅ Directory created/verified");
     }
 
     // Generate filename with timestamp: front_2026-08-22_14-30-45.jpg
