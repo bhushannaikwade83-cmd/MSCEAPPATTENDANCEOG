@@ -300,7 +300,7 @@ class AntiSpoofApiService {
   static Future<Map<String, dynamic>> markAttendanceAuto(
     File imageFile, {
     required String instId,
-    bool useAsyncPolling = true,  // false = sync (legacy), true = async (new)
+    bool useAsyncPolling = false,  // false = sync (legacy), true = async (new)
   }) async {
     try {
       final totalStart = DateTime.now();
