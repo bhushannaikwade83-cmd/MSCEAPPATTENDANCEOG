@@ -27,6 +27,9 @@ import asyncio
 from collections import deque
 from fastapi.responses import StreamingResponse
 import json
+import threading
+from concurrent.futures import ThreadPoolExecutor
+import uuid
 
 _face_service_import_error: Optional[Exception] = None
 _vector_db_import_error: Optional[Exception] = None
@@ -149,6 +152,10 @@ def get_setting(key: str, default=None):
         return raw
 
 app = FastAPI(title="EduSetu Face Recognition API", version="1.0.0")
+
+# ⚡ Thread pool for async face recognition (non-blocking)
+_worker_threads = ThreadPoolExecutor(max_workers=4, thread_name_prefix="face_worker_")
+_attendance_results = {}  # In-memory cache: attendance_id -> result
 
 # Serve dashboard at root
 @app.get("/", response_class=FileResponse)
@@ -1665,18 +1672,25 @@ async def register_multi_angle_face(
         live_logger.stats['active_processing'] = max(0, live_logger.stats['active_processing'] - 1)
 
         # 🔥 USE ACTUAL photo URLs from PHP (with timestamps!)
-        print(f'DEBUG: Received photo URLs from Flutter:')
+        # NO FALLBACK - if URLs not provided, fail immediately
+        if not front_photo_url or not left_photo_url or not right_photo_url:
+            raise HTTPException(
+                status_code=400,
+                detail=f'Missing photo URLs from PHP upload! front={front_photo_url}, left={left_photo_url}, right={right_photo_url}'
+            )
+
+        print(f'✅ DEBUG: Received photo URLs from Flutter:')
         print(f'  front_photo_url: {front_photo_url}')
         print(f'  left_photo_url: {left_photo_url}')
         print(f'  right_photo_url: {right_photo_url}')
 
         photo_urls = {
-            "front": front_photo_url or f"https://digitrixmedia.com/msceattendanceapp/registration-photos/{institute_id}/{student_id}/front.jpg",
-            "left": left_photo_url or f"https://digitrixmedia.com/msceattendanceapp/registration-photos/{institute_id}/{student_id}/left.jpg",
-            "right": right_photo_url or f"https://digitrixmedia.com/msceattendanceapp/registration-photos/{institute_id}/{student_id}/right.jpg",
+            "front": front_photo_url,
+            "left": left_photo_url,
+            "right": right_photo_url,
         }
 
-        print(f'DEBUG: Final photo URLs being returned:')
+        print(f'✅ DEBUG: Final photo URLs being returned:')
         print(f'  {photo_urls}')
 
         return {
@@ -2033,6 +2047,187 @@ async def recognize_embedding(
         logger.error(f"❌ Error recognizing embedding: {e}")
         raise HTTPException(status_code=500, detail=f"Error recognizing embedding: {str(e)}")
 
+# ⚡ Async face recognition worker
+async def _process_face_recognition_async(attendance_id: str, image_data: bytes, institute_id: str):
+    """
+    Background worker: Process face recognition asynchronously
+    Updates _attendance_results dict when complete
+    """
+    try:
+        start_time = time.time()
+        print(f"\n{'='*60}")
+        print(f"⚙️ [WORKER] Starting async face recognition for attendance_id={attendance_id}")
+        print(f"{'='*60}\n")
+
+        # ⏱️ STEP 1: Initialize services
+        step1_start = time.time()
+        face_service_instance = _ensure_face_service()
+        vector_db_instance = _ensure_vector_db()
+
+        if not face_service_instance.initialized:
+            logger.info("🔄 Initializing face service...")
+            await face_service_instance.initialize()
+        if vector_db_instance.index is None:
+            logger.info("🔄 Loading vector database...")
+            await vector_db_instance.load_index()
+        step1_time = time.time() - step1_start
+        print(f"⏱️  WORKER STEP 1 (Init): {step1_time:.3f}s")
+
+        # ⏱️ STEP 2: Generate embedding
+        step2_start = time.time()
+        logger.info("🔍 Generating face embedding...")
+        embedding = await face_service_instance.generate_embedding(image_data)
+        if embedding is None:
+            logger.warning("❌ No face detected in image")
+            _attendance_results[attendance_id] = {
+                "error": "No face detected",
+                "status": "❌ No Face",
+                "student_name": None,
+                "sr_no": None,
+                "similarity": 0.0,
+                "record_type": None
+            }
+            return
+        step2_time = time.time() - step2_start
+        print(f"⏱️  WORKER STEP 2 (Embedding): {step2_time:.3f}s")
+
+        # ⏱️ STEP 3: Load embeddings from cache
+        logger.info(f"🔎 Loading embeddings for institute {institute_id}...")
+        step3_start = time.time()
+        students = await _get_embeddings_for_institute(institute_id)
+        step3_time = time.time() - step3_start
+        print(f"⏱️  WORKER STEP 3 (Load Embeddings): {step3_time:.3f}s")
+
+        if not students:
+            logger.warning(f"❌ No students found for institute {institute_id}")
+            _attendance_results[attendance_id] = {
+                "error": "No students registered for this institute",
+                "status": "❌ No Students",
+                "student_name": None,
+                "sr_no": None,
+                "similarity": 0.0,
+                "record_type": None
+            }
+            return
+
+        # ⏱️ STEP 4: Prepare embeddings matrix
+        step4_start = time.time()
+        from sklearn.metrics.pairwise import cosine_similarity
+
+        SIMILARITY_THRESHOLD = get_setting('similarity_threshold', 0.65)
+        valid_students = []
+        embeddings_matrix_front = []
+        embeddings_matrix_left = []
+        embeddings_matrix_right = []
+
+        for student in students:
+            embeddings = student.get('embeddings', {})
+            if not embeddings:
+                continue
+
+            emb_front = embeddings.get('front')
+            emb_left = embeddings.get('left')
+            emb_right = embeddings.get('right')
+
+            if not any(v is not None for v in [emb_front, emb_left, emb_right]):
+                continue
+
+            try:
+                valid_students.append(student)
+                embeddings_matrix_front.append(emb_front if emb_front is not None else np.zeros(512, dtype='float32'))
+                embeddings_matrix_left.append(emb_left if emb_left is not None else np.zeros(512, dtype='float32'))
+                embeddings_matrix_right.append(emb_right if emb_right is not None else np.zeros(512, dtype='float32'))
+            except Exception as e:
+                continue
+
+        if not valid_students:
+            logger.warning(f"❌ No valid embeddings found for institute {institute_id}")
+            _attendance_results[attendance_id] = {
+                "error": "No matching student found",
+                "status": "❌ No Match",
+                "student_name": None,
+                "sr_no": None,
+                "similarity": 0.0,
+                "record_type": None
+            }
+            return
+
+        step4_time = time.time() - step4_start
+        print(f"⏱️  WORKER STEP 4 (Prepare Matrix): {step4_time:.3f}s ({len(valid_students)} students)")
+
+        # ⏱️ STEP 5: Calculate similarities
+        step5_start = time.time()
+        embeddings_matrix_front = np.array(embeddings_matrix_front, dtype='float32')
+        embeddings_matrix_left = np.array(embeddings_matrix_left, dtype='float32')
+        embeddings_matrix_right = np.array(embeddings_matrix_right, dtype='float32')
+
+        embedding_normalized = embedding / (np.linalg.norm(embedding) + 1e-8)
+
+        similarities_front = embeddings_matrix_front @ embedding_normalized if len(embeddings_matrix_front) > 0 else np.array([])
+        similarities_left = embeddings_matrix_left @ embedding_normalized if len(embeddings_matrix_left) > 0 else np.array([])
+        similarities_right = embeddings_matrix_right @ embedding_normalized if len(embeddings_matrix_right) > 0 else np.array([])
+
+        max_similarities = np.maximum(similarities_front, np.maximum(similarities_left, similarities_right))
+        best_idx = np.argmax(max_similarities)
+        best_similarity = float(max_similarities[best_idx])
+        step5_time = time.time() - step5_start
+        print(f"⏱️  WORKER STEP 5 (Similarities): {step5_time:.3f}s")
+
+        # Get best match
+        best_match = valid_students[best_idx]
+        fname = best_match.get('fname', '')
+        mname = best_match.get('mname', '')
+        lname = best_match.get('lname', '')
+        name_parts = [p for p in [fname, mname, lname] if p]
+        student_name = ' '.join(name_parts)
+        sr_no = best_match.get('sr_no', '')
+
+        print(f"\n✅ [WORKER] Face recognition complete:")
+        print(f"   Student: {student_name} ({sr_no})")
+        print(f"   Similarity: {best_similarity:.4f}")
+        print(f"   Matched: {'YES' if best_similarity >= SIMILARITY_THRESHOLD else 'NO (below threshold)'}")
+
+        # Save result
+        total_time = time.time() - start_time
+        _attendance_results[attendance_id] = {
+            "status": "✅ Success" if best_similarity >= SIMILARITY_THRESHOLD else "⚠️ Low Match",
+            "student_name": student_name if best_similarity >= SIMILARITY_THRESHOLD else None,
+            "sr_no": sr_no if best_similarity >= SIMILARITY_THRESHOLD else None,
+            "similarity": best_similarity,
+            "record_type": "entry",
+            "processing_time_sec": total_time
+        }
+
+        print(f"⏱️  [WORKER] Total processing time: {total_time:.3f}s")
+        print(f"{'='*60}\n")
+
+    except Exception as e:
+        logger.error(f"❌ Worker error: {e}")
+        _attendance_results[attendance_id] = {
+            "error": str(e),
+            "status": "❌ Error",
+            "student_name": None,
+            "sr_no": None,
+            "similarity": 0.0,
+            "record_type": None
+        }
+
+@app.get("/api/mark-attendance-auto/{attendance_id}")
+async def check_attendance_result(attendance_id: str):
+    """
+    Poll result of async attendance processing
+    Returns 202 Accepted if still processing
+    Returns 200 OK with result when complete
+    """
+    if attendance_id not in _attendance_results:
+        return JSONResponse(
+            status_code=202,
+            content={"status": "processing", "message": "Face recognition in progress..."}
+        )
+
+    result = _attendance_results.pop(attendance_id)  # Remove from cache after retrieval
+    return JSONResponse(status_code=200, content=result)
+
 @app.post("/api/mark-attendance-auto")
 async def mark_attendance_auto(
     image: UploadFile = File(...),
@@ -2053,385 +2248,54 @@ async def mark_attendance_auto(
         {student_name, sr_no, similarity, record_type, status}
     """
     try:
-        total_start = time.time()
-
-        # 🔍 DEBUG: Print exact institute_id value received
+        # ⚡ QUICK: Only validate + queue (< 100ms)
         print(f"\n{'='*60}")
-        print(f"🎯 BACKEND RECEIVED ATTENDANCE REQUEST")
-        print(f"   Institute ID type: {type(institute_id)} value: '{institute_id}'")
-        print(f"   Institute ID length: {len(str(institute_id))}")
-        print(f"   Institute ID hex: {institute_id.encode('utf-8').hex() if isinstance(institute_id, str) else 'N/A'}")
+        print(f"⚡ [QUICK] POST /api/mark-attendance-auto received")
+        print(f"   Institute: {institute_id}")
         print(f"{'='*60}\n")
 
-        logger.info(f"🎯 Attendance request for institute: {institute_id}")
-
-        # ⏱️ STEP 1: Initialize services
-        step1_start = time.time()
-        face_service_instance = _ensure_face_service()
-        vector_db_instance = _ensure_vector_db()
-
-        # Initialize if needed
-        if not face_service_instance.initialized:
-            logger.info("🔄 Initializing face service...")
-            await face_service_instance.initialize()
-        if vector_db_instance.index is None:
-            logger.info("🔄 Loading vector database...")
-            await vector_db_instance.load_index()
-        step1_time = time.time() - step1_start
-        print(f"⏱️  STEP 1 (Init): {step1_time:.3f}s")
-
-        # ⏱️ STEP 2: Read image
-        step2_start = time.time()
+        # Read image data
         image_data = await image.read()
         if len(image_data) == 0:
             logger.warning("❌ Empty image received")
             raise HTTPException(status_code=400, detail="Empty image file")
-        step2_time = time.time() - step2_start
-        print(f"⏱️  STEP 2 (Read Image): {step2_time:.3f}s ({len(image_data)} bytes)")
 
-        # ⏱️ STEP 3: Generate embedding
-        step3_start = time.time()
-        logger.info("🔍 Generating face embedding...")
-        embedding = await face_service_instance.generate_embedding(image_data)
-        if embedding is None:
-            logger.warning("❌ No face detected in image")
-            return {
-                "error": "No face detected",
-                "status": "❌ No Face",
-                "student_name": None,
-                "sr_no": None,
-                "similarity": 0.0,
-                "record_type": None
+        # Generate unique attendance ID
+        attendance_id = str(uuid.uuid4())
+        print(f"✅ [QUICK] Generated attendance_id: {attendance_id}")
+
+        # Queue the heavy face recognition work
+        print(f"✅ [QUICK] Queuing face recognition worker...")
+        _worker_threads.submit(
+            asyncio.run,
+            _process_face_recognition_async(attendance_id, image_data, institute_id)
+        )
+
+        # ✅ Return 202 Accepted immediately (< 100ms total)
+        print(f"✅ [QUICK] Returning 202 Accepted to client\n")
+        return JSONResponse(
+            status_code=202,
+            content={
+                "attendance_id": attendance_id,
+                "status": "processing",
+                "message": "Face recognition in progress. Poll with GET /api/mark-attendance-auto/{attendance_id}",
+                "polling_url": f"/api/mark-attendance-auto/{attendance_id}"
             }
-        step3_time = time.time() - step3_start
-        print(f"⏱️  STEP 3 (Generate Embedding): {step3_time:.3f}s")
-
-        # ⏱️ STEP 4: Load embeddings from cache
-        logger.info(f"🔎 Loading embeddings for institute {institute_id}...")
-        step4_start = time.time()
-        students = await _get_embeddings_for_institute(institute_id)
-        step4_time = time.time() - step4_start
-        print(f"⏱️  STEP 4 (Load Embeddings): {step4_time:.3f}s")
-
-        # 🔍 DEBUG: Show students loaded and their institute_id values
-        print(f"\n{'='*60}")
-        print(f"📊 STUDENTS LOADED FOR INSTITUTE: {institute_id}")
-        print(f"   Total students loaded: {len(students)}")
-        if students:
-            # Show first 5 students' institute_id values to verify they match request
-            for i, student in enumerate(students[:5]):
-                inst = student.get('institute_id', 'N/A')
-                sr = student.get('sr_no', 'N/A')
-                name_parts = []
-                for key in ['fname', 'mname', 'lname']:
-                    val = student.get(key)
-                    if val:
-                        name_parts.append(val)
-                name = ' '.join(name_parts) or 'Unknown'
-                print(f"      [{i}] SR:{sr} | Name:{name} | InstID:{inst}")
-
-            # Show institute_id distribution
-            inst_ids = [s.get('institute_id', 'N/A') for s in students]
-            unique_insts = set(inst_ids)
-            print(f"\n   Unique institutes in loaded students: {unique_insts}")
-            print(f"   Does institute_id match request? {institute_id in inst_ids}")
-        print(f"{'='*60}\n")
-
-        if not students:
-            logger.warning(f"❌ No students found for institute {institute_id}")
-            return {
-                "error": "No students registered for this institute",
-                "status": "❌ No Students",
-                "student_name": None,
-                "sr_no": None,
-                "similarity": 0.0,
-                "record_type": None
-            }
-
-        # ⏱️ STEP 5: Prepare embeddings matrix for similarity search
-        step5_start = time.time()
-        from sklearn.metrics.pairwise import cosine_similarity
-
-        SIMILARITY_THRESHOLD = get_setting('similarity_threshold', 0.65)
-        valid_students = []
-        embeddings_matrix_front = []
-        embeddings_matrix_left = []
-        embeddings_matrix_right = []
-
-        # Parse all 3 embeddings for each student
-        for student in students:
-            fname = student.get('fname', '')
-            mname = student.get('mname', '')
-            lname = student.get('lname', '')
-            name_parts = [p for p in [fname, mname, lname] if p]
-            full_name = ' '.join(name_parts)
-
-            embeddings = student.get('embeddings', {})
-            if not embeddings:
-                print(f"⚠️ Student {full_name}: No embeddings in cache")
-                continue
-
-            # Check if at least one embedding exists (use None check, not bool)
-            emb_front = embeddings.get('front')
-            emb_left = embeddings.get('left')
-            emb_right = embeddings.get('right')
-
-            if not any(v is not None for v in [emb_front, emb_left, emb_right]):
-                print(f"⚠️ Student {full_name}: No valid embeddings")
-                continue
-
-            try:
-                valid_students.append(student)
-                # Add embeddings (None padding if not available)
-                embeddings_matrix_front.append(emb_front if emb_front is not None else np.zeros(512, dtype='float32'))
-                embeddings_matrix_left.append(emb_left if emb_left is not None else np.zeros(512, dtype='float32'))
-                embeddings_matrix_right.append(emb_right if emb_right is not None else np.zeros(512, dtype='float32'))
-            except Exception as e:
-                print(f"❌ Error processing embeddings for {full_name}: {e}")
-                valid_students.pop()
-                continue
-
-        if not valid_students:
-            logger.warning(f"❌ No valid embeddings found for institute {institute_id}")
-            return {
-                "error": "No matching student found",
-                "status": "❌ No Match",
-                "student_name": None,
-                "sr_no": None,
-                "similarity": 0.0,
-                "record_type": None
-            }
-
-        step5_time = time.time() - step5_start
-        print(f"⏱️  STEP 5 (Prepare Matrix): {step5_time:.3f}s ({len(valid_students)} students)")
-
-        # ⏱️ STEP 6: Calculate similarities
-        step6_start = time.time()
-        # ⚡ Batch calculate similarities for all 3 angles
-        embeddings_matrix_front = np.array(embeddings_matrix_front, dtype='float32')
-        embeddings_matrix_left = np.array(embeddings_matrix_left, dtype='float32')
-        embeddings_matrix_right = np.array(embeddings_matrix_right, dtype='float32')
-
-        # 🔍 Debug: Check embedding values in detail
-        print(f"\n🔎 QUERY EMBEDDING DEBUG:")
-        print(f"   Query embedding shape: {embedding.shape}")
-        print(f"   Query embedding norm: {np.linalg.norm(embedding):.6f}")
-        print(f"   Query embedding min/max: {np.min(embedding):.6f} / {np.max(embedding):.6f}")
-        print(f"   Query embedding sum: {np.sum(embedding):.6f}")
-        print(f"   Query embedding first 10: {embedding[:10]}")
-
-        print(f"\n🔎 DATABASE EMBEDDINGS DEBUG:")
-        print(f"   Front matrix shape: {embeddings_matrix_front.shape}")
-        print(f"   Left matrix shape: {embeddings_matrix_left.shape}")
-        print(f"   Right matrix shape: {embeddings_matrix_right.shape}")
-        if len(embeddings_matrix_front) > 0:
-            print(f"   First student front norm: {np.linalg.norm(embeddings_matrix_front[0]):.6f}")
-            print(f"   First student left norm: {np.linalg.norm(embeddings_matrix_left[0]):.6f}")
-            print(f"   First student right norm: {np.linalg.norm(embeddings_matrix_right[0]):.6f}")
-
-            # Check if query == first student (all 3 angles)
-            if (np.allclose(embedding, embeddings_matrix_front[0]) or
-                np.allclose(embedding, embeddings_matrix_left[0]) or
-                np.allclose(embedding, embeddings_matrix_right[0])):
-                print(f"   ⚠️ QUERY IS IDENTICAL TO FIRST STUDENT!")
-            else:
-                print(f"   ✅ Query is different from first student")
-
-        # ⚡ FAST: Use dot product for normalized embeddings (10x faster than cosine_similarity!)
-        # For normalized vectors: cosine_similarity = dot_product
-        embedding_normalized = embedding / (np.linalg.norm(embedding) + 1e-8)
-
-        sim_start = time.time()
-        similarities_front = embeddings_matrix_front @ embedding_normalized if len(embeddings_matrix_front) > 0 else np.array([])
-        similarities_left = embeddings_matrix_left @ embedding_normalized if len(embeddings_matrix_left) > 0 else np.array([])
-        similarities_right = embeddings_matrix_right @ embedding_normalized if len(embeddings_matrix_right) > 0 else np.array([])
-        sim_time = time.time() - sim_start
-        print(f"⚡ [FAST] Dot product similarity computed in {sim_time:.3f}s")
-
-        # 🔥 USE MAX SIMILARITY (best match from any angle)
-        max_similarities = np.maximum(similarities_front, np.maximum(similarities_left, similarities_right))
-
-        print(f"\n   Front similarities: min={np.min(similarities_front):.6f}, max={np.max(similarities_front):.6f}")
-        print(f"   Left similarities: min={np.min(similarities_left):.6f}, max={np.max(similarities_left):.6f}")
-        print(f"   Right similarities: min={np.min(similarities_right):.6f}, max={np.max(similarities_right):.6f}")
-        print(f"   MAX similarities: min={np.min(max_similarities):.6f}, max={np.max(max_similarities):.6f}")
-
-        # Find best match
-        best_idx = np.argmax(max_similarities)
-        best_similarity = float(max_similarities[best_idx])
-
-        # Debug: Show which angle gave the best match (convert numpy scalars to float first!)
-        sim_front = float(similarities_front[best_idx])
-        sim_left = float(similarities_left[best_idx])
-        sim_right = float(similarities_right[best_idx])
-
-        best_from = 'front' if sim_front == best_similarity else ('left' if sim_left == best_similarity else 'right')
-        print(f"\n✅ Best match from angle: {best_from}")
-        print(f"   Front: {sim_front:.4f}")
-        print(f"   Left: {sim_left:.4f}")
-        print(f"   Right: {sim_right:.4f}")
-        print(f"   MAX (used): {best_similarity:.4f}")
-
-        best_match = valid_students[best_idx]
-        fname = best_match.get('fname', '')
-        mname = best_match.get('mname', '')
-        lname = best_match.get('lname', '')
-        # Construct full name: fname mname lname
-        name_parts = [p for p in [fname, mname, lname] if p]
-        student_name = ' '.join(name_parts)
-
-        # 📊 Debug: Show top 5 scores
-        print(f"\n🔎 SIMILARITY SCORES (Threshold: {SIMILARITY_THRESHOLD}) - Using MAX of 3 angles")
-        print(f"   Checked {len(valid_students)} students in institute {institute_id}")
-        top_indices = np.argsort(-max_similarities)[:5]
-        for i, idx in enumerate(top_indices, 1):
-            s = float(max_similarities[idx])
-            stu = valid_students[idx]
-            fname = stu.get('fname', '')
-            mname = stu.get('mname', '')
-            lname = stu.get('lname', '')
-            name_parts = [p for p in [fname, mname, lname] if p]
-            s_name = ' '.join(name_parts)
-            status = "✅ MATCH" if s >= SIMILARITY_THRESHOLD else "❌ Below"
-            s_front = similarities_front[idx]
-            s_left = similarities_left[idx]
-            s_right = similarities_right[idx]
-            print(f"   {i}. {s_name}: {s:.4f} {status}")
-            print(f"      (F:{s_front:.4f} L:{s_left:.4f} R:{s_right:.4f})")
-
-        step6_time = time.time() - step6_start
-        print(f"⏱️  STEP 6 (Calculate Similarities): {step6_time:.3f}s\n")
-
-        if best_similarity < SIMILARITY_THRESHOLD:
-            logger.warning(f"❌ No matching student found (best: {best_similarity:.4f}, threshold: {SIMILARITY_THRESHOLD})")
-            return {
-                "error": "No matching student found",
-                "status": "❌ No Match",
-                "student_name": None,
-                "sr_no": None,
-                "similarity": 0.0,
-                "record_type": None
-            }
-
-        # Got a match!
-        sr_no = best_match.get('sr_no', '')
-        student_id = best_match.get('id', '')
-        similarity = best_similarity
-
-        logger.info(f"✅ Match found: {student_name} (SR: {sr_no}, Similarity: {similarity:.2%})")
-
-        # ⏱️ STEP 7: Check entry/exit
-        step7_start = time.time()
-        from datetime import date
-        today = date.today().isoformat()
-
-        print(f"📋 Checking attendance for {sr_no} on {today}...")
-
-        already_marked = False
-        try:
-            # ⚡ FAST: One query, fetch which record_types exist today for this student
-            supabase = _get_supabase_client()
-            today_response = supabase.table('attendance').select(
-                'record_type'
-            ).eq('sr_no', sr_no).eq('institute_id', institute_id).eq('attendance_date', today).execute()
-
-            marked_types = {row.get('record_type') for row in (today_response.data or [])}
-            step7_time = time.time() - step7_start
-
-            has_entry = 'entry' in marked_types
-            has_exit = 'exit' in marked_types
-
-            if has_entry and has_exit:
-                already_marked = True
-                record_type = None
-                print(f"⚠️ Both ENTRY & EXIT already marked today ({step7_time:.3f}s)")
-            elif has_entry:
-                record_type = "exit"  # Already marked entry, now mark exit
-                print(f"✅ Entry found ({step7_time:.3f}s) → Record type: EXIT")
-            else:
-                record_type = "entry"  # First attendance of the day
-                print(f"✅ No entry found ({step7_time:.3f}s) → Record type: ENTRY")
-        except Exception as e:
-            logger.warning(f"⚠️ Could not check attendance: {e}, defaulting to ENTRY")
-            record_type = "entry"
-            step7_time = time.time() - step7_start
-
-        if already_marked:
-            total_time = time.time() - total_start
-            print(f"⏱️  TOTAL (already marked, skipped save): {total_time:.3f}s")
-            return {
-                "status": "⚠️ Already Marked",
-                "already_marked": True,
-                "student_name": student_name,
-                "sr_no": sr_no,
-                "student_id": student_id,
-                "similarity": float(similarity),
-                "record_type": None,
-                "message": f"{student_name} already has both ENTRY and EXIT marked for today"
-            }
-
-        # ⏱️ TIMING SUMMARY
-        total_time = time.time() - total_start
-        print(f"\n{'='*60}")
-        print(f"📊 TIMING BREAKDOWN:")
-        print(f"   STEP 1 (Init): {step1_time:.3f}s")
-        print(f"   STEP 2 (Read Image): {step2_time:.3f}s")
-        print(f"   STEP 3 (Embedding): {step3_time:.3f}s ⚠️ SLOW HERE?")
-        print(f"   STEP 4 (Load Embeddings): {step4_time:.3f}s")
-        print(f"   STEP 5 (Prepare Matrix): {step5_time:.3f}s")
-        print(f"   STEP 6 (Similarities): {step6_time:.3f}s")
-        print(f"   STEP 7 (Entry/Exit): {step7_time:.3f}s")
-        print(f"   {'─'*60}")
-        print(f"   TOTAL: {total_time:.3f}s")
-        print(f"{'='*60}\n")
-
-        # 🔍 DEBUG: Show final response being sent to Flutter
-        response_data = {
-            "status": "✅ Matched",
-            "student_name": student_name,
-            "sr_no": sr_no,
-            "student_id": student_id,
-            "similarity": float(similarity),
-            "record_type": record_type,
-            "message": f"Attendance marked for {student_name} ({record_type.upper()})",
-            "timing": {
-                "init": step1_time,
-                "read_image": step2_time,
-                "embedding": step3_time,
-                "load_embeddings": step4_time,
-                "prepare_matrix": step5_time,
-                "similarities": step6_time,
-                "entry_exit": step7_time,
-                "total": total_time
-            }
-        }
-
-        # 🔍 DEBUG: Print response before returning
-        print(f"\n{'='*60}")
-        print(f"🚀 SENDING RESPONSE TO FLUTTER (institute_id={institute_id})")
-        print(f"   Status: {response_data['status']}")
-        print(f"   Student: {response_data['student_name']}")
-        print(f"   SR No: {response_data['sr_no']}")
-        print(f"   Similarity: {response_data['similarity']:.4f}")
-        print(f"   Record Type: {response_data['record_type']}")
-        print(f"   Student ID: {response_data['student_id']}")
-        print(f"{'='*60}\n")
-
-        return response_data
+        )
 
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"❌ Attendance error: {e}")
+        logger.error(f"❌ Queue error: {e}")
         logger.error(f"📍 Stack: {traceback.format_exc()}")
-        return {
-            "error": str(e),
-            "status": "❌ Error",
-            "student_name": None,
-            "sr_no": None,
-            "similarity": 0.0,
-            "record_type": None
-        }
+        return JSONResponse(
+            status_code=500,
+            content={
+                "error": str(e),
+                "status": "❌ Error",
+                "message": "Failed to queue face recognition"
+            }
+        )
 
 @app.post("/api/upload-attendance-photo")
 async def upload_attendance_photo(
