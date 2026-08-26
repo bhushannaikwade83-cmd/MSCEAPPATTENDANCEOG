@@ -372,35 +372,6 @@ class AntiSpoofApiService {
     }
   }
 
-  /// Poll attendance result (async mode)
-  /// Returns: {status, student_name, sr_no, similarity, record_type, message}
-  static Future<Map<String, dynamic>> pollAttendanceResult(
-    String attendanceId,
-  ) async {
-    try {
-      print('🔄 [POLLING] Checking result for $attendanceId');
-      var response = await http.get(
-        Uri.parse('$API_URL/api/mark-attendance-auto/$attendanceId'),
-      ).timeout(const Duration(seconds: 5));
-
-      if (response.statusCode == 200) {
-        var result = json.decode(utf8.decode(response.bodyBytes));
-        print('✅ [POLLING] Got result: ${result["status"]}');
-        return result;
-      } else if (response.statusCode == 202) {
-        print('⏳ [POLLING] Still processing...');
-        return {"status": "processing", "message": "Still processing"};
-      } else {
-        var responseText = utf8.decode(response.bodyBytes);
-        print('❌ [POLLING] Error ${response.statusCode}: $responseText');
-        return {"error": "Status ${response.statusCode}"};
-      }
-    } catch (e) {
-      print('❌ [POLLING] Exception: $e');
-      return {"error": e.toString()};
-    }
-  }
-
   /// Returns user-friendly error message
   static String getErrorMessage(Map<String, dynamic> result) {
     if (result.containsKey('error')) {
