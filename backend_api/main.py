@@ -2231,29 +2231,17 @@ async def check_attendance_result(attendance_id: str):
 @app.post("/api/mark-attendance-auto")
 async def mark_attendance_auto(
     image: UploadFile = File(...),
-    institute_id: str = Form(...)
+    institute_id: str = Form(...),
+    sync: bool = Form(False),  # Old APK sends sync=true, new APK doesn't set it
 ):
     """
-    Mark attendance automatically from face image
+    ⚡ ASYNC (Default): Returns 202 Accepted + attendance_id
+    ⏳ SYNC (Legacy): Waits for result, returns 200 (for old APK compatibility)
 
-    Pipeline:
-    1. Recognize student from face using FAISS vector search
-    2. Return student details + match status
-
-    Args:
-        image: Face image file
-        inst_id: Institute ID for filtering results
-
-    Returns:
-        {student_name, sr_no, similarity, record_type, status}
+    Query parameter sync=true to use blocking mode (old APK).
+    Omit or sync=false for async mode (new APK).
     """
     try:
-        # ⚡ QUICK: Only validate + queue (< 100ms)
-        print(f"\n{'='*60}")
-        print(f"⚡ [QUICK] POST /api/mark-attendance-auto received")
-        print(f"   Institute: {institute_id}")
-        print(f"{'='*60}\n")
-
         # Read image data
         image_data = await image.read()
         if len(image_data) == 0:
@@ -2262,38 +2250,129 @@ async def mark_attendance_auto(
 
         # Generate unique attendance ID
         attendance_id = str(uuid.uuid4())
-        print(f"✅ [QUICK] Generated attendance_id: {attendance_id}")
 
         # Queue the heavy face recognition work
-        print(f"✅ [QUICK] Queuing face recognition worker...")
         _worker_threads.submit(
             asyncio.run,
             _process_face_recognition_async(attendance_id, image_data, institute_id)
         )
 
-        # ✅ Return 202 Accepted immediately (< 100ms total)
-        print(f"✅ [QUICK] Returning 202 Accepted to client\n")
-        return JSONResponse(
-            status_code=202,
-            content={
-                "attendance_id": attendance_id,
-                "status": "processing",
-                "message": "Face recognition in progress. Poll with GET /api/mark-attendance-auto/{attendance_id}",
-                "polling_url": f"/api/mark-attendance-auto/{attendance_id}"
+        # 🔄 DUAL MODE: Check if old APK (sync mode)
+        if sync:
+            # ⏳ OLD APK: Block until result (maintains backward compatibility)
+            print(f"\n⏳ [LEGACY] Sync mode - waiting for face recognition...")
+            max_wait = 60
+            wait_count = 0
+
+            while wait_count < max_wait:
+                await asyncio.sleep(0.5)
+                wait_count += 0.5
+
+                if attendance_id in _attendance_results:
+                    result = _attendance_results.pop(attendance_id)
+                    print(f"✅ [LEGACY] Returning result after {wait_count:.1f}s\n")
+                    return result
+
+            print(f"❌ [LEGACY] Timeout after {max_wait}s\n")
+            return {
+                "error": "Face recognition timeout",
+                "status": "❌ Timeout",
+                "student_name": None,
+                "sr_no": None,
+                "similarity": 0.0
             }
-        )
+        else:
+            # ⚡ NEW APK: Return 202 immediately with polling URL
+            print(f"\n⚡ [ASYNC] Returning 202 - poll for result\n")
+            return JSONResponse(
+                status_code=202,
+                content={
+                    "attendance_id": attendance_id,
+                    "status": "processing",
+                    "message": "Face recognition in progress. Poll with GET /api/mark-attendance-auto/{attendance_id}",
+                    "polling_url": f"/api/mark-attendance-auto/{attendance_id}"
+                }
+            )
 
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"❌ Queue error: {e}")
+        logger.error(f"❌ Error: {e}")
         logger.error(f"📍 Stack: {traceback.format_exc()}")
+        return {
+            "error": str(e),
+            "status": "❌ Error",
+            "student_name": None,
+            "sr_no": None,
+            "similarity": 0.0
+        }
+
+# 🔄 BACKWARD COMPATIBILITY: Sync wrapper for old APK
+@app.post("/api/mark-attendance-auto/sync")
+async def mark_attendance_auto_sync(
+    image: UploadFile = File(...),
+    institute_id: str = Form(...)
+):
+    """
+    ⚠️ DEPRECATED: Use async endpoint instead.
+
+    This wrapper maintains backward compatibility with old APK.
+    Returns 200 with result (blocks until face recognition completes).
+
+    For new apps: Use POST /api/mark-attendance-auto (returns 202)
+    then poll GET /api/mark-attendance-auto/{attendance_id}
+    """
+    try:
+        image_data = await image.read()
+        if len(image_data) == 0:
+            raise HTTPException(status_code=400, detail="Empty image file")
+
+        # Generate unique attendance ID
+        attendance_id = str(uuid.uuid4())
+
+        # Queue the work
+        _worker_threads.submit(
+            asyncio.run,
+            _process_face_recognition_async(attendance_id, image_data, institute_id)
+        )
+
+        # ⏳ SYNC: Poll until result is ready (blocks old APK flow)
+        print(f"\n⏳ [SYNC WRAPPER] Waiting for face recognition ({attendance_id})...")
+        max_wait = 60  # Max 60 seconds
+        wait_count = 0
+
+        while wait_count < max_wait:
+            await asyncio.sleep(0.5)
+            wait_count += 0.5
+
+            if attendance_id in _attendance_results:
+                result = _attendance_results.pop(attendance_id)
+                print(f"✅ [SYNC WRAPPER] Result ready after {wait_count:.1f}s")
+                return result
+
+        # Timeout
+        print(f"❌ [SYNC WRAPPER] Timeout after {max_wait}s")
+        return JSONResponse(
+            status_code=408,
+            content={
+                "error": "Face recognition timeout",
+                "status": "❌ Timeout",
+                "student_name": None,
+                "sr_no": None,
+                "similarity": 0.0
+            }
+        )
+
+    except Exception as e:
+        logger.error(f"❌ Sync wrapper error: {e}")
         return JSONResponse(
             status_code=500,
             content={
                 "error": str(e),
                 "status": "❌ Error",
-                "message": "Failed to queue face recognition"
+                "student_name": None,
+                "sr_no": None,
+                "similarity": 0.0
             }
         )
 

@@ -299,26 +299,25 @@ class AntiSpoofApiService {
   /// Returns: {student_name, sr_no, similarity, record_type, status}
   static Future<Map<String, dynamic>> markAttendanceAuto(
     File imageFile, {
-    required String instId, // Institute ID — must be the caller's actual institute
+    required String instId,
+    bool useAsyncPolling = false,  // false = sync (legacy), true = async (new)
   }) async {
     try {
       final totalStart = DateTime.now();
-      print('\n${"="*60}');
-      print('⚡ [ASYNC] Starting async attendance marking');
-      print('   Institute ID: $instId');
-      print("${"="*60}\n");
+      final mode = useAsyncPolling ? 'ASYNC' : 'SYNC (Legacy)';
+      print('\n🌐 [SERVICE] Calling /api/mark-attendance-auto ($mode)');
+      print('   Institute: $instId');
 
-      // ⏱️ STEP 1: Send request (returns 202 immediately)
-      print('🌐 [STEP 1] Sending image to backend...');
       var request = http.MultipartRequest(
         'POST',
         Uri.parse('$API_URL/api/mark-attendance-auto'),
       );
 
       request.fields['institute_id'] = instId;
+      request.fields['sync'] = (!useAsyncPolling).toString();  // sync=true for legacy, false for new
 
       final imageBytes = imageFile.readAsBytesSync();
-      print('   Image size: ${(imageBytes.length / 1024).toStringAsFixed(1)}KB');
+      print('   Image: ${(imageBytes.length / 1024).toStringAsFixed(1)}KB');
 
       request.files.add(
         http.MultipartFile.fromBytes(
@@ -328,88 +327,41 @@ class AntiSpoofApiService {
         ),
       );
 
+      print('🌐 [SERVICE] Sending request...');
       final sendStart = DateTime.now();
       var response = await request.send().timeout(
-        const Duration(seconds: 5),  // Quick timeout for upload
-        onTimeout: () => throw Exception('Upload timeout'),
+        const Duration(seconds: 65),  // 65 sec timeout (60 sec face processing + buffer)
+        onTimeout: () => throw Exception('Server timeout'),
       );
       final sendMs = DateTime.now().difference(sendStart).inMilliseconds;
 
-      print('✅ [STEP 1] Upload complete (${sendMs}ms)');
-      print('   Status: ${response.statusCode}');
+      print('✅ [SERVICE] Response: ${response.statusCode} (${sendMs}ms)');
 
-      if (response.statusCode != 202) {
+      if (response.statusCode == 200 || response.statusCode == 202) {
+        var responseData = await response.stream.toBytes();
+        var result = json.decode(utf8.decode(responseData));
+
+        if (response.statusCode == 202) {
+          // New async mode - result has attendance_id for polling
+          print('✅ [SERVICE] Queued (sync=false)');
+          print('   Attendance ID: ${result["attendance_id"]}');
+        } else {
+          // Legacy sync mode - result is complete
+          print('✅ [SERVICE] Complete (sync=true)');
+          print('   Student: ${result["student_name"] ?? "N/A"}');
+          print('   Similarity: ${(result["similarity"] ?? 0).toStringAsFixed(3)}');
+          print('⏱️  Total: ${sendMs}ms\n');
+        }
+
+        return result;
+      } else {
         var responseData = await response.stream.toBytes();
         var responseText = utf8.decode(responseData);
-        print('❌ Expected 202, got ${response.statusCode}: $responseText');
-        throw Exception('Upload failed: ${response.statusCode}');
+        print('❌ Error ${response.statusCode}: $responseText');
+        throw Exception('Status ${response.statusCode}');
       }
-
-      var responseData = await response.stream.toBytes();
-      var queueResponse = json.decode(utf8.decode(responseData));
-      final attendanceId = queueResponse['attendance_id'] as String;
-
-      print('✅ [STEP 1] Queued for processing');
-      print('   Attendance ID: $attendanceId');
-
-      // ⏱️ STEP 2: Poll for result
-      print('\n🔍 [STEP 2] Polling for result...');
-      int pollCount = 0;
-      final maxPolls = 60;  // Max 60 polls = 60 seconds
-      final pollInterval = Duration(milliseconds: 1000);
-
-      Map<String, dynamic> result = {};
-      bool completed = false;
-
-      while (pollCount < maxPolls && !completed) {
-        await Future.delayed(pollInterval);
-        pollCount++;
-
-        try {
-          var pollResponse = await http.get(
-            Uri.parse('$API_URL/api/mark-attendance-auto/$attendanceId'),
-          ).timeout(
-            const Duration(seconds: 5),
-            onTimeout: () => throw Exception('Poll timeout'),
-          );
-
-          if (pollResponse.statusCode == 200) {
-            // Result ready!
-            result = json.decode(pollResponse.body);
-            completed = true;
-            print('✅ [STEP 2] Result ready (poll #$pollCount after ${pollCount * 1000}ms)');
-          } else if (pollResponse.statusCode == 202) {
-            // Still processing
-            if (pollCount % 5 == 0) {
-              print('   Waiting... (poll #$pollCount)');
-            }
-          } else {
-            throw Exception('Unexpected status: ${pollResponse.statusCode}');
-          }
-        } catch (e) {
-          if (pollCount == maxPolls) {
-            throw Exception('Face recognition timeout after ${maxPolls}s');
-          }
-        }
-      }
-
-      if (!completed) {
-        throw Exception('Face recognition timeout after ${maxPolls}s');
-      }
-
-      final totalMs = DateTime.now().difference(totalStart).inMilliseconds;
-
-      print('\n${"="*60}');
-      print('✅ [ASYNC] Attendance complete!');
-      print('   Student: ${result["student_name"] ?? "N/A"}');
-      print('   SR No: ${result["sr_no"] ?? "N/A"}');
-      print('   Similarity: ${(result["similarity"] ?? 0).toStringAsFixed(3)}');
-      print('   Total time: ${totalMs}ms');
-      print("${"="*60}\n");
-
-      return result;
     } catch (e) {
-      print('❌ [ASYNC] Exception: $e');
+      print('❌ [SERVICE] Exception: $e');
       return {
         "error": e.toString(),
         "status": "❌ Error",
