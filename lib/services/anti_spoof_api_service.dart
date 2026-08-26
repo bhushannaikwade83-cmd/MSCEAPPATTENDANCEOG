@@ -119,8 +119,22 @@ class AntiSpoofApiService {
       final leftUrl = uploadResults[1];
       final rightUrl = uploadResults[2];
 
+      // ❌ STRICT: Check if ALL uploads succeeded - NO FALLBACK!
+      print('\n🔍 [VALIDATION] Checking upload results...');
+      List<String> failedAngles = [];
+      if (frontUrl == null || frontUrl.isEmpty) failedAngles.add('front');
+      if (leftUrl == null || leftUrl.isEmpty) failedAngles.add('left');
+      if (rightUrl == null || rightUrl.isEmpty) failedAngles.add('right');
+
+      if (failedAngles.isNotEmpty) {
+        final errorMsg = '❌ Photo upload failed for: ${failedAngles.join(", ")}. Please retry registration.';
+        print(errorMsg);
+        throw Exception(errorMsg);
+      }
+      print('✅ All 3 photos uploaded successfully');
+
       // ✅ STEP 2: Send to backend for embedding generation
-      print('📡 Sending to backend for embedding generation...');
+      print('\n📡 Sending to backend for embedding generation...');
       var request = http.MultipartRequest(
         'POST',
         Uri.parse('$API_URL/api/v1/register-multi-angle'),
@@ -138,9 +152,9 @@ class AntiSpoofApiService {
       print('  left_photo_url: $leftUrl');
       print('  right_photo_url: $rightUrl');
 
-      request.fields['front_photo_url'] = frontUrl ?? '';
-      request.fields['left_photo_url'] = leftUrl ?? '';
-      request.fields['right_photo_url'] = rightUrl ?? '';
+      request.fields['front_photo_url'] = frontUrl!;
+      request.fields['left_photo_url'] = leftUrl!;
+      request.fields['right_photo_url'] = rightUrl!;
 
       // Add compressed photos
       request.files.add(
@@ -252,7 +266,13 @@ class AntiSpoofApiService {
         return null;
       }
     } catch (e) {
-      print('   ⚠️ Upload failed: $e');
+      final errorStr = e.toString();
+      if (errorStr.contains('TimeoutException') || errorStr.contains('timeout')) {
+        print('   ❌ TIMEOUT: Upload took too long (>30s) - server may be slow');
+        print('   ⚠️ Please check server and retry');
+      } else {
+        print('   ❌ Upload failed: $e');
+      }
       return null;
     }
   }
@@ -282,21 +302,23 @@ class AntiSpoofApiService {
     required String instId, // Institute ID — must be the caller's actual institute
   }) async {
     try {
-      print('🌐 [SERVICE] Calling /api/mark-attendance-auto');
-      print('📊 [SERVICE] Institute ID: $instId');
+      final totalStart = DateTime.now();
+      print('\n${"="*60}');
+      print('⚡ [ASYNC] Starting async attendance marking');
+      print('   Institute ID: $instId');
+      print("${"="*60}\n");
 
+      // ⏱️ STEP 1: Send request (returns 202 immediately)
+      print('🌐 [STEP 1] Sending image to backend...');
       var request = http.MultipartRequest(
         'POST',
         Uri.parse('$API_URL/api/mark-attendance-auto'),
       );
 
-      // 🎯 Add institute_id as form field (backend expects this name)
       request.fields['institute_id'] = instId;
 
-      // 📸 Compress image aggressively to reduce upload time
-      print('📸 Compressing image for faster upload...');
       final imageBytes = imageFile.readAsBytesSync();
-      print('   Original: ${(imageBytes.length / 1024).toStringAsFixed(1)}KB');
+      print('   Image size: ${(imageBytes.length / 1024).toStringAsFixed(1)}KB');
 
       request.files.add(
         http.MultipartFile.fromBytes(
@@ -306,28 +328,88 @@ class AntiSpoofApiService {
         ),
       );
 
-      print('🌐 [SERVICE] Sending request...');
+      final sendStart = DateTime.now();
       var response = await request.send().timeout(
-        const Duration(seconds: 30),
-        onTimeout: () => throw Exception('API timeout - server not responding (15+ secs)'),
+        const Duration(seconds: 5),  // Quick timeout for upload
+        onTimeout: () => throw Exception('Upload timeout'),
       );
+      final sendMs = DateTime.now().difference(sendStart).inMilliseconds;
 
-      print('✅ [SERVICE] Response status: ${response.statusCode}');
+      print('✅ [STEP 1] Upload complete (${sendMs}ms)');
+      print('   Status: ${response.statusCode}');
 
-      if (response.statusCode != 200) {
+      if (response.statusCode != 202) {
         var responseData = await response.stream.toBytes();
         var responseText = utf8.decode(responseData);
-        print('❌ [SERVICE] Error response: $responseText');
-        throw Exception('Attendance failed: ${response.statusCode} - $responseText');
+        print('❌ Expected 202, got ${response.statusCode}: $responseText');
+        throw Exception('Upload failed: ${response.statusCode}');
       }
 
       var responseData = await response.stream.toBytes();
-      var result = json.decode(utf8.decode(responseData));
+      var queueResponse = json.decode(utf8.decode(responseData));
+      final attendanceId = queueResponse['attendance_id'] as String;
 
-      print('✅ [SERVICE] Response: $result');
+      print('✅ [STEP 1] Queued for processing');
+      print('   Attendance ID: $attendanceId');
+
+      // ⏱️ STEP 2: Poll for result
+      print('\n🔍 [STEP 2] Polling for result...');
+      int pollCount = 0;
+      final maxPolls = 60;  // Max 60 polls = 60 seconds
+      final pollInterval = Duration(milliseconds: 1000);
+
+      Map<String, dynamic> result = {};
+      bool completed = false;
+
+      while (pollCount < maxPolls && !completed) {
+        await Future.delayed(pollInterval);
+        pollCount++;
+
+        try {
+          var pollResponse = await http.get(
+            Uri.parse('$API_URL/api/mark-attendance-auto/$attendanceId'),
+          ).timeout(
+            const Duration(seconds: 5),
+            onTimeout: () => throw Exception('Poll timeout'),
+          );
+
+          if (pollResponse.statusCode == 200) {
+            // Result ready!
+            result = json.decode(pollResponse.body);
+            completed = true;
+            print('✅ [STEP 2] Result ready (poll #$pollCount after ${pollCount * 1000}ms)');
+          } else if (pollResponse.statusCode == 202) {
+            // Still processing
+            if (pollCount % 5 == 0) {
+              print('   Waiting... (poll #$pollCount)');
+            }
+          } else {
+            throw Exception('Unexpected status: ${pollResponse.statusCode}');
+          }
+        } catch (e) {
+          if (pollCount == maxPolls) {
+            throw Exception('Face recognition timeout after ${maxPolls}s');
+          }
+        }
+      }
+
+      if (!completed) {
+        throw Exception('Face recognition timeout after ${maxPolls}s');
+      }
+
+      final totalMs = DateTime.now().difference(totalStart).inMilliseconds;
+
+      print('\n${"="*60}');
+      print('✅ [ASYNC] Attendance complete!');
+      print('   Student: ${result["student_name"] ?? "N/A"}');
+      print('   SR No: ${result["sr_no"] ?? "N/A"}');
+      print('   Similarity: ${(result["similarity"] ?? 0).toStringAsFixed(3)}');
+      print('   Total time: ${totalMs}ms');
+      print("${"="*60}\n");
+
       return result;
     } catch (e) {
-      print('❌ [SERVICE] Exception: $e');
+      print('❌ [ASYNC] Exception: $e');
       return {
         "error": e.toString(),
         "status": "❌ Error",
