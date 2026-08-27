@@ -2273,7 +2273,7 @@ async def mark_attendance_auto(
         if sync:
             # ⏳ OLD APK: Block until result (maintains backward compatibility)
             print(f"\n⏳ [LEGACY] Sync mode - waiting for face recognition...")
-            max_wait = 60
+            max_wait = 180  # 3 minutes for slow Supabase queries
             wait_count = 0
 
             while wait_count < max_wait:
