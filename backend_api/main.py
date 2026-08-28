@@ -2264,6 +2264,8 @@ async def mark_attendance_auto(
         attendance_id = str(uuid.uuid4())
 
         # Queue the heavy face recognition work
+        active_workers = threading.active_count() - 1  # -1 for main thread
+        print(f"📊 [WORKER] Active threads: {active_workers}/32 | Queue ID: {attendance_id}")
         _worker_threads.submit(
             asyncio.run,
             _process_face_recognition_async(attendance_id, image_data, institute_id)
