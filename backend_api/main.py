@@ -154,7 +154,7 @@ def get_setting(key: str, default=None):
 app = FastAPI(title="EduSetu Face Recognition API", version="1.0.0")
 
 # ⚡ Thread pool for async face recognition (non-blocking)
-_worker_threads = ThreadPoolExecutor(max_workers=32, thread_name_prefix="face_worker_")
+_worker_threads = ThreadPoolExecutor(max_workers=64, thread_name_prefix="face_worker_")
 _attendance_results = {}  # In-memory cache: attendance_id -> result
 
 # Serve dashboard at root

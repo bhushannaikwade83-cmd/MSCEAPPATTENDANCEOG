@@ -312,16 +312,26 @@ class AntiSpoofApiService {
       print('\n🌐 [SERVICE] Calling /api/mark-attendance-auto ($mode)');
       print('   Institute: $instId');
 
+      print('\n🔍 [DEBUG] Creating multipart request...');
+      print('   URL: $API_URL/api/mark-attendance-auto');
+
       var request = http.MultipartRequest(
         'POST',
         Uri.parse('$API_URL/api/mark-attendance-auto'),
       );
 
       request.fields['institute_id'] = instId;
-      request.fields['sync'] = (!useAsyncPolling).toString();  // sync=true for legacy, false for new
+      request.fields['sync'] = (!useAsyncPolling).toString();
+
+      print('🔍 [DEBUG] Fields added:');
+      print('   institute_id: $instId');
+      print('   sync: ${(!useAsyncPolling).toString()}');
 
       final imageBytes = imageFile.readAsBytesSync();
-      print('   Image: ${(imageBytes.length / 1024).toStringAsFixed(1)}KB');
+      print('🔍 [DEBUG] Image file:');
+      print('   Path: ${imageFile.path}');
+      print('   Size: ${(imageBytes.length / 1024).toStringAsFixed(1)}KB');
+      print('   First 4 bytes: ${imageBytes.take(4).toList()}');
 
       request.files.add(
         http.MultipartFile.fromBytes(
@@ -331,19 +341,33 @@ class AntiSpoofApiService {
         ),
       );
 
+      print('🔍 [DEBUG] Multipart request ready:');
+      print('   Fields count: ${request.fields.length}');
+      print('   Files count: ${request.files.length}');
+      print('   Field names: ${request.fields.keys.toList()}');
+      print('   File field names: ${request.files.map((f) => f.field).toList()}');
+
       print('🌐 [SERVICE] Sending request...');
       final sendStart = DateTime.now();
       var response = await request.send().timeout(
-        const Duration(seconds: 65),  // 65 sec timeout (60 sec face processing + buffer)
+        const Duration(seconds: 65),
         onTimeout: () => throw Exception('Server timeout'),
       );
       final sendMs = DateTime.now().difference(sendStart).inMilliseconds;
 
       print('✅ [SERVICE] Response: ${response.statusCode} (${sendMs}ms)');
 
+      print('🔍 [DEBUG] Response headers:');
+      print('   ${response.headers}');
+
       if (response.statusCode == 200 || response.statusCode == 202) {
         var responseData = await response.stream.toBytes();
-        var result = json.decode(utf8.decode(responseData));
+        var responseText = utf8.decode(responseData);
+
+        print('🔍 [DEBUG] Response body (raw):');
+        print('   $responseText');
+
+        var result = json.decode(responseText);
 
         if (response.statusCode == 202) {
           // New async mode - result has attendance_id for polling
@@ -362,6 +386,8 @@ class AntiSpoofApiService {
         var responseData = await response.stream.toBytes();
         var responseText = utf8.decode(responseData);
         print('❌ Error ${response.statusCode}: $responseText');
+        print('🔍 [DEBUG] Full error response:');
+        print('   $responseText');
         throw Exception('Status ${response.statusCode}');
       }
     } catch (e) {
