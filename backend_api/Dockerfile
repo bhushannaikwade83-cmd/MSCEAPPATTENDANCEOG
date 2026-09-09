@@ -1,5 +1,5 @@
 # Dockerfile for Cloud Run deployment
-FROM python:3.10-slim
+FROM python:3.10-slim-bookworm
 
 WORKDIR /app
 
