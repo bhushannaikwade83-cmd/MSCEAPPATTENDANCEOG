@@ -3,7 +3,7 @@ import 'dart:async';
 
 /// Monitors backend connection status and logs to console
 class BackendMonitorService {
-  static const String _backendUrl = 'https://api.digitrixmedia.com';
+  static const String _backendUrl = 'https://digitrixmedia.com/msceattendanceapp/api';
   static Timer? _monitorTimer;
   static bool _isConnected = false;
 

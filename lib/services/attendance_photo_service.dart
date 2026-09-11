@@ -7,7 +7,7 @@ import 'package:image/image.dart' as img;
 
 class AttendancePhotoService {
   // ✅ Upload to YOUR SERVER (not B2!)
-  static const String SERVER_URL = "https://api.digitrixmedia.com";
+  static const String SERVER_URL = "https://digitrixmedia.com/msceattendanceapp/api";
   static const int MAX_SIZE_KB = 50; // Compress aggressively
 
   /// Upload attendance photo to PHP API

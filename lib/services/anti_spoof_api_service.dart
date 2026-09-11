@@ -5,7 +5,7 @@ import 'dart:convert';
 class AntiSpoofApiService {
   // Get backend URL from .env (uses same IP as rest of app)
   static String get API_URL {
-    return "https://api.digitrixmedia.com"; // 🔥 Digitrix Media API
+    return "https://digitrixmedia.com/msceattendanceapp/api"; // 🔥 Self-Hosted Backend
   }
 
   /// Pre-warm backend (just check health, models load on first registration)
