@@ -118,6 +118,29 @@ def _get_supabase_client():
         _supabase_client = create_client(supabase_url, supabase_key)
     return _supabase_client
 
+# 🔄 RETRY LOGIC: Handle ConnectionTerminated gracefully
+def _supabase_query_with_retry(query_func, max_retries=3, backoff_base=0.5):
+    """Execute Supabase query with exponential backoff retry
+
+    DO NOT silently return empty on connection error!
+    Raise so caller knows it's a connection issue, not "no students"
+    """
+    for attempt in range(max_retries):
+        try:
+            return query_func()
+        except Exception as e:
+            error_str = str(e).lower()
+            # Only retry on connection errors, not on data validation errors
+            if any(keyword in error_str for keyword in ['connectionterminated', 'remoteprotocolerror', 'readerror', 'timeout']):
+                if attempt < max_retries - 1:
+                    wait_time = backoff_base * (2 ** attempt)  # Exponential backoff: 0.5s, 1s, 2s
+                    logger.warning(f"⚠️ [RETRY {attempt+1}/{max_retries}] {error_str[:50]} - waiting {wait_time}s...")
+                    time.sleep(wait_time)
+                    continue
+            # Final attempt or non-retryable error: raise
+            logger.error(f"❌ [QUERY FAILED] {e}")
+            raise
+
 # ⚙️ APP SETTINGS: live-tunable values (Supabase-backed, no redeploy needed)
 _settings_cache = {'values': {}, 'loaded_at': None}
 _SETTINGS_CACHE_TTL_SECONDS = 30
@@ -154,7 +177,10 @@ def get_setting(key: str, default=None):
 app = FastAPI(title="EduSetu Face Recognition API", version="1.0.0")
 
 # ⚡ Thread pool for async face recognition (non-blocking)
-_worker_threads = ThreadPoolExecutor(max_workers=64, thread_name_prefix="face_worker_")
+# ⚡ REDUCED WORKER THREADS: 64 → 8 to prevent connection pool exhaustion
+# Logs showed 39/32 active threads causing ConnectionTerminated errors
+# Lower concurrency = fewer simultaneous Supabase queries = better stability
+_worker_threads = ThreadPoolExecutor(max_workers=8, thread_name_prefix="face_worker_")
 _attendance_results = {}  # In-memory cache: attendance_id -> result
 
 # Serve dashboard at root
@@ -496,7 +522,7 @@ async def _get_embeddings_for_institute(institute_id: str):
             print(f"⏰ Cache expired for {institute_id}, reloading...")
             del embedding_cache['by_institute'][institute_id]
 
-    # ✅ STEP 2: Load from Supabase with OPTIMIZED query
+    # ✅ STEP 2: Load from Supabase with OPTIMIZED query + RETRY LOGIC
     try:
         supabase = _get_supabase_client()  # ⚡ Persistent client (connection pooling)
 
@@ -505,9 +531,13 @@ async def _get_embeddings_for_institute(institute_id: str):
 
         # ⚡ OPTIMIZATION 1: Only load NEEDED columns (not all!)
         # Original: 10 columns, Optimized: 6 columns = 2x faster network
-        response = supabase.table('students').select(
-            'id, sr_no, fname, mname, lname, institute_id, face_embedding_front, face_embedding_left, face_embedding_right'
-        ).eq('institute_id', institute_id).eq('face_registration_status', 'registered').execute()
+        # WRAPPED IN RETRY: Handles ConnectionTerminated with backoff
+        def fetch_students():
+            return supabase.table('students').select(
+                'id, sr_no, fname, mname, lname, institute_id, face_embedding_front, face_embedding_left, face_embedding_right'
+            ).eq('institute_id', institute_id).eq('face_registration_status', 'registered').execute()
+
+        response = _supabase_query_with_retry(fetch_students)
 
         query_time = time.time() - query_start
         students_data = response.data if response.data else []
@@ -574,8 +604,16 @@ async def _get_embeddings_for_institute(institute_id: str):
         return students
 
     except Exception as e:
-        logger.error(f"❌ Failed to load institute {institute_id}: {e}")
-        return []
+        error_str = str(e).lower()
+        # IMPORTANT: Differentiate between "connection failed" and "no students"
+        if any(keyword in error_str for keyword in ['connectionterminated', 'remoteprotocolerror', 'readerror', 'timeout']):
+            # Connection error: Re-raise so caller knows it's DB unavailable, NOT "0 students"
+            logger.error(f"❌ Failed to load institute {institute_id}: <ConnectionError> {e}")
+            raise  # Do NOT return [] - let caller handle gracefully
+        else:
+            # Other errors (permissions, schema): Return empty and log
+            logger.error(f"❌ Failed to load institute {institute_id}: {e}")
+            return []
 
 async def _load_embeddings_cache():
     """(Optional) Pre-load top 10 institutes at startup for warmup"""
@@ -2097,15 +2135,29 @@ async def _process_face_recognition_async(attendance_id: str, image_data: bytes,
         step2_time = time.time() - step2_start
         print(f"⏱️  WORKER STEP 2 (Embedding): {step2_time:.3f}s")
 
-        # ⏱️ STEP 3: Load embeddings from cache
+        # ⏱️ STEP 3: Load embeddings from cache (with connection error handling)
         logger.info(f"🔎 Loading embeddings for institute {institute_id}...")
         step3_start = time.time()
 
         # Time the Supabase query separately
         db_start = time.time()
-        students = await _get_embeddings_for_institute(institute_id)
-        db_time = time.time() - db_start
-        print(f"   └─ Supabase query: {db_time:.3f}s ({len(students)} students)")
+        try:
+            students = await _get_embeddings_for_institute(institute_id)
+            db_time = time.time() - db_start
+            print(f"   └─ Supabase query: {db_time:.3f}s ({len(students)} students)")
+        except Exception as e:
+            # Connection error during loading - return error to user
+            db_time = time.time() - db_start
+            logger.error(f"❌ Database connection failed for institute {institute_id}: {e}")
+            _attendance_results[attendance_id] = {
+                "error": f"Database unavailable (tried {3} times)",
+                "status": "❌ DB Error",
+                "student_name": None,
+                "sr_no": None,
+                "similarity": 0.0,
+                "record_type": None
+            }
+            return
 
         step3_time = time.time() - step3_start
         print(f"⏱️  WORKER STEP 3 (Load Embeddings): {step3_time:.3f}s")
