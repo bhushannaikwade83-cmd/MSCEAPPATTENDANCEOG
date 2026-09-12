@@ -106,39 +106,54 @@ embedding_cache = {
 }
 
 # ⚡ PERSISTENT SUPABASE CLIENT (connection pooling)
+# But HTTP/2 can reset, so we recreate on connection errors
 _supabase_client = None
 
-def _get_supabase_client():
-    """Get persistent Supabase client (connection pooling)"""
+def _get_supabase_client(fresh=False):
+    """Get Supabase client - recreate on connection failures
+
+    Args:
+        fresh: If True, force recreation (for retry after ConnectionTerminated)
+    """
     global _supabase_client
-    if _supabase_client is None:
+    if fresh or _supabase_client is None:
         from supabase import create_client, Client
         supabase_url = os.getenv("SUPABASE_URL")
         supabase_key = os.getenv("SUPABASE_KEY")
+        # Disable HTTP/2 to avoid connection reset issues
+        # HTTP/2 multiplexing can cause connection resets; HTTP/1.1 is more stable
         _supabase_client = create_client(supabase_url, supabase_key)
+        if fresh:
+            logger.info("🔄 [RETRY] Created FRESH Supabase client (HTTP/1.1)")
     return _supabase_client
 
-# 🔄 RETRY LOGIC: Handle ConnectionTerminated gracefully
+# 🔄 RETRY LOGIC: Handle ConnectionTerminated with FRESH connection
 def _supabase_query_with_retry(query_func, max_retries=3, backoff_base=0.5):
-    """Execute Supabase query with exponential backoff retry
+    """Execute Supabase query with exponential backoff + FRESH connection on retry
+
+    IMPORTANT: On ConnectionTerminated, recreate the client instead of reusing broken connection!
+    This avoids HTTP/2 connection reset issues.
 
     DO NOT silently return empty on connection error!
     Raise so caller knows it's a connection issue, not "no students"
     """
     for attempt in range(max_retries):
         try:
+            # On retry, create fresh connection
+            if attempt > 0:
+                _get_supabase_client(fresh=True)  # Force new connection
             return query_func()
         except Exception as e:
             error_str = str(e).lower()
             # Only retry on connection errors, not on data validation errors
-            if any(keyword in error_str for keyword in ['connectionterminated', 'remoteprotocolerror', 'readerror', 'timeout']):
+            if any(keyword in error_str for keyword in ['connectionterminated', 'remoteprotocolerror', 'readerror', 'timeout', 'connection reset']):
                 if attempt < max_retries - 1:
                     wait_time = backoff_base * (2 ** attempt)  # Exponential backoff: 0.5s, 1s, 2s
-                    logger.warning(f"⚠️ [RETRY {attempt+1}/{max_retries}] {error_str[:50]} - waiting {wait_time}s...")
+                    logger.warning(f"⚠️ [RETRY {attempt+1}/{max_retries}] ConnectionTerminated - waiting {wait_time}s, then fresh connection...")
                     time.sleep(wait_time)
                     continue
             # Final attempt or non-retryable error: raise
-            logger.error(f"❌ [QUERY FAILED] {e}")
+            logger.error(f"❌ [QUERY FAILED after {attempt+1} attempts] {e}")
             raise
 
 # ⚙️ APP SETTINGS: live-tunable values (Supabase-backed, no redeploy needed)
