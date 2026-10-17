@@ -17,6 +17,9 @@ import json
 from typing import List, Dict, Optional
 from supabase import create_client, Client
 
+# 🔥 CPU OPTIMIZATION: Limit FAISS threads (prevent CPU spike)
+faiss.omp_set_num_threads(1)
+
 # Firebase is optional - only if using Firestore
 try:
     import firebase_admin

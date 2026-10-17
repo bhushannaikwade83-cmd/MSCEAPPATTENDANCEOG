@@ -23,6 +23,12 @@ import time
 import base64
 from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeoutError
 
+# 🔥 CPU OPTIMIZATION: Balance ONNX Runtime threads (2 = fast without thrashing)
+os.environ["OMP_NUM_THREADS"] = "2"
+os.environ["OPENBLAS_NUM_THREADS"] = "2"
+os.environ["MKL_NUM_THREADS"] = "2"
+os.environ["NUMEXPR_NUM_THREADS"] = "2"
+
 # Try to import InsightFace (provides RetinaFace detector + ArcFace embedding)
 try:
     import insightface
@@ -52,7 +58,7 @@ class FaceRecognitionService:
     async def initialize(self):
         """
         Initialize RetinaFace detector + ArcFace embedding model
-        
+
         The buffalo_l model from InsightFace includes:
         - RetinaFace: Face detection (handles various angles, lighting, occlusions)
         - ArcFace R100: Face embedding (512-dimensional vectors)
@@ -62,10 +68,20 @@ class FaceRecognitionService:
                 "InsightFace is not installed. Please install it with: "
                 "pip install insightface onnxruntime"
             )
-        
+
         try:
+            # 🔥 CPU OPTIMIZATION: Configure ONNX Runtime threading (2 = fast + balanced)
+            try:
+                import onnxruntime as ort
+                sess_options = ort.SessionOptions()
+                sess_options.intra_op_num_threads = 2
+                sess_options.inter_op_num_threads = 2
+                logger.info("✅ ONNX Runtime: intra_op_threads=2, inter_op_threads=2 (optimized)")
+            except:
+                logger.warning("⚠️ Could not configure ONNX Runtime options")
+
             logger.info("🔄 Initializing RetinaFace (detection) + ArcFace (embedding)...")
-            
+
             # Initialize InsightFace FaceAnalysis
             # This loads both RetinaFace detector and ArcFace embedding model
             # buffalo_l is the best model (ArcFace R100, 512-dim embeddings)
@@ -74,7 +90,7 @@ class FaceRecognitionService:
                 name=self.model_name,
                 providers=['CPUExecutionProvider']  # Use CPU for Cloud Run compatibility
             )
-            
+
             # Prepare model (ctx_id=-1 for CPU, 0 for GPU)
             # det_size=(640, 640) for RetinaFace detection accuracy
             logger.info("🔄 Preparing RetinaFace + ArcFace models (this may take 30-60 seconds on first run)...")

@@ -20,9 +20,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
 // ============================================
 
 $db_host = getenv('DB_HOST') ?: 'localhost';
-$db_user = getenv('DB_USER') ?: 'root';
-$db_pass = getenv('DB_PASS') ?: '';
-$db_name = getenv('DB_NAME') ?: 'attendance';
+$db_user = getenv('DB_USER') ?: 'digitrix_msce_attendance_app_user';
+$db_pass = getenv('DB_PASS') ?: 'Bhushan@70';
+$db_name = getenv('DB_NAME') ?: 'digitrix_msce_attendance_app';
 
 try {
     $conn = new mysqli($db_host, $db_user, $db_pass, $db_name);
@@ -62,6 +62,7 @@ try {
     switch ($action) {
         // ===== READ OPERATIONS =====
         case 'get-students':
+        case 'get_by_institute':
             handle_get_students($conn);
             break;
 
@@ -96,6 +97,10 @@ try {
 
         case 'delete-student':
             handle_delete_student($conn);
+            break;
+
+        case 'clear-photo':
+            handle_clear_photo($conn);
             break;
 
         // ===== UTILITY =====
@@ -213,7 +218,7 @@ function handle_get_students($conn) {
 
     echo json_encode([
         'success' => true,
-        'data' => $students,
+        'students' => $students,
         'total' => $total,
         'page' => $page,
         'limit' => $limit,
@@ -470,42 +475,80 @@ function handle_update_student($conn) {
 
 /**
  * PUT /students_api.php?action=update-embeddings
- * Update face embeddings (critical for registration)
+ * Update face embeddings + photo URLs (critical for registration)
  */
 function handle_update_embeddings($conn) {
     $data = json_decode(file_get_contents('php://input'), true);
 
-    if (empty($data['id'])) {
+    // Accept either student_id or sr_no
+    $student_id = $data['student_id'] ?? $data['id'] ?? null;
+    $sr_no = $data['sr_no'] ?? null;
+    $institute_id = $data['institute_id'] ?? null;  // Required for sr_no lookup
+
+    if (!$student_id && !$sr_no) {
         http_response_code(400);
-        echo json_encode(['success' => false, 'error' => 'id required']);
+        echo json_encode(['success' => false, 'error' => 'student_id or sr_no required']);
         return;
     }
 
-    $id = $data['id'];
+    // If using sr_no, MUST have institute_id to avoid cross-institute photo mix-up
+    if (!$student_id && !$institute_id) {
+        http_response_code(400);
+        echo json_encode(['success' => false, 'error' => 'institute_id required when using sr_no']);
+        return;
+    }
+
+    // 🔥 DEBUG: Log incoming data
+    log_debug("[UPDATE_EMBEDDINGS] Received data for student_id=$student_id, sr_no=$sr_no, institute_id=$institute_id");
+    log_debug("[UPDATE_EMBEDDINGS] face_photo_url from request: " . ($data['face_photo_url'] ?? 'NULL'));
+
     $front = $data['face_embedding_front'] ? json_encode($data['face_embedding_front']) : null;
     $left = $data['face_embedding_left'] ? json_encode($data['face_embedding_left']) : null;
     $right = $data['face_embedding_right'] ? json_encode($data['face_embedding_right']) : null;
+    $photo_url = $data['face_photo_url'] ?? $data['front_photo_url'] ?? null;
     $registration_status = $data['face_registration_status'] ?? 'registered';
+    $registered_at = $data['face_registered_at'] ?? date('Y-m-d H:i:s');
     $now = date('Y-m-d H:i:s');
+
+    log_debug("[UPDATE_EMBEDDINGS] photo_url after processing: " . ($photo_url ?? 'NULL'));
 
     $query = "UPDATE students SET
               face_embedding_front = ?,
               face_embedding_left = ?,
               face_embedding_right = ?,
+              face_photo_url = ?,
               face_registration_status = ?,
               face_registered_at = ?,
               updated_at = ?
-              WHERE id = ?";
+              WHERE ";
+
+    if ($student_id) {
+        $query .= "id = ?";
+        $params = [$front, $left, $right, $photo_url, $registration_status, $registered_at, $now, $student_id];
+        $types = "ssssssss";
+    } else {
+        // ✅ FIX: Always filter by BOTH institute_id AND sr_no to prevent cross-institute mix-up
+        $query .= "sr_no = ? AND institute_id = ?";
+        $params = [$front, $left, $right, $photo_url, $registration_status, $registered_at, $now, $sr_no, $institute_id];
+        $types = "sssssssss";
+    }
 
     $stmt = $conn->prepare($query);
-    $stmt->bind_param("sssssss", $front, $left, $right, $registration_status, $now, $now, $id);
+    if (!$stmt) {
+        http_response_code(500);
+        echo json_encode(['success' => false, 'error' => 'Prepare failed: ' . $conn->error]);
+        return;
+    }
+
+    $stmt->bind_param($types, ...$params);
 
     if ($stmt->execute()) {
-        echo json_encode(['success' => true]);
+        echo json_encode(['success' => true, 'rows_affected' => $stmt->affected_rows]);
     } else {
         http_response_code(500);
-        echo json_encode(['success' => false, 'error' => $conn->error]);
+        echo json_encode(['success' => false, 'error' => 'Execute failed: ' . $stmt->error]);
     }
+    $stmt->close();
 }
 
 /**
@@ -542,6 +585,56 @@ function log_debug($message) {
     @mkdir(dirname($log_file), 0755, true);
     $timestamp = date('Y-m-d H:i:s');
     file_put_contents($log_file, "[$timestamp] $message\n", FILE_APPEND);
+}
+
+// ==========================================
+// CLEAR PHOTO (for changing photo)
+// ==========================================
+function handle_clear_photo($conn) {
+    $data = json_decode(file_get_contents('php://input'), true);
+
+    $student_id = $data['student_id'] ?? null;
+    $face_photo_change_count = intval($data['face_photo_change_count'] ?? 0);
+    $face_photo_change_disabled = boolval($data['face_photo_change_disabled'] ?? false);
+
+    if (!$student_id) {
+        http_response_code(400);
+        echo json_encode(['success' => false, 'error' => 'student_id required']);
+        return;
+    }
+
+    $query = "UPDATE students SET
+              face_photo_url = NULL,
+              face_embedding_front = NULL,
+              face_embedding_left = NULL,
+              face_embedding_right = NULL,
+              face_registration_status = 'pending',
+              face_photo_change_count = ?,
+              face_photo_change_disabled = ?
+              WHERE id = ?";
+
+    $stmt = $conn->prepare($query);
+    if (!$stmt) {
+        http_response_code(500);
+        echo json_encode(['success' => false, 'error' => 'Prepare failed: ' . $conn->error]);
+        return;
+    }
+
+    $disabled_int = $face_photo_change_disabled ? 1 : 0;
+    $stmt->bind_param("iis", $face_photo_change_count, $disabled_int, $student_id);
+
+    if ($stmt->execute()) {
+        echo json_encode([
+            'success' => true,
+            'message' => 'Photo cleared',
+            'change_count' => $face_photo_change_count,
+            'disabled' => $face_photo_change_disabled
+        ]);
+    } else {
+        http_response_code(500);
+        echo json_encode(['success' => false, 'error' => 'Update failed: ' . $stmt->error]);
+    }
+    $stmt->close();
 }
 
 ?>

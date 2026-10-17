@@ -68,6 +68,8 @@ class LiveLogger:
             'failed_requests': 0,
             'active_processing': 0,
         }
+        self.request_times = deque(maxlen=120)  # Last 120 seconds of request timestamps
+        self.last_request_count = 0
 
     def add_log(self, level, message):
         """Add log entry with timestamp"""
@@ -84,8 +86,27 @@ class LiveLogger:
         """Get recent logs"""
         return list(self.logs)[:limit]
 
+    def track_request(self):
+        """Track incoming request for RPS calculation"""
+        self.request_times.append(time.time())
+        self.stats['total_requests'] += 1
+
+    def get_rps(self):
+        """Calculate requests per second"""
+        if not self.request_times:
+            return 0.0
+        now = time.time()
+        recent = [t for t in self.request_times if now - t <= 1.0]
+        return len(recent)
+
     def get_stats(self):
         """Get current statistics"""
+        import psutil
+        try:
+            cpu_percent = psutil.cpu_percent(interval=0.1)
+        except:
+            cpu_percent = 0
+
         return {
             'total_requests': self.stats['total_requests'],
             'successful_requests': self.stats['successful_requests'],
@@ -94,6 +115,8 @@ class LiveLogger:
             'success_rate': round(
                 (self.stats['successful_requests'] / max(self.stats['total_requests'], 1)) * 100
             ),
+            'rps': round(self.get_rps(), 2),
+            'cpu_percent': cpu_percent,
         }
 
 live_logger = LiveLogger()
@@ -102,7 +125,7 @@ live_logger = LiveLogger()
 # Each institute's embeddings cached until timeout (300s = 5min)
 embedding_cache = {
     'by_institute': {},  # { 'institute_id': {'students': [...], 'loaded_at': datetime} }
-    'cache_timeout_seconds': 300,
+    'cache_timeout_seconds': 3600,  # ✅ Increased from 900s (15min) to 3600s (60min) - 4x better reuse!
 }
 
 # ⚡ PERSISTENT SUPABASE CLIENT (connection pooling)
@@ -192,10 +215,9 @@ def get_setting(key: str, default=None):
 app = FastAPI(title="EduSetu Face Recognition API", version="1.0.0")
 
 # ⚡ Thread pool for async face recognition (non-blocking)
-# ⚡ REDUCED WORKER THREADS: 64 → 8 to prevent connection pool exhaustion
-# Logs showed 39/32 active threads causing ConnectionTerminated errors
-# Lower concurrency = fewer simultaneous Supabase queries = better stability
-_worker_threads = ThreadPoolExecutor(max_workers=8, thread_name_prefix="face_worker_")
+# ⚡ WORKER THREADS: 8 workers (unlimited queue - process all requests)
+# CPU controlled via ONNX/FAISS thread limiting (see face_service.py + vector_db.py)
+_worker_threads = ThreadPoolExecutor(max_workers=24, thread_name_prefix="face_worker_")  # Scaled up: ONNX threads=2, safe for 24 workers
 _attendance_results = {}  # In-memory cache: attendance_id -> result
 
 # Serve dashboard at root
@@ -715,7 +737,24 @@ async def startup_event():
         logger.warning(f"⚠️ AntiSpoofService pre-warm failed: {e}")
         print(f"⚠️ AntiSpoofService pre-warm failed: {e}")
 
-    logger.info("✅ API ready!")
+    # Start monitoring thread for RPS + CPU logging
+    def monitor_stats():
+        import psutil
+        while True:
+            try:
+                stats = live_logger.get_stats()
+                rps = stats.get('rps', 0)
+                cpu = stats.get('cpu_percent', 0)
+                active = threading.active_count() - 1
+                logger.info(f"📊 LIVE: RPS={rps:.1f}/s | CPU={cpu:.1f}% | Threads={active}/32 | Total Req={stats['total_requests']}")
+                time.sleep(1)
+            except Exception as e:
+                logger.debug(f"Monitor error: {e}")
+                time.sleep(1)
+
+    monitor_thread = threading.Thread(target=monitor_stats, daemon=True)
+    monitor_thread.start()
+    logger.info("✅ API ready! (RPS monitoring started)")
 
 @app.get("/")
 async def root():
@@ -2321,6 +2360,7 @@ async def mark_attendance_auto(
     Omit or sync=false for async mode (new APK).
     """
     try:
+        live_logger.track_request()  # Track for RPS calculation
         # Read image data
         image_data = await image.read()
         if len(image_data) == 0:
@@ -2342,7 +2382,7 @@ async def mark_attendance_auto(
         if sync:
             # ⏳ OLD APK: Block until result (maintains backward compatibility)
             print(f"\n⏳ [LEGACY] Sync mode - waiting for face recognition...")
-            max_wait = 180  # 3 minutes for slow Supabase queries
+            max_wait = 120  # Increased from 45 to handle queue backlog
             wait_count = 0
 
             while wait_count < max_wait:
@@ -2721,5 +2761,5 @@ async def debug_faiss_status():
 
 if __name__ == "__main__":
     import uvicorn
-    # 🔥 Use port 5001 (matches Flutter app's BACKEND_URL)
-    uvicorn.run(app, host="0.0.0.0", port=5001)
+    # 🔥 Use port 8000 (matches VPS systemd service)
+    uvicorn.run(app, host="0.0.0.0", port=8000)
