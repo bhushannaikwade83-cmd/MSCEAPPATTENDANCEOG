@@ -169,7 +169,7 @@ def _supabase_query_with_retry(query_func, max_retries=3, backoff_base=0.5):
         except Exception as e:
             error_str = str(e).lower()
             # Only retry on connection errors, not on data validation errors
-            if any(keyword in error_str for keyword in ['connectionterminated', 'remoteprotocolerror', 'readerror', 'timeout', 'connection reset']):
+            if any(keyword in error_str for keyword in ['connectionterminated', 'remoteprotocolerror', 'readerror', 'timeout', 'connection reset', 'server disconnected', 'eof occurred']):
                 if attempt < max_retries - 1:
                     wait_time = backoff_base * (2 ** attempt)  # Exponential backoff: 0.5s, 1s, 2s
                     logger.warning(f"⚠️ [RETRY {attempt+1}/{max_retries}] ConnectionTerminated - waiting {wait_time}s, then fresh connection...")
@@ -658,6 +658,29 @@ async def _load_embeddings_cache():
     print("⚡ EMBEDDING CACHE: Lazy-loading enabled (per-institute on-demand)")
     print("="*80 + "\n")
 
+async def _preload_institute_embeddings():
+    """Pre-load top institutes at startup to warm up cache (reduces first-request latency)"""
+    try:
+        # Get list of institutes to preload from env or use defaults
+        preload_institutes = os.getenv("PRELOAD_INSTITUTES", "").split(",")
+        preload_institutes = [i.strip() for i in preload_institutes if i.strip()]
+
+        if not preload_institutes:
+            print("⏭️ No institutes to preload (set PRELOAD_INSTITUTES env var)")
+            return
+
+        print(f"\n⏭️ PRE-LOADING {len(preload_institutes)} institutes at startup...")
+        for inst_id in preload_institutes[:5]:  # Limit to 5 to avoid long startup
+            try:
+                print(f"   📦 Preloading institute {inst_id}...", end=" ")
+                await _get_embeddings_for_institute(inst_id)
+                print("✅")
+            except Exception as e:
+                print(f"⚠️ ({str(e)[:30]})")
+        print("✅ Preload complete!\n")
+    except Exception as e:
+        logger.warning(f"⚠️ Preload failed: {e}")
+
 @app.on_event("startup")
 async def startup_event():
     """Initialize services on startup"""
@@ -665,6 +688,9 @@ async def startup_event():
 
     # ⚡ Load embedding cache (FAST matching, no DB queries)
     await _load_embeddings_cache()
+
+    # 🔥 Pre-load institutes for faster first-response
+    await _preload_institute_embeddings()
 
     # 🔥 TEST: Verify ArcFace model is actually working (generates different embeddings)
     print("\n" + "="*80)
