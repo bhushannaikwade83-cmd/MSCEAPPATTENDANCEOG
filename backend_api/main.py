@@ -2790,6 +2790,6 @@ if __name__ == "__main__":
     import os
     # 🔥 Read PORT from environment (Railway sets $PORT), fallback to 8000
     port = int(os.getenv("PORT", 8000))
-    workers = int(os.getenv("WORKERS", 20))  # 20 workers for maximum concurrency
+    workers = int(os.getenv("WORKERS", 32))  # 32 workers for high concurrency + background tasks
     print(f"🚀 Starting backend on port {port} with {workers} workers")
     uvicorn.run(app, host="0.0.0.0", port=port, workers=workers)
